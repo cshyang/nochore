@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+.pycache/
+
+# Data and credentials
+*.csv
+*.json
+credentials.json
+config.json
+.env.local
+google-ads.yaml
+
+# Generated data and logs
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+*.log
+
+# Reports (generated)
+monthly_summaries/
+!monthly_summaries/.gitkeep
+
+# Backups
+*.backup
+*.bak
+
+# IDE and editor
+.vscode/
+.venv/
+
+# local
+.claude/
+.gemini/
+.kilocode/
+.opencode/
+.windsurf/
+

@@ -1,0 +1,16 @@
+clients:
+  last-minute:
+    meta:
+      system_user_id: "61577869030671"
+      ad_accounts:
+        - id: "act_1163453211889702"
+          name: "DMP Singapore"
+        - id: "act_475543895521800"
+          name: "DMP MY"
+        - id: "act_655792112740573"
+          name: "Tint n' Wrap"
+        - id: "act_3588231148124410"
+          name: "Homescape"
+    google_ads:
+      customer_ids:
+        - "107-310-0792"
