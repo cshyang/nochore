@@ -8,11 +8,16 @@
   - [x] ImpressionShareRecord
   - [x] QualityScoreRecord
   - [x] Keep existing PerformanceRecord for campaign metrics
+- [x] Split mixed data models into `src/models/`
+  - [x] Core storage records
+  - [x] Diagnostic-tree models
+  - [x] Client summary/reporting view models
 - [x] Create `src/storage.py` with partitioned Parquet storage
   - [x] append() - Add records with deduplication
   - [x] read() - Query by date range
   - [x] Automatic monthly partitioning
-- [ ] Write unit tests for storage operations (DEFERRED)
+- [x] Add Google conversion action storage support
+- [x] Write unit/integration tests for summary building and dual report generation
 
 ### Phase 2: Data Fetchers
 - [x] Create `src/fetchers/` directory structure
@@ -21,9 +26,11 @@
   - [x] Impression share query (P2)
   - [x] Quality scores query (P3)
   - [x] Campaign performance query
+  - [x] Conversion action query for lead normalization
 - [x] Refactor `src/fetchers/meta_ads.py`
   - [x] Campaign-level metrics
   - [x] Simplify (no search terms/QS equivalent)
+  - [x] Make included lead action types configurable
 - [ ] Test with real API credentials (REQUIRES USER)
 
 ### Phase 3: Analyzers
@@ -54,36 +61,42 @@
   - [x] Trends section
   - [x] Recommendations summary
 - [x] Ensure markdown is structured for LLM parsing
+- [x] Add `src/reporting/` package for shared reporting logic
+- [x] Add deterministic client summary renderer
+- [x] Add brand-aware client summary sections for multi-brand clients
+- [x] Remove unused `src/report_templates/` path
 
 ### Phase 5: Pipeline Integration
 - [x] Create `src/main.py` with new orchestration
   - [x] Fetch → Store → Analyze → Report flow
   - [x] Per-client processing
   - [x] Monthly data accumulation
+- [x] Normalize Google leads using conversion action rules
+- [x] Generate both the internal report and `_summary.md` from the same run
+- [x] Thread client reporting config through the pipeline
 - [x] Delete deprecated files
   - [x] `src/report_generator.py`
   - [x] `src/data_processor.py`
   - [x] `src/data_fetchers.py` (replaced by fetchers/)
 
 ### Phase 6: Testing & Validation
-- [ ] Test end-to-end with homescape client (REQUIRES USER with API credentials)
-- [ ] Validate markdown output is LLM-parseable (REQUIRES USER testing)
-- [ ] Verify data accumulation works across months (REQUIRES USER testing)
-- [ ] Check API quota usage is within limits (REQUIRES USER monitoring)
+- [x] Test end-to-end with homescape client (REQUIRES USER with API credentials)
+- [x] Validate markdown output is LLM-parseable (REQUIRES USER testing)
+- [x] Verify data accumulation works across months (REQUIRES USER testing)
+- [x] Check API quota usage is within limits (REQUIRES USER monitoring)
 
 ## Implementation Summary
 
 ### Completed
 - ✅ All data models created with new record types
 - ✅ Partitioned Parquet storage manager
-- ✅ Google Ads fetcher with all 4 GAQL queries
-- ✅ Meta Ads fetcher (simplified)
+- ✅ Google Ads fetcher with conversion action normalization input
+- ✅ Meta Ads fetcher with configurable lead action types
 - ✅ All 4 analyzers (search terms, IS, QS, trends)
-- ✅ Markdown report generator optimized for LLM
-- ✅ New pipeline orchestration (main.py)
-
-### Deferred
-- Unit tests - Can be added later if needed
+- ✅ Internal diagnostic report + client summary report
+- ✅ New pipeline orchestration (main.py + pipeline.py)
+- ✅ Reporting/config/model package cleanup
+- ✅ Unit + integration coverage for summary generation
 
 ### Requires User Action
 - Test with real Google Ads API credentials

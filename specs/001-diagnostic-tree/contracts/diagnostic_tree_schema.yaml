@@ -1,0 +1,204 @@
+# Diagnostic Tree Configuration Schema
+# This defines the structure of config/diagnostic_tree.yaml
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: DiagnosticTreeConfig
+description: Configuration for the diagnostic tree system
+type: object
+
+required:
+  - version
+  - metrics
+  - checks
+  - thresholds
+
+properties:
+  version:
+    type: string
+    pattern: "^\\d+\\.\\d+$"
+    description: Configuration version (e.g., "1.0")
+
+  metrics:
+    type: object
+    description: Metrics to monitor for changes
+    additionalProperties:
+      $ref: "#/definitions/MetricConfig"
+
+  checks:
+    type: object
+    description: Diagnostic checks to run when metrics change
+    additionalProperties:
+      $ref: "#/definitions/CheckConfig"
+
+  thresholds:
+    $ref: "#/definitions/ThresholdConfig"
+
+definitions:
+  MetricConfig:
+    type: object
+    required:
+      - name
+      - formula
+      - change_threshold
+      - diagnostic_checks
+    properties:
+      name:
+        type: string
+        description: Human-readable metric name
+      formula:
+        type: string
+        description: How to calculate the metric (e.g., "spend / conversions_primary")
+      change_threshold:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Percentage change that triggers investigation (0.10 = 10%)
+      diagnostic_checks:
+        type: array
+        items:
+          type: string
+        description: List of check IDs to run when metric changes
+
+  CheckConfig:
+    type: object
+    required:
+      - name
+      - description
+      - evidence
+      - recommendations
+    properties:
+      name:
+        type: string
+        description: Human-readable check name
+      description:
+        type: string
+        description: What this check investigates
+      dimensions:
+        type: array
+        items:
+          type: string
+          enum: [device, geo, hour]
+        description: Dimensions to analyze (for composition checks)
+      threshold:
+        type: number
+        description: Threshold for this specific check (e.g., shift magnitude)
+      evidence:
+        type: array
+        items:
+          $ref: "#/definitions/EvidenceRule"
+        description: Rules for evaluating evidence
+      recommendations:
+        type: array
+        items:
+          $ref: "#/definitions/RecommendationTemplate"
+        description: Actions to recommend when check confirms
+
+  EvidenceRule:
+    type: object
+    required:
+      - metric
+      - condition
+      - weight
+    properties:
+      metric:
+        type: string
+        description: Metric to evaluate (e.g., "impression_share_lost_rank")
+      condition:
+        type: string
+        description: Condition to check (e.g., "increased > 5pts", "decreased > 10%")
+      weight:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Weight of this evidence in confidence calculation
+
+  RecommendationTemplate:
+    type: object
+    required:
+      - action
+      - effort
+      - template
+    properties:
+      action:
+        type: string
+        description: Action identifier (e.g., "review_bids", "add_negatives")
+      effort:
+        type: string
+        enum: [low, medium, high]
+        description: Implementation effort level
+      template:
+        type: string
+        description: Template for recommendation text (supports {placeholders})
+
+  ThresholdConfig:
+    type: object
+    required:
+      - min_data_points
+      - significance_level
+      - anomaly_z_score
+    properties:
+      min_data_points:
+        type: integer
+        minimum: 1
+        description: Minimum days of data for trend analysis
+      significance_level:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: R² threshold for trend significance
+      anomaly_z_score:
+        type: number
+        minimum: 0
+        description: Z-score threshold for anomaly detection
+
+# Example configuration
+examples:
+  - version: "1.0"
+    metrics:
+      cpl:
+        name: "Cost Per Lead"
+        formula: "spend / conversions_primary"
+        change_threshold: 0.10
+        diagnostic_checks:
+          - competition
+          - quality_score
+          - search_term_quality
+          - composition_shift
+
+    checks:
+      competition:
+        name: "Competition Changes"
+        description: "Detect increased auction competition"
+        evidence:
+          - metric: impression_share_lost_rank
+            condition: "increased > 5pts"
+            weight: 0.4
+          - metric: avg_cpc
+            condition: "increased > 10%"
+            weight: 0.3
+        recommendations:
+          - action: review_bids
+            effort: low
+            template: "Review and adjust bids for campaigns with IS loss"
+
+      composition_shift:
+        name: "Traffic Composition Shift"
+        description: "Detect changes in traffic mix"
+        dimensions:
+          - device
+          - geo
+          - hour
+        threshold: 0.15
+        evidence:
+          - metric: dimension_shift_magnitude
+            condition: "> 15pts"
+            weight: 1.0
+        recommendations:
+          - action: adjust_bid_modifiers
+            effort: low
+            template: "Adjust {dimension} bid modifiers: {details}"
+
+    thresholds:
+      min_data_points: 7
+      significance_level: 0.7
+      anomaly_z_score: 2.0

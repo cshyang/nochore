@@ -16,3 +16,10 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+## Active Technologies
+- Python 3.9+ (matches existing codebase) + Polars (dataframes), Click (CLI), Rich (output), PyYAML (config) (001-diagnostic-tree)
+- Parquet files (existing partitioned storage in `data/`) (001-diagnostic-tree)
+
+## Recent Changes
+- 001-diagnostic-tree: Added Python 3.9+ (matches existing codebase) + Polars (dataframes), Click (CLI), Rich (output), PyYAML (config)

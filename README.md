@@ -1,13 +1,13 @@
 # Ads Report Automation CLI
 
-A command-line tool for automated advertising performance reports that pulls data from Meta and Google Ads APIs, stores it in partitioned Parquet files, and generates LLM-friendly markdown reports with KPI deltas and actionable insights.
+A command-line tool for automated advertising performance reports that pulls data from Meta and Google Ads APIs, stores it in partitioned Parquet files, and generates dual markdown outputs from one pipeline run: an internal diagnostic report and a compact client summary.
 
 ## 🚀 Features
 
 - **Multi-platform data aggregation** (Meta Ads, Google Ads)
 - **Configurable historical windows** (`--days`)
 - **Partitioned Parquet storage** per client/data type (monthly partitions)
-- **LLM-optimized markdown reports** in `monthly_summaries/`
+- **LLM-optimized markdown reports** in `reports/`
 - **Search terms analysis** (negative keyword candidates, match-type distribution)
 - **Impression share analysis** (budget vs rank loss, recommendations)
 - **Quality score analysis** (changes, low-QS alerts, distribution)
@@ -126,14 +126,24 @@ uv run ads-report --verbose
 uv run ads-report --help
 ```
 
+### Make Targets
+
+```bash
+make sync
+make run CLIENT=nota MONTH=2026-01
+make no-fetch CLIENT=nota MONTH=2026-01
+make test
+```
+
 ## 📈 Output
 
 ### Reports
-- **Markdown reports**: `monthly_summaries/{client}_{YYYY-MM}.md`
+- **Internal diagnostic report**: `reports/{client}_{YYYY-MM}.md`
+- **Client summary report**: `reports/{client}_{YYYY-MM}_summary.md`
 
 ### Data Files
 - **Partitioned Parquet**: `data/{client_id}/{data_type}/{YYYY-MM}.parquet`
-- Data types include: `campaigns`, `search_terms`, `impression_share`, `quality_scores`
+- Data types include: `campaigns`, `conversion_actions`, `search_terms`, `impression_share`, `quality_scores`
 
 ### Logs
 - **Log files**: `logs/ads_report.log`
@@ -181,19 +191,22 @@ The unified `fact_performance_daily` table includes:
 ```
 ads-report-automation/
 ├── src/
-│   ├── __init__.py
-│   ├── main.py              # CLI entry point (single pipeline)
-│   ├── config.py            # Configuration management
-│   ├── data_models.py       # Data schemas
+│   ├── main.py              # CLI entry point
+│   ├── pipeline.py          # Fetch -> store -> analyze -> report orchestration
 │   ├── storage.py           # Partitioned Parquet storage
+│   ├── config/              # Client/reporting config and diagnostic config
+│   ├── models/              # Core records, diagnostics, reporting view models
 │   ├── fetchers/            # API data fetchers
 │   ├── analyzers/           # Insight engines
-│   └── report.py            # Markdown report generator
+│   ├── diagnostics/         # Diagnostic tree logic
+│   └── reporting/           # Internal + client report generation
 ├── data/                    # Parquet data files
 ├── logs/                    # Application logs
-├── monthly_summaries/       # Generated reports
-├── clients.yaml            # Client configuration
-├── pyproject.toml          # Project configuration
+├── reports/                 # Generated reports
+├── clients.yaml             # Client config, theme rules, brand rules
+├── config/diagnostic_tree.yaml
+├── tests/
+├── pyproject.toml
 └── README.md
 ```
 

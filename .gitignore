@@ -22,8 +22,8 @@ logs/*
 *.log
 
 # Reports (generated)
-monthly_summaries/
-!monthly_summaries/.gitkeep
+reports/*
+!reports/.gitkeep
 
 # Backups
 *.backup
@@ -32,6 +32,8 @@ monthly_summaries/
 # IDE and editor
 .vscode/
 .venv/
+.DS_Store
+.worktrees/
 
 # local
 .claude/
@@ -39,4 +41,3 @@ monthly_summaries/
 .kilocode/
 .opencode/
 .windsurf/
-

@@ -19,6 +19,23 @@ When the report generator runs
 Then a markdown file is created in monthly_summaries/
 And filename follows pattern {client}_{YYYY-MM}.md
 
+### Requirement: Brand-Segmented Client Summary
+The system SHALL support multi-brand client summaries using deterministic brand routing rules when a client operates multiple brands under one reporting client.
+
+#### Scenario: Render one client report with multiple brand sections
+Given a client configuration with multiple `brand_rules`
+And campaign rows from multiple source accounts
+When the client summary is generated
+Then the report includes one combined spending overview for the full client
+And the report renders separate brand sections after the overview
+And each brand section contains only the platform breakdowns for that brand
+
+#### Scenario: Route one Google account to a single brand
+Given a client where all Google Ads campaigns belong to one brand
+When the summary builder applies `brand_rules`
+Then every Google Ads row is assigned to that configured brand
+And the final report places Google Ads breakdowns only under that brand section
+
 ### Requirement: Executive Summary
 The report SHALL include an executive summary with:
 - Key metrics comparison (this month vs last month)

@@ -140,6 +140,56 @@ class AnalyzerConfig:
     # ...
 ```
 
+### 8. Dual Report Rendering
+
+**Decision:** Generate two markdown artifacts from every run.
+
+**Rationale:**
+- The internal report can stay verbose and diagnostic.
+- The client report should stay deterministic, compact, and table-first.
+- One pipeline run keeps both artifacts consistent for the same dataset and date window.
+
+**Outputs:**
+- Internal: `reports/{client}_{YYYY-MM}.md`
+- Client summary: `reports/{client}_{YYYY-MM}_summary.md`
+
+### 9. Source Structure Cleanup
+
+**Decision:** Split mixed-responsibility modules into dedicated packages without renaming the top-level `src/` package.
+
+**Rationale:**
+- `data_models.py` had grown into unrelated concerns.
+- `config.py` mixed client config with diagnostic-tree loading.
+- Reporting logic existed across `report.py`, helper modules, and unused templates.
+
+**Target structure:**
+- `src/models/` for persisted records, diagnostic models, and reporting view models
+- `src/config/` for client/reporting config and diagnostic-tree config
+- `src/reporting/` for calculations, normalization, and report generation
+
+### 10. Brand-Aware Client Summaries
+
+**Decision:** Add deterministic brand routing before theme routing for clients that operate multiple brands under one reporting client.
+
+**Rationale:**
+- Some clients share one monthly report but operate distinct brands.
+- Account-level routing is more reliable than LLM inference and avoids recurring manual cleanup.
+- Brand grouping lets the report keep one combined overview while still segmenting downstream platform tables.
+
+**Implementation:**
+- `reporting.brand_rules` assigns a row to a brand using platform plus source account ID and/or campaign regex.
+- Brand matching runs before theme matching.
+- Theme matching supports optional brand-specific rules; if no brand-specific theme matches, the brand can define a `default_theme`.
+- The client summary layout becomes:
+  - Combined client-level spending overview
+  - Brand sections
+  - Platform-by-theme tables within each brand section
+
+**Trade-offs:**
+- (+) Deterministic and reviewable in config
+- (+) Preserves a single client report file
+- (-) Adds more reporting config that must be maintained as brands/accounts change
+
 ## Alternatives Considered
 
 ### Storage: SQLite vs Parquet

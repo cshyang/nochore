@@ -10,9 +10,12 @@ Current reporting system generates basic CLI tables focused on human viewing. Th
 ## What Changes
 
 - **NEW**: Data fetchers for granular Google Ads metrics (search terms, impression share, quality scores)
+- **NEW**: Google conversion-action fetcher output for deterministic lead normalization
 - **NEW**: Analytics engines to generate insights (negative keyword candidates, lost impression analysis, QS trends)
-- **NEW**: Markdown report generator optimized for AI consumption
+- **NEW**: Dual markdown outputs: internal diagnostic report + compact client summary
+- **NEW**: Brand-aware client summary sections for multi-brand clients under a single client account
 - **REPLACE**: Current CLI-focused report generator with structured markdown output
+- **REFACTOR**: Reporting/config/model code reorganized into dedicated packages to remove duplicated report paths
 - **NEW**: Partitioned storage for monthly data accumulation
 
 ## Impact
@@ -23,12 +26,13 @@ Current reporting system generates basic CLI tables focused on human viewing. Th
   - `markdown-reporting` (NEW) - Report generation
 
 - Affected code:
-  - `src/data_models.py` - Add new record types
-  - `src/data_fetchers.py` - Replace with `src/fetchers/` directory
-  - `src/report_generator.py` - Replace with `src/report.py`
-  - `src/data_processor.py` - Replace with `src/analyzers/` directory
-  - `src/main.py` - Update pipeline orchestration
-  - `src/storage.py` - NEW partitioned Parquet storage
+  - `src/models/` - Split core, diagnostic, and reporting data models
+  - `src/config/` - Split client/reporting config from diagnostic-tree config
+  - `src/reporting/` - Consolidated reporting calculations, builders, and generators
+  - `src/fetchers/` - Added conversion-action ingestion for Google Ads
+  - `src/main.py` and `src/pipeline.py` - Update dual-report orchestration
+  - `src/storage.py` - Extended storage for conversion action records
+  - `clients.yaml` - Added client-facing brand routing rules for multi-brand reporting
 
 ## Priority Features
 

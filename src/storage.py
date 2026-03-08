@@ -5,11 +5,13 @@ from datetime import date, datetime
 from typing import List, Union, Optional
 import polars as pl
 
-from .data_models import (
-    SearchTermRecord,
+from .models import (
+    DimensionBreakdownRecord,
+    GoogleConversionActionRecord,
     ImpressionShareRecord,
+    PerformanceRecord,
     QualityScoreRecord,
-    PerformanceRecord
+    SearchTermRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,13 +38,18 @@ class StorageManager:
         elif data_type == "quality_scores":
             return ["source_account_id", "date", "keyword_id"]
         elif data_type == "campaigns":
-            return ["platform", "source_account_id", "date", "campaign_id"]
+            return ["client_id", "platform", "source_account_id", "date", "campaign_id"]
+        elif data_type == "conversion_actions":
+            return ["source_account_id", "date", "campaign_id", "conversion_action_name"]
+        elif data_type == "dimension_breakdown":
+            return ["source_account_id", "date", "campaign_id", "dimension_type", "dimension_value"]
         else:
             raise ValueError(f"Unknown data type: {data_type}")
     
-    def append(self, client_id: str, data_type: str, 
-               records: Union[List[SearchTermRecord], List[ImpressionShareRecord], 
-                            List[QualityScoreRecord], List[PerformanceRecord]]) -> None:
+    def append(self, client_id: str, data_type: str,
+               records: Union[List[SearchTermRecord], List[ImpressionShareRecord],
+                            List[QualityScoreRecord], List[PerformanceRecord],
+                            List[DimensionBreakdownRecord], List[GoogleConversionActionRecord]]) -> None:
         """Append records with deduplication."""
         if not records:
             logger.warning(f"No records to append for {client_id}/{data_type}")
@@ -68,6 +75,8 @@ class StorageManager:
                 }
                 for r in records
             ]
+        elif isinstance(records[0], DimensionBreakdownRecord):
+            data = [r.to_dict() for r in records]
         else:
             data = [vars(r) for r in records]
         
@@ -131,15 +140,19 @@ class StorageManager:
         
         if not dfs:
             return pl.DataFrame()
-        
+
         combined = pl.concat(dfs)
-        
+
+        # Filter by client_id if column exists (prevents cross-client data pollution)
+        if "client_id" in combined.columns:
+            combined = combined.filter(pl.col("client_id") == client_id)
+
         # Filter by date range if specified
         if start_date:
             combined = combined.filter(pl.col("date") >= start_date)
         if end_date:
             combined = combined.filter(pl.col("date") <= end_date)
-        
+
         return combined
     
     def list_clients(self) -> List[str]:
