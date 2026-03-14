@@ -374,7 +374,7 @@ def generate_reports(
     storage: StorageManager,
     internal_report_generator: InternalReportGenerator,
     client_summary_generator: ClientSummaryGenerator,
-) -> tuple[str, str]:
+) -> Tuple[str, str]:
     """Phase 3: Generate markdown reports from analysis results.
 
     Produces both the internal detailed report and the client-facing summary.
