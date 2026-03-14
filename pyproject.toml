@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 ads-report = "src.main:cli"
+campaign = "src.cli.main:cli"
 
 [build-system]
 requires = ["hatchling"]
