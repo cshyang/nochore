@@ -2,7 +2,7 @@
 import logging
 import os
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
 from rich.console import Console
@@ -16,7 +16,7 @@ from src.analyzers.trends import TrendAnalyzer
 from src.credentials import CredentialManager
 from src.date_utils import calculate_previous_period
 from src.fetchers.google_ads import GoogleAdsFetcher
-from src.models import ReportingConfig
+from src.models import AnalysisResults, ReportingConfig
 from src.reporting import (
     ClientSummaryGenerator,
     InternalReportGenerator,
@@ -178,72 +178,86 @@ def fetch_meta(
         )
 
 
-def process_client(
+def fetch_client(
     client_id: str,
     client_config: Dict[str, Any],
     reporting_config: ReportingConfig,
-    current_start: date,
-    current_end: date,
+    start_date: date,
+    end_date: date,
     storage: StorageManager,
-    internal_report_generator: InternalReportGenerator,
-    client_summary_generator: ClientSummaryGenerator,
     cred_manager: CredentialManager,
-    no_fetch: bool = False,
-    is_monthly: bool = True,
 ) -> None:
-    """Process a single client: fetch data, analyze, and generate report.
+    """Phase 1: Fetch data from APIs and store.
 
-    This is the main pipeline orchestrator that coordinates:
-    1. Data fetching from Google Ads and Meta APIs
-    2. Running all analyzers on the fetched data
-    3. Generating the markdown report
+    Fetches Google Ads and Meta data for the given client and date range,
+    persisting all results via the storage manager.
 
     Args:
         client_id: Client identifier
         client_config: Client configuration dict
+        reporting_config: Reporting configuration
+        start_date: Start of date range
+        end_date: End of date range
+        storage: Storage manager for persisting data
+        cred_manager: Credential manager for API access
+    """
+    console.print("[yellow]Phase 1: Fetching data...[/yellow]")
+
+    ga_client = init_google_ads_client(cred_manager)
+    if "google_ads" in client_config and ga_client:
+        fetch_google_ads(
+            client_id, client_config, start_date, end_date, storage, ga_client
+        )
+    elif "google_ads" in client_config:
+        console.print(
+            "[yellow]  Skipping Google Ads fetch (missing credentials)[/yellow]"
+        )
+
+    if "meta" in client_config:
+        fetch_meta(
+            client_id,
+            client_config,
+            reporting_config,
+            start_date,
+            end_date,
+            storage,
+            cred_manager,
+        )
+
+
+def analyze_client(
+    client_id: str,
+    reporting_config: ReportingConfig,
+    current_start: date,
+    current_end: date,
+    storage: StorageManager,
+    is_monthly: bool = True,
+) -> Optional[AnalysisResults]:
+    """Phase 2: Run analyzers on stored data and return structured results.
+
+    Reads data from storage, normalizes campaigns, runs all analyzers
+    (search terms, impression share, quality score, trends), and computes
+    the KPI summary. Returns an AnalysisResults object or None if no data
+    is found.
+
+    Args:
+        client_id: Client identifier
+        reporting_config: Reporting configuration
         current_start: Start date of current reporting period
         current_end: End date of current reporting period
-        storage: Storage manager instance
-        report_generator: Report generator instance
-        cred_manager: Credential manager instance
-        no_fetch: If True, skip API fetching and use cached data
+        storage: Storage manager for reading persisted data
         is_monthly: If True, use month-over-month comparison
-    """
-    console.print(f"[blue]Processing {client_id}[/blue]\n")
 
-    # Calculate comparison period
+    Returns:
+        AnalysisResults with all analyzer outputs, or None if no data found
+    """
+    console.print("\n[yellow]Phase 2: Analyzing data...[/yellow]")
+
     previous_start, previous_end = calculate_previous_period(
         current_start, current_end, is_monthly
     )
 
-    # Phase 1: Fetch data (optional)
-    if not no_fetch:
-        console.print("[yellow]Phase 1: Fetching data...[/yellow]")
-
-        ga_client = init_google_ads_client(cred_manager)
-        if "google_ads" in client_config and ga_client:
-            fetch_google_ads(
-                client_id, client_config, current_start, current_end, storage, ga_client
-            )
-        elif "google_ads" in client_config:
-            console.print(
-                "[yellow]  Skipping Google Ads fetch (missing credentials)[/yellow]"
-            )
-
-        if "meta" in client_config:
-            fetch_meta(
-                client_id,
-                client_config,
-                reporting_config,
-                current_start,
-                current_end,
-                storage,
-                cred_manager,
-            )
-
-    # Phase 2: Analyze data
-    console.print("\n[yellow]Phase 2: Analyzing data...[/yellow]")
-
+    # Read stored data
     search_terms_df = storage.read(
         client_id, "search_terms", current_start, current_end
     )
@@ -258,21 +272,9 @@ def process_client(
         client_id, "conversion_actions", previous_start, current_end
     )
 
+    # Normalize campaigns for analysis (full period)
     campaigns_all, _ = normalize_campaigns(
         raw_campaigns_all, conversion_actions_all, reporting_config
-    )
-    raw_campaigns_current = (
-        raw_campaigns_all.filter(
-            (pl.col("date") >= current_start) & (pl.col("date") <= current_end)
-        )
-        if not raw_campaigns_all.is_empty()
-        else raw_campaigns_all
-    )
-    conversion_actions_current = storage.read(
-        client_id, "conversion_actions", current_start, current_end
-    )
-    _, lead_corrections = normalize_campaigns(
-        raw_campaigns_current, conversion_actions_current, reporting_config
     )
 
     campaigns_current = (
@@ -283,6 +285,7 @@ def process_client(
         else campaigns_all
     )
 
+    # Early exit if no data at all
     if (
         search_terms_df.is_empty()
         and impression_share_df.is_empty()
@@ -292,7 +295,7 @@ def process_client(
         console.print(
             "[yellow]No stored data found for this client/date range.[/yellow]"
         )
-        return
+        return None
 
     # Run analyzers
     st_analyzer = SearchTermsAnalyzer(search_terms_df)
@@ -319,9 +322,7 @@ def process_client(
     leads_forecast = trend_analyzer.forecast("conversions_primary")
     console.print(f"  Detected {len(anomalies)} anomalies")
 
-    # Phase 3: Generate report
-    console.print("\n[yellow]Phase 3: Generating markdown report...[/yellow]")
-
+    # Compute KPI summary
     kpi_summary = (
         compute_kpi_summary(
             campaigns_all=campaigns_all,
@@ -338,23 +339,94 @@ def process_client(
         }
     )
 
-    report_path = internal_report_generator.generate_report(
+    # Determine currency from campaign data
+    currency = ""
+    if not campaigns_current.is_empty() and "currency" in campaigns_current.columns:
+        first_currency = campaigns_current.select("currency").row(0)[0]
+        if first_currency:
+            currency = first_currency
+
+    return AnalysisResults(
         client_id=client_id,
-        period=current_end.strftime("%Y-%m"),
+        period_current=f"{current_start.isoformat()} to {current_end.isoformat()}",
+        period_previous=f"{previous_start.isoformat()} to {previous_end.isoformat()}",
+        currency=currency,
         kpi_summary=kpi_summary,
-        neg_keywords=neg_keywords,
+        negative_keywords=neg_keywords,
         top_search_terms=top_search_terms,
         match_type_breakdown=match_type_breakdown,
-        lost_is=lost_is,
-        budget_recs=budget_recs,
+        lost_impression_share=lost_is,
+        budget_recommendations=budget_recs,
         qs_changes=qs_changes,
         low_qs_alerts=low_qs_alerts,
         qs_distribution=qs_distribution,
         trends=[leads_trend, clicks_trend],
         anomalies=anomalies,
-        forecast=[leads_forecast],
+        forecasts=[leads_forecast],
     )
 
+
+def generate_reports(
+    results: AnalysisResults,
+    reporting_config: ReportingConfig,
+    current_start: date,
+    current_end: date,
+    storage: StorageManager,
+    internal_report_generator: InternalReportGenerator,
+    client_summary_generator: ClientSummaryGenerator,
+) -> tuple[str, str]:
+    """Phase 3: Generate markdown reports from analysis results.
+
+    Produces both the internal detailed report and the client-facing summary.
+    Re-reads raw campaign data from storage and normalizes it to obtain
+    lead corrections needed for the client summary.
+
+    Args:
+        results: Structured analysis results from analyze_client()
+        reporting_config: Reporting configuration
+        current_start: Start date of current reporting period
+        current_end: End date of current reporting period
+        storage: Storage manager for reading campaign data
+        internal_report_generator: Generator for internal reports
+        client_summary_generator: Generator for client summaries
+
+    Returns:
+        Tuple of (internal_report_path, client_summary_path)
+    """
+    console.print("\n[yellow]Phase 3: Generating markdown report...[/yellow]")
+
+    client_id = results.client_id
+
+    # Generate internal report from analysis results
+    report_path = internal_report_generator.generate_report(
+        client_id=client_id,
+        period=current_end.strftime("%Y-%m"),
+        kpi_summary=results.kpi_summary,
+        neg_keywords=results.negative_keywords,
+        top_search_terms=results.top_search_terms,
+        match_type_breakdown=results.match_type_breakdown,
+        lost_is=results.lost_impression_share,
+        budget_recs=results.budget_recommendations,
+        qs_changes=results.qs_changes,
+        low_qs_alerts=results.low_qs_alerts,
+        qs_distribution=results.qs_distribution,
+        trends=results.trends,
+        anomalies=results.anomalies,
+        forecast=results.forecasts,
+    )
+
+    # Re-read and normalize current-period raw campaigns for lead corrections
+    raw_campaigns_current = storage.read(
+        client_id, "campaigns", current_start, current_end
+    )
+    conversion_actions_current = storage.read(
+        client_id, "conversion_actions", current_start, current_end
+    )
+    campaigns_current, lead_corrections = normalize_campaigns(
+        raw_campaigns_current, conversion_actions_current, reporting_config
+    )
+
+    # Generate client summary
     client_summary_report = build_client_summary_report(
         client_id=client_id,
         current_df=campaigns_current,
@@ -367,3 +439,80 @@ def process_client(
 
     console.print(f"\n[bold green]Internal report generated: {report_path}[/bold green]")
     console.print(f"[bold green]Client summary generated: {client_summary_path}[/bold green]\n")
+
+    return report_path, client_summary_path
+
+
+def process_client(
+    client_id: str,
+    client_config: Dict[str, Any],
+    reporting_config: ReportingConfig,
+    current_start: date,
+    current_end: date,
+    storage: StorageManager,
+    internal_report_generator: InternalReportGenerator,
+    client_summary_generator: ClientSummaryGenerator,
+    cred_manager: CredentialManager,
+    no_fetch: bool = False,
+    is_monthly: bool = True,
+) -> None:
+    """Process a single client: fetch data, analyze, and generate report.
+
+    This is the main pipeline orchestrator that coordinates:
+    1. Data fetching from Google Ads and Meta APIs
+    2. Running all analyzers on the fetched data
+    3. Generating the markdown report
+
+    Preserved for backward compatibility. Delegates to fetch_client(),
+    analyze_client(), and generate_reports().
+
+    Args:
+        client_id: Client identifier
+        client_config: Client configuration dict
+        reporting_config: Reporting configuration
+        current_start: Start date of current reporting period
+        current_end: End date of current reporting period
+        storage: Storage manager instance
+        internal_report_generator: Internal report generator instance
+        client_summary_generator: Client summary generator instance
+        cred_manager: Credential manager instance
+        no_fetch: If True, skip API fetching and use cached data
+        is_monthly: If True, use month-over-month comparison
+    """
+    console.print(f"[blue]Processing {client_id}[/blue]\n")
+
+    # Phase 1: Fetch data (optional)
+    if not no_fetch:
+        fetch_client(
+            client_id=client_id,
+            client_config=client_config,
+            reporting_config=reporting_config,
+            start_date=current_start,
+            end_date=current_end,
+            storage=storage,
+            cred_manager=cred_manager,
+        )
+
+    # Phase 2: Analyze data
+    results = analyze_client(
+        client_id=client_id,
+        reporting_config=reporting_config,
+        current_start=current_start,
+        current_end=current_end,
+        storage=storage,
+        is_monthly=is_monthly,
+    )
+
+    if results is None:
+        return
+
+    # Phase 3: Generate reports
+    generate_reports(
+        results=results,
+        reporting_config=reporting_config,
+        current_start=current_start,
+        current_end=current_end,
+        storage=storage,
+        internal_report_generator=internal_report_generator,
+        client_summary_generator=client_summary_generator,
+    )
