@@ -3,12 +3,13 @@
 Supports table (human), json (agent), and csv output modes.
 """
 
+import csv
 import json
 import sys
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.table import Table
@@ -35,8 +36,28 @@ def _serialize(obj: Any) -> Any:
     return obj
 
 
+def _to_rows(data: Any) -> Optional[List[Dict[str, Any]]]:
+    """Normalize data into a list of dicts for tabular output.
+
+    Returns None if data cannot be converted to rows.
+    """
+    if is_dataclass(data) and not isinstance(data, type):
+        return [asdict(data)]
+    if isinstance(data, list) and data and is_dataclass(data[0]):
+        return [asdict(item) for item in data]
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
+    return None
+
+
 def output_json(data: Any) -> None:
     """Print data as JSON to stdout."""
+    if is_dataclass(data) and not isinstance(data, type):
+        data = asdict(data)
+    elif isinstance(data, list) and data and is_dataclass(data[0]):
+        data = [asdict(item) for item in data]
     print(json.dumps(data, default=_serialize, indent=2))
 
 
@@ -58,39 +79,20 @@ def output_table(title: str, rows: List[Dict[str, Any]], columns: Optional[List[
 def output_data(data: Any, fmt: OutputFormat, title: str = "", columns: Optional[List[str]] = None) -> None:
     """Route output to the appropriate formatter."""
     if fmt == OutputFormat.JSON:
-        if is_dataclass(data) and not isinstance(data, type):
-            output_json(asdict(data))
-        elif isinstance(data, list) and data and is_dataclass(data[0]):
-            output_json([asdict(item) for item in data])
-        else:
-            output_json(data)
-    elif fmt == OutputFormat.TABLE:
-        if is_dataclass(data) and not isinstance(data, type):
-            rows = [asdict(data)]
-        elif isinstance(data, list) and data and is_dataclass(data[0]):
-            rows = [asdict(item) for item in data]
-        elif isinstance(data, list):
-            rows = data
-        elif isinstance(data, dict):
-            rows = [data]
-        else:
+        output_json(data)
+        return
+
+    rows = _to_rows(data)
+    if rows is None:
+        if fmt == OutputFormat.TABLE:
             console.print(str(data))
-            return
-        output_table(title, rows, columns)
-    elif fmt == OutputFormat.CSV:
-        import csv
-        import io
-        if is_dataclass(data) and not isinstance(data, type):
-            rows = [asdict(data)]
-        elif isinstance(data, list) and data and is_dataclass(data[0]):
-            rows = [asdict(item) for item in data]
-        elif isinstance(data, list):
-            rows = data
-        elif isinstance(data, dict):
-            rows = [data]
         else:
             print(str(data))
-            return
+        return
+
+    if fmt == OutputFormat.TABLE:
+        output_table(title, rows, columns)
+    elif fmt == OutputFormat.CSV:
         if rows:
             writer = csv.DictWriter(sys.stdout, fieldnames=rows[0].keys())
             writer.writeheader()

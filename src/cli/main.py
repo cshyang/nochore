@@ -34,8 +34,10 @@ from .tools_cmd import tools
 @click.pass_context
 def cli(ctx: click.Context, output_format: str, quiet: bool, verbose: bool, config_path: str) -> None:
     """Campaign CLI -- analytics pipeline for ad campaign management."""
+    from src.output import OutputFormat
+
     ctx.ensure_object(dict)
-    ctx.obj["format"] = output_format
+    ctx.obj["format"] = OutputFormat(output_format)
     ctx.obj["quiet"] = quiet
     ctx.obj["verbose"] = verbose
     ctx.obj["config_path"] = config_path

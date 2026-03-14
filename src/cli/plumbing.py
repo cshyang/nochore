@@ -13,7 +13,7 @@ import click
 from .context import resolve_client_id
 
 
-def _resolve_dates(month: str | None, days: int | None) -> tuple[bool, date, date]:
+def resolve_dates(month: str | None, days: int | None) -> tuple[bool, date, date]:
     """Resolve date range from --month / --days flags.
 
     Defaults to last 30 days when neither flag is supplied.
@@ -54,13 +54,13 @@ def fetch(ctx: click.Context, client_id: str | None, month: str | None, days: in
     """Pull data from ad platforms (Google Ads, Meta) and store locally."""
     from src.config import ConfigManager
     from src.credentials import CredentialManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import fetch_client
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()
@@ -105,13 +105,13 @@ def fetch(ctx: click.Context, client_id: str | None, month: str | None, days: in
 def analyze(ctx: click.Context, client_id: str | None, month: str | None, days: int | None, only: str | None) -> None:
     """Run analyzers on stored data and return structured results."""
     from src.config import ConfigManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import analyze_client
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()
@@ -158,14 +158,14 @@ def analyze(ctx: click.Context, client_id: str | None, month: str | None, days: 
 def report(ctx: click.Context, client_id: str | None, month: str | None, days: int | None, report_type: str) -> None:
     """Generate markdown reports from analysis results."""
     from src.config import ConfigManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import analyze_client, generate_reports
     from src.reporting import ClientSummaryGenerator, InternalReportGenerator
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()

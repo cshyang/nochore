@@ -50,7 +50,7 @@ TOOL_MANIFEST = [
 @click.pass_context
 def tools(ctx: click.Context) -> None:
     """List available campaign CLI capabilities as JSON for agent discovery."""
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     output_data(TOOL_MANIFEST, fmt, title="Available Tools", columns=["name", "description", "when_to_use"])

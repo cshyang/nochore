@@ -8,7 +8,7 @@ from __future__ import annotations
 import click
 
 from .context import resolve_client_id
-from .plumbing import _resolve_dates
+from .plumbing import resolve_dates
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +28,13 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
     """
     from src.config import ConfigManager
     from src.credentials import CredentialManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import analyze_client, fetch_client
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()
@@ -115,13 +115,13 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
     """
     from src.config import ConfigManager
     from src.credentials import CredentialManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import analyze_client, fetch_client
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()
@@ -210,14 +210,14 @@ def brief(ctx: click.Context, client_id: str | None, month: str | None, days: in
     """
     from src.config import ConfigManager
     from src.credentials import CredentialManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
     from src.pipeline import analyze_client, fetch_client, generate_reports
     from src.reporting import ClientSummaryGenerator, InternalReportGenerator
     from src.storage import StorageManager
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cid = resolve_client_id(client_id)
-    is_monthly, start, end = _resolve_dates(month, days)
+    is_monthly, start, end = resolve_dates(month, days)
 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()

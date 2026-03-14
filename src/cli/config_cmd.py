@@ -15,9 +15,9 @@ def config(ctx: click.Context) -> None:
 def config_list(ctx: click.Context) -> None:
     """Show configured clients and their platforms."""
     from src.config import ConfigManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cm = ConfigManager(ctx.obj["config_path"])
     config_data = cm.load_config()
 
@@ -48,9 +48,9 @@ def config_list(ctx: click.Context) -> None:
 def check_creds(ctx: click.Context) -> None:
     """Verify API credentials for all configured platforms."""
     from src.credentials import CredentialManager
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     cred = CredentialManager()
     status = cred.validate_credentials()
 

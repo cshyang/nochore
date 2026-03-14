@@ -23,12 +23,10 @@ def _write_context(client_id: str) -> None:
 
 def read_context() -> str | None:
     """Read the active client from the context file, if it exists."""
-    if not CONTEXT_FILE.exists():
-        return None
     try:
         data = json.loads(CONTEXT_FILE.read_text(encoding="utf-8"))
         return data.get("client_id")
-    except (json.JSONDecodeError, KeyError):
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return None
 
 
@@ -61,9 +59,9 @@ def use(ctx: click.Context, client_id: str) -> None:
     Writes CLIENT_ID to .campaign-context so subsequent commands can
     omit the client_id argument.
     """
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
 
     # Validate the client exists in config
     from src.config import ConfigManager
@@ -92,9 +90,9 @@ def use(ctx: click.Context, client_id: str) -> None:
 @click.pass_context
 def status(ctx: click.Context) -> None:
     """Show current context and data freshness."""
-    from src.output import OutputFormat, output_data
+    from src.output import output_data
 
-    fmt = OutputFormat(ctx.obj["format"])
+    fmt = ctx.obj["format"]
     active = read_context()
 
     info: dict = {
