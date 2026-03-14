@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 class GoogleAdsFetcher:
     """Fetches data from Google Ads API."""
     
-    def __init__(self, client: GoogleAdsClient, customer_id: str):
+    def __init__(self, client: GoogleAdsClient, source_alias: str, customer_id: str):
         self.client = client
+        self.source_alias = source_alias
         self.customer_id = customer_id.replace("-", "")  # Remove dashes
         self.ga_service = client.get_service("GoogleAdsService")
     
@@ -54,6 +55,7 @@ class GoogleAdsFetcher:
                 for row in batch.results:
                     records.append(SearchTermRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         date=date.fromisoformat(row.segments.date),
                         campaign_id=str(row.campaign.id),
@@ -100,6 +102,7 @@ class GoogleAdsFetcher:
                     # Convert metrics (they may be None)
                     records.append(ImpressionShareRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         date=date.fromisoformat(row.segments.date),
                         campaign_id=str(row.campaign.id),
@@ -148,6 +151,7 @@ class GoogleAdsFetcher:
                 for row in batch.results:
                     records.append(QualityScoreRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         date=date.fromisoformat(row.segments.date),
                         campaign_id=str(row.campaign.id),
@@ -209,6 +213,7 @@ class GoogleAdsFetcher:
                     records.append(PerformanceRecord(
                         client_id=client_id,
                         platform=Platform.GOOGLE_ADS,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         date=date.fromisoformat(row.segments.date),
                         campaign_id=str(row.campaign.id),
@@ -257,6 +262,7 @@ class GoogleAdsFetcher:
                     records.append(
                         GoogleConversionActionRecord(
                             client_id=client_id,
+                            source_alias=self.source_alias,
                             source_account_id=self.customer_id,
                             date=date.fromisoformat(row.segments.date),
                             campaign_id=str(row.campaign.id),
@@ -304,6 +310,7 @@ class GoogleAdsFetcher:
 
                     records.append(DimensionBreakdownRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         platform=Platform.GOOGLE_ADS,
                         date=date.fromisoformat(row.segments.date),
@@ -360,6 +367,7 @@ class GoogleAdsFetcher:
 
                     records.append(DimensionBreakdownRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         platform=Platform.GOOGLE_ADS,
                         date=date.fromisoformat(row.segments.date),
@@ -411,6 +419,7 @@ class GoogleAdsFetcher:
 
                     records.append(DimensionBreakdownRecord(
                         client_id=client_id,
+                        source_alias=self.source_alias,
                         source_account_id=self.customer_id,
                         platform=Platform.GOOGLE_ADS,
                         date=date.fromisoformat(row.segments.date),

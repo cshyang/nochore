@@ -111,6 +111,10 @@ def status(ctx: click.Context) -> None:
         if client_context:
             info["context"] = client_context
 
+        knowledge_file = Path("data") / active / "knowledge.md"
+        info["knowledge_file"] = str(knowledge_file)
+        info["knowledge_exists"] = knowledge_file.exists()
+
         from src.storage import StorageManager
 
         storage = StorageManager()
@@ -127,7 +131,10 @@ def status(ctx: click.Context) -> None:
                     parquets = sorted(dt_dir.glob("*.parquet"))
                     if parquets:
                         latest = parquets[-1]
-                        mtime = datetime.datetime.fromtimestamp(latest.stat().st_mtime)
+                        mtime = datetime.datetime.fromtimestamp(
+                            latest.stat().st_mtime,
+                            tz=datetime.timezone.utc,
+                        ).astimezone()
                         freshness[dt_dir.name] = mtime.isoformat(timespec="seconds")
         info["data_freshness"] = freshness
 

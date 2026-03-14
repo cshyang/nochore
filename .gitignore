@@ -14,6 +14,12 @@ config.json
 .env.local
 google-ads.yaml
 
+# Client configs (contain real account IDs and business context)
+config/clients/*.yaml
+!config/clients/example.yaml
+config/defaults.yaml
+.campaign-context
+
 # Generated data and logs
 data/*
 !data/.gitkeep

@@ -1,59 +1,96 @@
 context:
   business: "Multi-brand home services company (renovation, tinting, wrapping)"
-  market: "Singapore, Malaysia"
-  ticket_size: "high"
-  stage: "mature"
-  objective: "leads"
-  quality_signals:
-    - "High CTR indicates good targeting and ad relevance"
-    - "High CVR indicates quality traffic and landing page fit"
-    - "Messaging conversations are real leads, not page views"
   notes:
-    - "Homescape is the priority brand, others are secondary"
-    - "MY market is price-sensitive, expect higher CPL than SG"
+    - "Homescape is the priority brand, gets most budget"
     - "CNY seasonal campaigns run Jan-Feb only"
     - "Meta leads are counted from messaging conversation starts"
 
-meta:
-  ad_accounts:
-    - id: "act_1163453211889702"
+sources:
+  google_ads:
+    homescape_ads:
+      customer_id: "107-310-0792"
+  meta:
+    dmp_sg_meta:
+      account_id: "act_1163453211889702"
       name: "DMP Singapore"
-    - id: "act_475543895521800"
+    dmp_my_meta:
+      account_id: "act_475543895521800"
       name: "DMP MY"
-    - id: "act_655792112740573"
+    tint_meta:
+      account_id: "act_655792112740573"
       name: "Tint n' Wrap"
-    - id: "act_3588231148124410"
+    homescape_meta:
+      account_id: "act_3588231148124410"
       name: "Homescape"
+  ga4:
+    homescape_site:
+      property_id: "451924825"
 
-google_ads:
-  customer_ids:
-    - "107-310-0792"
-
-reporting:
+business:
   brands:
     - name: "Homescape"
+      context:
+        market: "Singapore"
+        ticket_size: "high"
+        objective: "leads"
+        quality_signals:
+          - "High CTR indicates good targeting and ad relevance"
+          - "High CVR indicates quality traffic and landing page fit"
       sources:
-        - platform: "google_ads"
-          account_id: "107-310-0792"
-        - platform: "meta"
-          account_id: "act_3588231148124410"
+        - "homescape_ads"
+        - "homescape_meta"
+        - "homescape_site"
       default_theme: "Always On"
+      filters:
+        homescape_site:
+          landing_page_regex: "/"
+          key_events:
+            - "contact_from_submit"
+            - "whatsapp_link_click"
     - name: "Tint n' Wrap"
+      context:
+        market: "Singapore"
+        ticket_size: "medium"
+        objective: "leads"
+        quality_signals:
+          - "High CTR indicates good targeting and ad relevance"
       sources:
-        - platform: "meta"
-          account_id: "act_655792112740573"
+        - "tint_meta"
     - name: "DMP Singapore"
+      context:
+        market: "Singapore"
+        ticket_size: "high"
+        objective: "leads"
+        quality_signals:
+          - "High CTR indicates good targeting and ad relevance"
+          - "High CVR indicates quality traffic and landing page fit"
       sources:
-        - platform: "meta"
-          account_id: "act_1163453211889702"
+        - "dmp_sg_meta"
     - name: "DMP MY"
+      context:
+        market: "Malaysia"
+        ticket_size: "high"
+        objective: "leads"
+        quality_signals:
+          - "High CTR indicates good targeting and ad relevance"
+        notes:
+          - "MY market is price-sensitive, expect higher CPL than SG"
       sources:
-        - platform: "meta"
-          account_id: "act_475543895521800"
+        - "dmp_my_meta"
+
   theme_rules:
-    - platform: "meta"
+    - source: "dmp_sg_meta"
       theme: "Seasonal"
       campaign_name_regex: "(?i)cny|seasonal|promo"
-    - platform: "google_ads"
+    - source: "dmp_my_meta"
+      theme: "Seasonal"
+      campaign_name_regex: "(?i)cny|seasonal|promo"
+    - source: "tint_meta"
+      theme: "Seasonal"
+      campaign_name_regex: "(?i)cny|seasonal|promo"
+    - source: "homescape_meta"
+      theme: "Seasonal"
+      campaign_name_regex: "(?i)cny|seasonal|promo"
+    - source: "homescape_ads"
       theme: "Performance Max"
       campaign_name_regex: "(?i)performance max|pmax"

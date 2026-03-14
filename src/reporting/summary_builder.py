@@ -9,15 +9,16 @@ import polars as pl
 
 from ..models import (
     BrandSection,
+    BusinessConfig,
     ClientSummaryReport,
     InsightRow,
     LeadCorrectionSummary,
     PlatformThemeBreakdown,
-    ReportingConfig,
     SpendingOverviewRow,
     ThemePerformanceRow,
     ThemeRule,
 )
+from .brand_scope import assign_brand_columns
 
 PLATFORM_LABELS = {
     "google_ads": "Google Ads",
@@ -25,54 +26,31 @@ PLATFORM_LABELS = {
 }
 
 
-def assign_brands(df: pl.DataFrame, reporting_config: ReportingConfig) -> pl.DataFrame:
+def assign_brands(df: pl.DataFrame, business_config: BusinessConfig) -> pl.DataFrame:
     """Assign client-facing brands to campaign rows."""
-    if df.is_empty():
-        return df.with_columns(
-            pl.lit(None, dtype=pl.String).alias("brand"),
-            pl.lit(None, dtype=pl.String).alias("brand_default_theme"),
-        )
-
-    if not reporting_config.brand_rules:
-        return df.with_columns(
-            pl.lit(None, dtype=pl.String).alias("brand"),
-            pl.lit(None, dtype=pl.String).alias("brand_default_theme"),
-        )
-
-    brands: List[Optional[str]] = []
-    default_themes: List[Optional[str]] = []
-    for row in df.iter_rows(named=True):
-        brand, default_theme = _match_brand(
-            str(row.get("platform", "")),
-            str(row.get("source_account_id", "")),
-            str(row.get("campaign_name", "")),
-            reporting_config,
-        )
-        brands.append(brand)
-        default_themes.append(default_theme)
-
-    return df.with_columns(
-        pl.Series("brand", brands, dtype=pl.String),
-        pl.Series("brand_default_theme", default_themes, dtype=pl.String),
+    return assign_brand_columns(
+        df,
+        business_config,
+        unmatched_label="Unmapped",
     )
 
 
-def assign_themes(df: pl.DataFrame, reporting_config: ReportingConfig) -> pl.DataFrame:
+def assign_themes(df: pl.DataFrame, business_config: BusinessConfig) -> pl.DataFrame:
     """Assign client-facing themes to campaign rows."""
     if df.is_empty():
         return df.with_columns(pl.lit("Unmapped").alias("theme"))
 
     working_df = df
     if "brand" not in working_df.columns:
-        working_df = assign_brands(working_df, reporting_config)
+        working_df = assign_brands(working_df, business_config)
 
     themes = [
         _match_theme(
-            platform=str(row.get("platform", "")),
+            source_alias=str(row.get("source_alias", "")),
             brand=_normalize_optional_text(row.get("brand")),
             campaign_name=str(row.get("campaign_name", "")),
             brand_default_theme=_normalize_optional_text(row.get("brand_default_theme")),
-            reporting_config=reporting_config,
+            business_config=business_config,
         )
         for row in working_df.iter_rows(named=True)
     ]
@@ -82,13 +60,13 @@ def assign_themes(df: pl.DataFrame, reporting_config: ReportingConfig) -> pl.Dat
 def normalize_campaigns(
     campaigns_df: pl.DataFrame,
     conversion_actions_df: pl.DataFrame,
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
 ) -> Tuple[pl.DataFrame, List[LeadCorrectionSummary]]:
     """Normalize Google primary leads using conversion-action rules."""
     if campaigns_df.is_empty():
         return campaigns_df, []
 
-    google_rules = reporting_config.primary_lead_rules.google_ads
+    google_rules = business_config.lead_rules.google_ads
     include = set(google_rules.include_conversion_actions)
     exclude = set(google_rules.exclude_conversion_actions)
     if conversion_actions_df.is_empty() or (not include and not exclude):
@@ -104,14 +82,14 @@ def normalize_campaigns(
         return campaigns_df, []
 
     normalized = (
-        working_actions.group_by(["source_account_id", "date", "campaign_id"])
+        working_actions.group_by(["source_alias", "source_account_id", "date", "campaign_id"])
         .agg(pl.col("conversions").fill_null(0).sum().alias("normalized_primary_leads"))
     )
 
     normalized_campaigns = (
         campaigns_df.join(
             normalized,
-            on=["source_account_id", "date", "campaign_id"],
+            on=["source_alias", "source_account_id", "date", "campaign_id"],
             how="left",
         )
         .with_columns(
@@ -133,17 +111,18 @@ def normalize_campaigns(
 def build_client_summary_report(
     client_id: str,
     current_df: pl.DataFrame,
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     period_start: str,
     period_end: str,
+    brand: str | None = None,
     lead_corrections: Iterable[LeadCorrectionSummary] | None = None,
 ) -> ClientSummaryReport:
     """Build the structured client-facing summary model."""
-    branded_df = assign_brands(current_df, reporting_config)
-    themed_df = assign_themes(branded_df, reporting_config)
+    branded_df = assign_brands(current_df, business_config)
+    themed_df = assign_themes(branded_df, business_config)
 
     spending_overview = _build_spending_overview(themed_df)
-    brand_sections = _build_brand_sections(themed_df, reporting_config)
+    brand_sections = _build_brand_sections(themed_df, business_config)
     if brand_sections:
         platform_breakdowns: List[PlatformThemeBreakdown] = []
         breakdown_contexts = [
@@ -158,10 +137,11 @@ def build_client_summary_report(
     insights = _build_insights(breakdown_contexts)
     recommendations = _build_recommendations(breakdown_contexts)
     corrections = list(lead_corrections or [])
-    data_notes = list(reporting_config.data_notes) + _format_correction_notes(corrections)
+    data_notes = list(business_config.data_notes) + _format_correction_notes(corrections)
 
     return ClientSummaryReport(
         client_id=client_id,
+        brand=brand,
         period_label=f"{period_start} to {period_end}",
         period_start=period_start,
         period_end=period_end,
@@ -175,50 +155,22 @@ def build_client_summary_report(
     )
 
 
-def _match_brand(
-    platform: str,
-    source_account_id: str,
-    campaign_name: str,
-    reporting_config: ReportingConfig,
-) -> Tuple[Optional[str], Optional[str]]:
-    normalized_source_account_id = _normalize_account_id(source_account_id)
-
-    for rule in reporting_config.brand_rules:
-        if rule.platform != platform:
-            continue
-        if rule.source_account_ids:
-            allowed_ids = {_normalize_account_id(item) for item in rule.source_account_ids}
-            if normalized_source_account_id not in allowed_ids:
-                continue
-        if rule.campaign_name_regex and not re.search(
-            rule.campaign_name_regex,
-            campaign_name,
-            flags=re.IGNORECASE,
-        ):
-            continue
-        return rule.brand, rule.default_theme
-
-    if reporting_config.brand_rules:
-        return "Unmapped", None
-    return None, None
-
-
 def _match_theme(
-    platform: str,
+    source_alias: str,
     brand: Optional[str],
     campaign_name: str,
     brand_default_theme: Optional[str],
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
 ) -> str:
     specific_rules = [
         rule
-        for rule in reporting_config.theme_rules
-        if rule.platform == platform and rule.brand is not None and rule.brand == brand
+        for rule in business_config.theme_rules
+        if rule.source == source_alias and rule.brand is not None and rule.brand == brand
     ]
     generic_rules = [
         rule
-        for rule in reporting_config.theme_rules
-        if rule.platform == platform and rule.brand is None
+        for rule in business_config.theme_rules
+        if rule.source == source_alias and rule.brand is None
     ]
 
     matched_theme = _match_theme_rules(specific_rules, campaign_name)
@@ -266,9 +218,9 @@ def _build_spending_overview(df: pl.DataFrame) -> List[SpendingOverviewRow]:
 
 def _build_brand_sections(
     df: pl.DataFrame,
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
 ) -> List[BrandSection]:
-    if df.is_empty() or "brand" not in df.columns or not reporting_config.brand_rules:
+    if df.is_empty() or "brand" not in df.columns or not business_config.brands:
         return []
 
     brand_df = df.filter(pl.col("brand").is_not_null())
@@ -285,8 +237,8 @@ def _build_brand_sections(
     }
 
     configured_order: dict[str, int] = {}
-    for rule in reporting_config.brand_rules:
-        configured_order.setdefault(rule.brand, len(configured_order))
+    for brand in business_config.brands:
+        configured_order.setdefault(brand.name, len(configured_order))
 
     brand_names = sorted(
         brand_spend,
@@ -515,12 +467,6 @@ def _first_currency(df: pl.DataFrame) -> str:
         return "USD"
     currencies = df["currency"].drop_nulls().unique().to_list()
     return str(currencies[0]) if currencies else "USD"
-
-
-def _normalize_account_id(value: str) -> str:
-    return str(value).strip().replace("-", "").lower()
-
-
 def _normalize_optional_text(value: object) -> Optional[str]:
     if value is None:
         return None

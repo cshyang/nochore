@@ -19,6 +19,7 @@ class PerformanceRecord:
 
     client_id: str
     platform: Platform
+    source_alias: str
     source_account_id: str
     date: date
     campaign_id: str
@@ -36,6 +37,7 @@ class PerformanceRecord:
         return {
             "client_id": self.client_id,
             "platform": self.platform.value,
+            "source_alias": self.source_alias,
             "source_account_id": self.source_account_id,
             "date": self.date.isoformat(),
             "campaign_id": self.campaign_id,
@@ -55,6 +57,7 @@ class SearchTermRecord:
     """Search query that triggered ads."""
 
     client_id: str
+    source_alias: str
     source_account_id: str
     date: date
     campaign_id: str
@@ -75,6 +78,7 @@ class ImpressionShareRecord:
     """Campaign impression share metrics."""
 
     client_id: str
+    source_alias: str
     source_account_id: str
     date: date
     campaign_id: str
@@ -90,6 +94,7 @@ class QualityScoreRecord:
     """Keyword quality score snapshot."""
 
     client_id: str
+    source_alias: str
     source_account_id: str
     date: date
     campaign_id: str
@@ -113,6 +118,7 @@ class DimensionBreakdownRecord:
     """Metric breakdown by a single dimension."""
 
     client_id: str
+    source_alias: str
     source_account_id: str
     platform: Platform
     date: date
@@ -131,6 +137,7 @@ class DimensionBreakdownRecord:
         """Convert to a storage-friendly mapping."""
         return {
             "client_id": self.client_id,
+            "source_alias": self.source_alias,
             "source_account_id": self.source_account_id,
             "platform": self.platform.value,
             "date": self.date.isoformat() if isinstance(self.date, date) else self.date,
@@ -148,10 +155,28 @@ class DimensionBreakdownRecord:
 
 
 @dataclass
+class GA4LandingPageRecord:
+    """GA4 landing page engagement data per day."""
+
+    client_id: str
+    source_alias: str
+    property_id: str
+    date: date
+    landing_page: str
+    channel_group: str
+    sessions: int
+    engaged_sessions: int
+    key_events: float
+    engagement_rate: float
+    bounce_rate: float
+
+
+@dataclass
 class GoogleConversionActionRecord:
     """Google Ads conversion totals segmented by conversion action name."""
 
     client_id: str
+    source_alias: str
     source_account_id: str
     date: date
     campaign_id: str

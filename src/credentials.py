@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from rich.console import Console
 
-console = Console()
+console = Console(stderr=True)
 
 class CredentialManager:
     """Manages API credentials for Meta and Google Ads."""
@@ -69,11 +69,27 @@ class CredentialManager:
 
         return missing
     
+    def has_google_service_account(self) -> bool:
+        """Check if GOOGLE_APPLICATION_CREDENTIALS is set and points to a file."""
+        path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        return bool(path and Path(path).is_file())
+
+    def get_google_service_account_credentials(self):
+        """Return google.oauth2.service_account.Credentials scoped for GA4 + SC."""
+        from google.oauth2 import service_account
+        path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        scopes = [
+            "https://www.googleapis.com/auth/analytics.readonly",
+            "https://www.googleapis.com/auth/webmasters.readonly",
+        ]
+        return service_account.Credentials.from_service_account_file(path, scopes=scopes)
+
     def validate_credentials(self) -> Dict[str, bool]:
         """Validate all credentials and return status."""
         return {
             'meta': self.has_meta_credentials(),
-            'google_ads': self.has_google_ads_credentials()
+            'google_ads': self.has_google_ads_credentials(),
+            'google_service_account': self.has_google_service_account(),
         }
     
     def print_credential_status(self):
@@ -97,6 +113,12 @@ class CredentialManager:
             for item in missing:
                 console.print(f"  Missing: {item}")
         
+        if status.get('google_service_account'):
+            console.print("[green]✓ Google Service Account: Configured (GA4 + Search Console)[/green]")
+        else:
+            console.print("[red]✗ Google Service Account: Missing[/red]")
+            console.print("  Required: GOOGLE_APPLICATION_CREDENTIALS")
+
         if not any(status.values()):
             console.print("\n[yellow]⚠️  No API credentials found - using mock data[/yellow]")
         elif all(status.values()):

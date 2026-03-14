@@ -1,6 +1,7 @@
-## Shared defaults applied to all clients.
-## Client configs override or extend these values.
-## Lists (business.data_notes, business.lead_rules, notes, etc.) are appended.
+# Shared defaults applied to all clients.
+# Copy to defaults.yaml and fill in your values.
+# Client configs override or extend these values.
+# Lists (business.data_notes, business.lead_rules, notes, etc.) are appended.
 
 business:
   lead_rules:

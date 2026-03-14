@@ -82,6 +82,37 @@ class ClientSummaryGeneratorTests(unittest.TestCase):
             self.assertIn("## Recommendations", text)
             self.assertIn("| Rank | Brand | Platform | Theme | Spend | Leads | CPL | Assessment |", text)
 
+    def test_generate_report_uses_brand_specific_filename_and_header(self) -> None:
+        report = ClientSummaryReport(
+            client_id="nota",
+            period_label="2026-01-01 to 2026-01-31",
+            period_start="2026-01-01",
+            period_end="2026-01-31",
+            spending_overview=[
+                SpendingOverviewRow(platform="Google Ads", currency="MYR", spend=50.0, spend_pct=100.0),
+            ],
+            platform_breakdowns=[],
+            insights=[],
+            recommendations=["Keep spend steady."],
+            data_notes=["No additional notes."],
+            brand="Tint n' Wrap",
+            brand_sections=[
+                BrandSection(
+                    brand="Tint n' Wrap",
+                    total_spend=50.0,
+                    platform_breakdowns=[],
+                )
+            ],
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            generator = ClientSummaryGenerator(output_dir=tmp_dir)
+            path = generator.generate_report(report)
+            self.assertEqual(path.name, "nota_tint-n-wrap_2026-01_summary.md")
+            text = Path(path).read_text(encoding="utf-8")
+            self.assertIn("# Nota Campaign Performance - Tint n' Wrap", text)
+            self.assertIn("**Brand:** Tint n' Wrap", text)
+
 
 if __name__ == "__main__":
     unittest.main()

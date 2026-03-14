@@ -22,10 +22,12 @@ class MetaAdsFetcher:
     def __init__(
         self,
         api: FacebookAdsApi,
+        source_alias: str,
         account_id: str,
         include_action_types: Optional[Iterable[str]] = None,
     ):
         self.api = api
+        self.source_alias = source_alias
         self.account = AdAccount(account_id)
         self.conversion_action_types = set(include_action_types or DEFAULT_META_ACTION_TYPES)
     
@@ -75,6 +77,7 @@ class MetaAdsFetcher:
                 records.append(PerformanceRecord(
                     client_id=client_id,
                     platform=Platform.META,
+                    source_alias=self.source_alias,
                     source_account_id=self.account.get_id(),
                     date=date.fromisoformat(insight['date_start']),
                     campaign_id=insight['campaign_id'],
@@ -132,6 +135,7 @@ class MetaAdsFetcher:
 
                 records.append(DimensionBreakdownRecord(
                     client_id=client_id,
+                    source_alias=self.source_alias,
                     source_account_id=self.account.get_id(),
                     platform=Platform.META,
                     date=date.fromisoformat(insight['date_start']),
@@ -191,6 +195,7 @@ class MetaAdsFetcher:
 
                 records.append(DimensionBreakdownRecord(
                     client_id=client_id,
+                    source_alias=self.source_alias,
                     source_account_id=self.account.get_id(),
                     platform=Platform.META,
                     date=date.fromisoformat(insight['date_start']),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -19,12 +20,18 @@ class ClientSummaryGenerator:
 
     def generate_report(self, report: ClientSummaryReport) -> Path:
         """Write the summary markdown to disk."""
-        file_path = self.output_dir / f"{report.client_id}_{report.period_end[:7]}_summary.md"
+        prefix = _report_prefix(report.client_id, report.brand)
+        file_path = self.output_dir / f"{prefix}_{report.period_end[:7]}_summary.md"
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         with file_path.open("w", encoding="utf-8") as handle:
-            handle.write(f"# {report.client_id.title()} Campaign Performance\n\n")
+            title = f"{report.client_id.title()} Campaign Performance"
+            if report.brand:
+                title = f"{title} - {report.brand}"
+            handle.write(f"# {title}\n\n")
             handle.write(f"**Period:** {report.period_start} to {report.period_end}\n")
+            if report.brand:
+                handle.write(f"**Brand:** {report.brand}\n")
             handle.write(f"**Generated:** {timestamp}\n\n")
             handle.write("---\n\n")
 
@@ -129,3 +136,14 @@ class ClientSummaryGenerator:
                     f"{format_count(row.leads)} | {cpl} | {row.assessment} |\n"
                 )
         handle.write("\n---\n\n")
+
+
+def _report_prefix(client_id: str, brand: str | None) -> str:
+    prefix = client_id
+    if brand:
+        prefix = f"{prefix}_{_slugify(brand)}"
+    return prefix
+
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")

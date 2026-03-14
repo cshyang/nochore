@@ -16,18 +16,20 @@ from src.analyzers.trends import TrendAnalyzer
 from src.credentials import CredentialManager
 from src.date_utils import calculate_previous_period
 from src.fetchers.google_ads import GoogleAdsFetcher
-from src.models import AnalysisResults, ReportingConfig
+from src.models import AnalysisResults, BusinessConfig
 from src.reporting import (
     ClientSummaryGenerator,
     InternalReportGenerator,
     build_client_summary_report,
+    canonicalize_brand_name,
     compute_kpi_summary,
+    filter_to_brand,
     normalize_campaigns,
 )
 from src.storage import StorageManager
 
 logger = logging.getLogger(__name__)
-console = Console()
+console = Console(stderr=True)
 
 
 def init_google_ads_client(
@@ -66,7 +68,7 @@ def init_google_ads_client(
 
 def fetch_google_ads(
     client_id: str,
-    client_config: Dict[str, Any],
+    business_config: BusinessConfig,
     start_date: date,
     end_date: date,
     storage: StorageManager,
@@ -78,38 +80,37 @@ def fetch_google_ads(
 
     Args:
         client_id: Client identifier
-        client_config: Client configuration dict
+        business_config: Business configuration
         start_date: Start of date range
         end_date: End of date range
         storage: Storage manager for persisting data
         ga_client: Initialized Google Ads client
     """
-    customer_ids = client_config.get("google_ads", {}).get("customer_ids", [])
-    for customer_id in customer_ids:
-        fetcher = GoogleAdsFetcher(ga_client, customer_id)
+    for alias, source in business_config.sources.google_ads.items():
+        fetcher = GoogleAdsFetcher(ga_client, alias, source.customer_id)
 
         search_terms = fetcher.fetch_search_terms(client_id, start_date, end_date)
         storage.append(client_id, "search_terms", search_terms)
-        console.print(f"  Fetched {len(search_terms)} search terms ({customer_id})")
+        console.print(f"  Fetched {len(search_terms)} search terms ({alias})")
 
         impression_share = fetcher.fetch_impression_share(
             client_id, start_date, end_date
         )
         storage.append(client_id, "impression_share", impression_share)
         console.print(
-            f"  Fetched {len(impression_share)} impression share records ({customer_id})"
+            f"  Fetched {len(impression_share)} impression share records ({alias})"
         )
 
         quality_scores = fetcher.fetch_quality_scores(client_id, start_date, end_date)
         storage.append(client_id, "quality_scores", quality_scores)
         console.print(
-            f"  Fetched {len(quality_scores)} quality score records ({customer_id})"
+            f"  Fetched {len(quality_scores)} quality score records ({alias})"
         )
 
         campaigns = fetcher.fetch_campaign_performance(client_id, start_date, end_date)
         storage.append(client_id, "campaigns", campaigns)
         console.print(
-            f"  Fetched {len(campaigns)} campaign performance records ({customer_id})"
+            f"  Fetched {len(campaigns)} campaign performance records ({alias})"
         )
 
         conversion_actions = fetcher.fetch_conversion_actions(
@@ -117,14 +118,13 @@ def fetch_google_ads(
         )
         storage.append(client_id, "conversion_actions", conversion_actions)
         console.print(
-            f"  Fetched {len(conversion_actions)} conversion action records ({customer_id})"
+            f"  Fetched {len(conversion_actions)} conversion action records ({alias})"
         )
 
 
 def fetch_meta(
     client_id: str,
-    client_config: Dict[str, Any],
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     start_date: date,
     end_date: date,
     storage: StorageManager,
@@ -134,7 +134,7 @@ def fetch_meta(
 
     Args:
         client_id: Client identifier
-        client_config: Client configuration dict
+        business_config: Business configuration
         start_date: Start of date range
         end_date: End of date range
         storage: Storage manager for persisting data
@@ -144,9 +144,7 @@ def fetch_meta(
         console.print("[yellow]  Skipping Meta fetch (missing credentials)[/yellow]")
         return
 
-    meta_config = client_config.get("meta", {})
-    ad_accounts = meta_config.get("ad_accounts", [])
-    if not ad_accounts:
+    if not business_config.sources.meta:
         return
 
     try:
@@ -161,27 +159,65 @@ def fetch_meta(
         access_token=meta_creds.get("access_token"), api_version="v22.0"
     )
 
-    for account in ad_accounts:
-        account_id = account.get("id")
-        if not account_id:
-            continue
-
+    for alias, source in business_config.sources.meta.items():
         fetcher = MetaAdsFetcher(
             api,
-            account_id,
-            include_action_types=reporting_config.primary_lead_rules.meta.include_action_types,
+            alias,
+            source.account_id,
+            include_action_types=business_config.lead_rules.meta.include_action_types,
         )
         campaigns = fetcher.fetch_campaign_performance(client_id, start_date, end_date)
         storage.append(client_id, "campaigns", campaigns)
         console.print(
-            f"  Fetched {len(campaigns)} Meta campaign performance records ({account_id})"
+            f"  Fetched {len(campaigns)} Meta campaign performance records ({alias})"
+        )
+
+
+def fetch_ga4(
+    client_id: str,
+    business_config: BusinessConfig,
+    start_date: date,
+    end_date: date,
+    storage: StorageManager,
+    cred_manager: CredentialManager,
+) -> None:
+    """Fetch GA4 landing page data for all brands that have GA4 configured."""
+    if not cred_manager.has_google_service_account():
+        console.print("[yellow]  Skipping GA4 fetch (no service account)[/yellow]")
+        return
+
+    if not business_config.sources.ga4:
+        return
+
+    try:
+        from src.fetchers.ga4 import GA4Fetcher
+    except ImportError as exc:
+        console.print(f"[red]  GA4 SDK not available: {exc}[/red]")
+        return
+
+    credentials = cred_manager.get_google_service_account_credentials()
+    for alias, source in business_config.sources.ga4.items():
+        fetcher = GA4Fetcher(credentials, alias, source.property_id)
+        records = fetcher.fetch_landing_pages(client_id, start_date, end_date)
+        storage.append(client_id, "ga4_landing_pages", records)
+        console.print(
+            f"  Fetched {len(records)} GA4 landing page records ({alias})"
+        )
+
+
+def fetch_search_console(
+    business_config: BusinessConfig,
+) -> None:
+    """Stub for future Search Console ingestion."""
+    if business_config.sources.search_console:
+        console.print(
+            "[yellow]  Skipping Search Console fetch (not implemented yet)[/yellow]"
         )
 
 
 def fetch_client(
     client_id: str,
-    client_config: Dict[str, Any],
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     start_date: date,
     end_date: date,
     storage: StorageManager,
@@ -189,13 +225,12 @@ def fetch_client(
 ) -> None:
     """Phase 1: Fetch data from APIs and store.
 
-    Fetches Google Ads and Meta data for the given client and date range,
+    Fetches Google Ads, Meta, and GA4 data for the given client and date range,
     persisting all results via the storage manager.
 
     Args:
         client_id: Client identifier
-        client_config: Client configuration dict
-        reporting_config: Reporting configuration
+        business_config: Business configuration
         start_date: Start of date range
         end_date: End of date range
         storage: Storage manager for persisting data
@@ -204,35 +239,38 @@ def fetch_client(
     console.print("[yellow]Phase 1: Fetching data...[/yellow]")
 
     ga_client = init_google_ads_client(cred_manager)
-    if "google_ads" in client_config and ga_client:
+    if business_config.sources.google_ads and ga_client:
         fetch_google_ads(
-            client_id, client_config, start_date, end_date, storage, ga_client
+            client_id, business_config, start_date, end_date, storage, ga_client
         )
-    elif "google_ads" in client_config:
+    elif business_config.sources.google_ads:
         console.print(
             "[yellow]  Skipping Google Ads fetch (missing credentials)[/yellow]"
         )
 
-    if "meta" in client_config:
+    if business_config.sources.meta:
         fetch_meta(
             client_id,
-            client_config,
-            reporting_config,
+            business_config,
             start_date,
             end_date,
             storage,
             cred_manager,
         )
 
+    fetch_ga4(client_id, business_config, start_date, end_date, storage, cred_manager)
+    fetch_search_console(business_config)
+
 
 def analyze_client(
     client_id: str,
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     current_start: date,
     current_end: date,
     storage: StorageManager,
     is_monthly: bool = True,
     context: Optional[Dict[str, Any]] = None,
+    brand: str | None = None,
 ) -> Optional[AnalysisResults]:
     """Phase 2: Run analyzers on stored data and return structured results.
 
@@ -243,7 +281,7 @@ def analyze_client(
 
     Args:
         client_id: Client identifier
-        reporting_config: Reporting configuration
+        business_config: Business configuration
         current_start: Start date of current reporting period
         current_end: End date of current reporting period
         storage: Storage manager for reading persisted data
@@ -257,6 +295,9 @@ def analyze_client(
     previous_start, previous_end = calculate_previous_period(
         current_start, current_end, is_monthly
     )
+    selected_brand = canonicalize_brand_name(business_config, brand) if brand else None
+    if brand and selected_brand is None:
+        raise ValueError(f"Unknown brand '{brand}' for client '{client_id}'.")
 
     # Read stored data
     search_terms_df = storage.read(
@@ -275,8 +316,38 @@ def analyze_client(
 
     # Normalize campaigns for analysis (full period)
     campaigns_all, _ = normalize_campaigns(
-        raw_campaigns_all, conversion_actions_all, reporting_config
+        raw_campaigns_all, conversion_actions_all, business_config
     )
+    if selected_brand:
+        _, campaigns_all = filter_to_brand(
+            campaigns_all,
+            business_config,
+            selected_brand,
+        )
+        _, search_terms_df = filter_to_brand(
+            search_terms_df,
+            business_config,
+            selected_brand,
+            default_platform="google_ads",
+        )
+        _, impression_share_df = filter_to_brand(
+            impression_share_df,
+            business_config,
+            selected_brand,
+            default_platform="google_ads",
+        )
+        _, quality_scores_df = filter_to_brand(
+            quality_scores_df,
+            business_config,
+            selected_brand,
+            default_platform="google_ads",
+        )
+
+    ga4_df = storage.read(client_id, "ga4_landing_pages", current_start, current_end)
+    if selected_brand and not ga4_df.is_empty():
+        from src.reporting.brand_scope import filter_ga4_to_brand
+
+        ga4_df = filter_ga4_to_brand(ga4_df, business_config, selected_brand)
 
     campaigns_current = (
         campaigns_all.filter(
@@ -292,6 +363,7 @@ def analyze_client(
         and impression_share_df.is_empty()
         and quality_scores_df.is_empty()
         and campaigns_current.is_empty()
+        and ga4_df.is_empty()
     ):
         console.print(
             "[yellow]No stored data found for this client/date range.[/yellow]"
@@ -323,6 +395,18 @@ def analyze_client(
     leads_forecast = trend_analyzer.forecast("conversions_primary")
     console.print(f"  Detected {len(anomalies)} anomalies")
 
+    # GA4 web quality analysis
+    web_quality = None
+    if not ga4_df.is_empty():
+        from src.analyzers.web_quality import WebQualityAnalyzer
+
+        wq_analyzer = WebQualityAnalyzer(ga4_df)
+        web_quality = wq_analyzer.analyze()
+        if web_quality:
+            console.print(
+                f"  GA4: {web_quality.summary.get('total_sessions', 0)} sessions analyzed"
+            )
+
     # Compute KPI summary
     kpi_summary = (
         compute_kpi_summary(
@@ -352,8 +436,11 @@ def analyze_client(
         period_current=f"{current_start.isoformat()} to {current_end.isoformat()}",
         period_previous=f"{previous_start.isoformat()} to {previous_end.isoformat()}",
         currency=currency,
+        scope="brand" if selected_brand else "client",
+        brand=selected_brand,
         context=context or {},
         kpi_summary=kpi_summary,
+        web_quality=web_quality,
         negative_keywords=neg_keywords,
         top_search_terms=top_search_terms,
         match_type_breakdown=match_type_breakdown,
@@ -370,13 +457,14 @@ def analyze_client(
 
 def generate_reports(
     results: AnalysisResults,
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     current_start: date,
     current_end: date,
     storage: StorageManager,
     internal_report_generator: InternalReportGenerator,
     client_summary_generator: ClientSummaryGenerator,
-) -> Tuple[str, str]:
+    report_type: str = "all",
+) -> Tuple[Optional[str], Optional[str]]:
     """Phase 3: Generate markdown reports from analysis results.
 
     Produces both the internal detailed report and the client-facing summary.
@@ -385,7 +473,7 @@ def generate_reports(
 
     Args:
         results: Structured analysis results from analyze_client()
-        reporting_config: Reporting configuration
+        business_config: Business configuration
         current_start: Start date of current reporting period
         current_end: End date of current reporting period
         storage: Storage manager for reading campaign data
@@ -415,7 +503,8 @@ def generate_reports(
         trends=results.trends,
         anomalies=results.anomalies,
         forecast=results.forecasts,
-    )
+        brand=results.brand,
+    ) if report_type in {"all", "internal"} else None
 
     # Re-read and normalize current-period raw campaigns for lead corrections
     raw_campaigns_current = storage.read(
@@ -424,31 +513,49 @@ def generate_reports(
     conversion_actions_current = storage.read(
         client_id, "conversion_actions", current_start, current_end
     )
+    if results.brand:
+        _, raw_campaigns_current = filter_to_brand(
+            raw_campaigns_current,
+            business_config,
+            results.brand,
+        )
+        _, conversion_actions_current = filter_to_brand(
+            conversion_actions_current,
+            business_config,
+            results.brand,
+            default_platform="google_ads",
+        )
     campaigns_current, lead_corrections = normalize_campaigns(
-        raw_campaigns_current, conversion_actions_current, reporting_config
+        raw_campaigns_current, conversion_actions_current, business_config
     )
 
     # Generate client summary
-    client_summary_report = build_client_summary_report(
-        client_id=client_id,
-        current_df=campaigns_current,
-        reporting_config=reporting_config,
-        period_start=current_start.isoformat(),
-        period_end=current_end.isoformat(),
-        lead_corrections=lead_corrections,
-    )
-    client_summary_path = client_summary_generator.generate_report(client_summary_report)
+    client_summary_path = None
+    if report_type in {"all", "summary"}:
+        client_summary_report = build_client_summary_report(
+            client_id=client_id,
+            current_df=campaigns_current,
+            business_config=business_config,
+            period_start=current_start.isoformat(),
+            period_end=current_end.isoformat(),
+            brand=results.brand,
+            lead_corrections=lead_corrections,
+        )
+        client_summary_path = client_summary_generator.generate_report(client_summary_report)
 
-    console.print(f"\n[bold green]Internal report generated: {report_path}[/bold green]")
-    console.print(f"[bold green]Client summary generated: {client_summary_path}[/bold green]\n")
+    if report_path:
+        console.print(f"\n[bold green]Internal report generated: {report_path}[/bold green]")
+    if client_summary_path:
+        console.print(f"[bold green]Client summary generated: {client_summary_path}[/bold green]")
+    if report_path or client_summary_path:
+        console.print()
 
     return report_path, client_summary_path
 
 
 def process_client(
     client_id: str,
-    client_config: Dict[str, Any],
-    reporting_config: ReportingConfig,
+    business_config: BusinessConfig,
     current_start: date,
     current_end: date,
     storage: StorageManager,
@@ -470,8 +577,7 @@ def process_client(
 
     Args:
         client_id: Client identifier
-        client_config: Client configuration dict
-        reporting_config: Reporting configuration
+        business_config: Business configuration
         current_start: Start date of current reporting period
         current_end: End date of current reporting period
         storage: Storage manager instance
@@ -487,8 +593,7 @@ def process_client(
     if not no_fetch:
         fetch_client(
             client_id=client_id,
-            client_config=client_config,
-            reporting_config=reporting_config,
+            business_config=business_config,
             start_date=current_start,
             end_date=current_end,
             storage=storage,
@@ -498,7 +603,7 @@ def process_client(
     # Phase 2: Analyze data
     results = analyze_client(
         client_id=client_id,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=current_start,
         current_end=current_end,
         storage=storage,
@@ -511,7 +616,7 @@ def process_client(
     # Phase 3: Generate reports
     generate_reports(
         results=results,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=current_start,
         current_end=current_end,
         storage=storage,

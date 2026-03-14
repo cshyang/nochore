@@ -17,6 +17,10 @@ dependencies = [
     "google-ads>=22.0.0",
     "numpy>=2.0.2",
     "inquirer>=3.0.0",
+    "prompt_toolkit>=3.0.0",
+    "google-analytics-data>=0.18.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.22.0",
 ]
 
 [project.scripts]

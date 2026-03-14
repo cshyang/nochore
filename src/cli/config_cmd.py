@@ -13,7 +13,7 @@ def config(ctx: click.Context) -> None:
 @config.command("list")
 @click.pass_context
 def config_list(ctx: click.Context) -> None:
-    """Show configured clients and their platforms."""
+    """Show configured clients and their source aliases."""
     from src.config import ConfigManager
     from src.output import output_data
 
@@ -27,20 +27,29 @@ def config_list(ctx: click.Context) -> None:
     clients = cm.get_clients()
     rows = []
     for cid in clients:
-        cc = cm.get_client_config(cid)
-        platforms = []
-        if "google_ads" in cc:
-            platforms.append("google_ads")
-        if "meta" in cc:
-            platforms.append("meta")
+        business_config = cm.get_business_config(cid)
+        source_types = []
+        if business_config.sources.google_ads:
+            source_types.append("google_ads")
+        if business_config.sources.meta:
+            source_types.append("meta")
+        if business_config.sources.ga4:
+            source_types.append("ga4")
+        if business_config.sources.search_console:
+            source_types.append("search_console")
         rows.append({
             "client_id": cid,
-            "platforms": ", ".join(platforms),
-            "google_ads_accounts": len(cc.get("google_ads", {}).get("customer_ids", [])),
-            "meta_ad_accounts": len(cc.get("meta", {}).get("ad_accounts", [])),
+            "source_types": ", ".join(source_types),
+            "source_aliases": ", ".join(business_config.sources.aliases()),
+            "brand_count": len(business_config.brands),
         })
 
-    output_data(rows, fmt, title="Configured Clients", columns=["client_id", "platforms", "google_ads_accounts", "meta_ad_accounts"])
+    output_data(
+        rows,
+        fmt,
+        title="Configured Clients",
+        columns=["client_id", "source_types", "source_aliases", "brand_count"],
+    )
 
 
 @config.command("check-creds")

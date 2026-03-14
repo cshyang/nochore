@@ -173,6 +173,43 @@ class CompositionShift:
 
 
 @dataclass
+class LandingPageInsight:
+    """Single landing page quality insight from GA4."""
+
+    landing_page: str
+    sessions: int
+    engagement_rate: float
+    bounce_rate: float
+    key_events: float
+    key_event_rate: float
+    top_channels: List[str] = field(default_factory=list)
+    signal: str = "healthy"  # healthy|low_engagement|low_key_events|high_bounce
+
+
+@dataclass
+class PaidVsEngagementInsight:
+    """Pages where paid traffic volume is high but engagement is weak."""
+
+    landing_page: str
+    paid_sessions: int
+    paid_engagement_rate: float
+    paid_bounce_rate: float
+    organic_engagement_rate: Optional[float]
+    gap: float
+
+
+@dataclass
+class WebQualityResults:
+    """GA4 web quality analysis results."""
+
+    top_landing_pages: List[LandingPageInsight] = field(default_factory=list)
+    low_engagement_pages: List[LandingPageInsight] = field(default_factory=list)
+    low_key_event_pages: List[LandingPageInsight] = field(default_factory=list)
+    paid_engagement_gaps: List[PaidVsEngagementInsight] = field(default_factory=list)
+    summary: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class AnalysisResults:
     """Complete analysis results for a client/period."""
 
@@ -180,8 +217,11 @@ class AnalysisResults:
     period_current: str
     period_previous: str
     currency: str
+    scope: str = "client"
+    brand: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     kpi_summary: Dict[str, Any] = field(default_factory=dict)
+    web_quality: Optional[WebQualityResults] = None
     composition_device: Optional[CompositionBreakdown] = None
     composition_geo: Optional[CompositionBreakdown] = None
     composition_hour: Optional[CompositionBreakdown] = None

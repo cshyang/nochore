@@ -1,6 +1,7 @@
 """Internal markdown report generator optimized for diagnostics and LLM parsing."""
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -66,17 +67,26 @@ class InternalReportGenerator:
         composition_shifts: Optional[List[CompositionShift]] = None,
         search_term_trends: Optional[List[Dict[str, Any]]] = None,
         junk_ratio: Optional[Dict[str, Any]] = None,
+        brand: Optional[str] = None,
     ) -> Path:
         """Generate complete markdown report."""
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        filename = f"{client_id}_{period.replace(' ', '-')}.md"
+        prefix = client_id
+        if brand:
+            prefix = f"{prefix}_{_slugify(brand)}"
+        filename = f"{prefix}_{period.replace(' ', '-')}.md"
         file_path = self.output_dir / filename
 
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             # Header
-            f.write(f"# {client_id} - Ads Performance Report\n")
+            title = f"{client_id} - Ads Performance Report"
+            if brand:
+                title = f"{title} ({brand})"
+            f.write(f"# {title}\n")
             f.write(f"**Period:** {period}\n")
+            if brand:
+                f.write(f"**Brand:** {brand}\n")
             f.write(f"**Generated:** {timestamp}\n\n")
             f.write("---\n\n")
 
@@ -221,7 +231,6 @@ class InternalReportGenerator:
         out += "\n---\n\n"
 
         return out
-    
     def _format_search_terms_section(self, neg_kw: List[NegativeKeywordRec],
                                      top_terms: List[TopSearchTerm],
                                      match_breakdown: List[MatchTypeBreakdown]) -> str:
@@ -670,5 +679,10 @@ class InternalReportGenerator:
 
 
 MarkdownReportGenerator = InternalReportGenerator
+
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
 
 __all__ = ["InternalReportGenerator", "MarkdownReportGenerator"]

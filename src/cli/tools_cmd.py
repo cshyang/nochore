@@ -6,44 +6,86 @@ so that AI agents can discover what tools are available.
 
 import click
 
-TOOL_MANIFEST = [
-    {
-        "name": "check",
-        "description": "Quick health dashboard -- fetches data, runs all analyzers, shows alerts",
-        "params": ["client_id", "--month", "--days"],
-        "when_to_use": "When you want an overview of how a client is doing",
+TOOL_MANIFEST = {
+    "global_options": {
+        "--format": "table|json|csv (must come before subcommand)",
+        "--quiet": "Suppress non-essential output",
+        "--verbose": "Enable debug logging",
+        "--config": "Path to config directory (default: config)",
     },
-    {
-        "name": "investigate",
-        "description": "Deep diagnostic investigation into why a specific metric changed",
-        "params": ["client_id", "--metric (cpl|cvr|volume)", "--month", "--days"],
-        "when_to_use": "When CPL, CVR, or volume has changed and you need to understand why",
+    "commands": [
+        {
+            "name": "use",
+            "description": "Set the active client context (persists across commands)",
+            "params": ["client_id"],
+            "when_to_use": "Before running analysis to set which client to work on",
+        },
+        {
+            "name": "status",
+            "description": "Show current context, knowledge file path, data freshness, and client business context",
+            "params": [],
+            "when_to_use": "To orient yourself -- check active client, data staleness, and whether knowledge exists",
+        },
+        {
+            "name": "brands list",
+            "description": "List configured brands for a client",
+            "params": ["client_id"],
+            "when_to_use": "To discover valid brand names before running brand-scoped analysis",
+        },
+        {
+            "name": "config list",
+            "description": "List all configured clients",
+            "params": [],
+            "when_to_use": "To discover available client IDs",
+        },
+        {
+            "name": "check",
+            "description": "Quick health dashboard -- fetches data, runs all analyzers, shows alerts",
+            "params": ["client_id", "--brand", "--month", "--days", "--no-fetch"],
+            "when_to_use": "When you want an overview of how a client is doing",
+        },
+        {
+            "name": "investigate",
+            "description": "Deep diagnostic investigation into why a specific metric changed",
+            "params": ["client_id", "--brand", "--metric (cpl|cvr|volume)", "--month", "--days", "--no-fetch"],
+            "when_to_use": "When CPL, CVR, or volume has changed and you need to understand why",
+        },
+        {
+            "name": "brief",
+            "description": "Generate a client-ready summary report",
+            "params": ["client_id", "--brand", "--month", "--days", "--no-fetch"],
+            "when_to_use": "When preparing for a client call or need a shareable summary",
+        },
+        {
+            "name": "fetch",
+            "description": "Pull data from configured sources (Google Ads, Meta, GA4) and store locally",
+            "params": ["client_id", "--platform (google|meta|all)", "--month", "--days"],
+            "when_to_use": "When you need fresh data before analysis",
+        },
+        {
+            "name": "analyze",
+            "description": "Run analyzers on stored data and return structured results",
+            "params": ["client_id", "--brand", "--only (search-terms,trends,...)", "--month", "--days"],
+            "when_to_use": "When you need specific analyzer output without fetching new data",
+        },
+        {
+            "name": "report",
+            "description": "Generate markdown reports from analysis results",
+            "params": ["client_id", "--brand", "--type (internal|summary|all)", "--month", "--days"],
+            "when_to_use": "When you need to save a report to disk",
+        },
+        {
+            "name": "tools",
+            "description": "List all available capabilities as JSON (this command)",
+            "params": [],
+            "when_to_use": "To discover what the campaign CLI can do",
+        },
+    ],
+    "knowledge": {
+        "file_pattern": "data/<client_id>/knowledge.md",
+        "description": "Persistent notebook per client. Read before analysis, write after. Included in check/investigate/brief JSON output.",
     },
-    {
-        "name": "brief",
-        "description": "Generate a client-ready summary report",
-        "params": ["client_id", "--month", "--days"],
-        "when_to_use": "When preparing for a client call or need a shareable summary",
-    },
-    {
-        "name": "fetch",
-        "description": "Pull data from ad platforms (Google Ads, Meta) and store locally",
-        "params": ["client_id", "--platform (google|meta|all)", "--month", "--days"],
-        "when_to_use": "When you need fresh data before analysis",
-    },
-    {
-        "name": "analyze",
-        "description": "Run analyzers on stored data and return structured results",
-        "params": ["client_id", "--only (search-terms,trends,...)", "--month", "--days"],
-        "when_to_use": "When you need specific analyzer output, not a full health check",
-    },
-    {
-        "name": "report",
-        "description": "Generate markdown reports from analysis results",
-        "params": ["client_id", "--type (internal|summary|all)", "--month", "--days"],
-        "when_to_use": "When you need to save a report to disk",
-    },
-]
+}
 
 
 @click.command()

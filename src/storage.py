@@ -16,6 +16,18 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+INTEGER_DTYPES = {
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+}
+FLOAT_DTYPES = {pl.Float32, pl.Float64}
+
 class StorageManager:
     """Manages partitioned Parquet storage for analytics data."""
     
@@ -32,19 +44,57 @@ class StorageManager:
     def _get_id_columns(self, data_type: str) -> List[str]:
         """Get composite key columns for deduplication."""
         if data_type == "search_terms":
-            return ["source_account_id", "date", "campaign_id", "ad_group_id", "search_term"]
+            return ["source_alias", "source_account_id", "date", "campaign_id", "ad_group_id", "search_term"]
         elif data_type == "impression_share":
-            return ["source_account_id", "date", "campaign_id"]
+            return ["source_alias", "source_account_id", "date", "campaign_id"]
         elif data_type == "quality_scores":
-            return ["source_account_id", "date", "keyword_id"]
+            return ["source_alias", "source_account_id", "date", "keyword_id"]
         elif data_type == "campaigns":
-            return ["client_id", "platform", "source_account_id", "date", "campaign_id"]
+            return ["client_id", "platform", "source_alias", "source_account_id", "date", "campaign_id"]
         elif data_type == "conversion_actions":
-            return ["source_account_id", "date", "campaign_id", "conversion_action_name"]
+            return ["source_alias", "source_account_id", "date", "campaign_id", "conversion_action_name"]
         elif data_type == "dimension_breakdown":
-            return ["source_account_id", "date", "campaign_id", "dimension_type", "dimension_value"]
+            return ["source_alias", "source_account_id", "date", "campaign_id", "dimension_type", "dimension_value"]
+        elif data_type == "ga4_landing_pages":
+            return ["client_id", "source_alias", "property_id", "date", "landing_page", "channel_group"]
+        elif data_type == "search_console_search_analytics":
+            return ["client_id", "source_alias", "site_url", "date", "query", "page"]
         else:
             raise ValueError(f"Unknown data type: {data_type}")
+
+    def _resolve_dtype(self, left: pl.DataType, right: pl.DataType) -> pl.DataType:
+        """Find a compatible dtype for concatenating persisted partitions."""
+        if left == right:
+            return left
+        if left == pl.Null:
+            return right
+        if right == pl.Null:
+            return left
+        if left in INTEGER_DTYPES and right in FLOAT_DTYPES:
+            return pl.Float64
+        if left in FLOAT_DTYPES and right in INTEGER_DTYPES:
+            return pl.Float64
+        return left
+
+    def _align_frames_for_concat(self, frames: List[pl.DataFrame]) -> List[pl.DataFrame]:
+        """Cast shared columns to compatible dtypes before concatenation."""
+        target_schema: dict[str, pl.DataType] = {}
+        for frame in frames:
+            for column, dtype in frame.schema.items():
+                current = target_schema.get(column)
+                target_schema[column] = (
+                    dtype if current is None else self._resolve_dtype(current, dtype)
+                )
+
+        aligned_frames: List[pl.DataFrame] = []
+        for frame in frames:
+            casts = [
+                pl.col(column).cast(target_dtype)
+                for column, target_dtype in target_schema.items()
+                if column in frame.columns and frame.schema[column] != target_dtype
+            ]
+            aligned_frames.append(frame.with_columns(casts) if casts else frame)
+        return aligned_frames
     
     def append(self, client_id: str, data_type: str,
                records: Union[List[SearchTermRecord], List[ImpressionShareRecord],
@@ -61,6 +111,7 @@ class StorageManager:
                 {
                     'client_id': r.client_id,
                     'platform': r.platform.value,
+                    'source_alias': r.source_alias,
                     'source_account_id': r.source_account_id,
                     'date': r.date,
                     'campaign_id': r.campaign_id,
@@ -103,7 +154,10 @@ class StorageManager:
             # Read existing data if exists
             if partition_path.exists():
                 existing_df = pl.read_parquet(partition_path)
-                combined = pl.concat([existing_df, month_data], how="diagonal")
+                combined = pl.concat(
+                    self._align_frames_for_concat([existing_df, month_data]),
+                    how="diagonal",
+                )
             else:
                 combined = month_data
             
@@ -141,7 +195,7 @@ class StorageManager:
         if not dfs:
             return pl.DataFrame()
 
-        combined = pl.concat(dfs)
+        combined = pl.concat(self._align_frames_for_concat(dfs), how="diagonal")
 
         # Filter by client_id if column exists (prevents cross-client data pollution)
         if "client_id" in combined.columns:

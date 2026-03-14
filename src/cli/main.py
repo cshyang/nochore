@@ -1,19 +1,21 @@
 """Top-level Click group for the campaign CLI.
 
 Provides global flags (--format, --quiet, --verbose, --config) and
-registers all subcommands and subgroups.
+registers all subcommands and subgroups.  When invoked with no
+subcommand, drops into an interactive REPL.
 """
 
 import click
 
 from .context import use, status
+from .brands_cmd import brands
 from .plumbing import fetch, analyze, report
 from .porcelain import check, investigate, brief
 from .config_cmd import config
 from .tools_cmd import tools
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.option(
     "--format",
     "output_format",
@@ -46,10 +48,16 @@ def cli(ctx: click.Context, output_format: str, quiet: bool, verbose: bool, conf
         import logging
         logging.basicConfig(level=logging.DEBUG)
 
+    # No subcommand → launch interactive REPL
+    if ctx.invoked_subcommand is None:
+        from .repl import start_repl
+        start_repl(cli, ctx)
+
 
 # Register commands
 cli.add_command(use)
 cli.add_command(status)
+cli.add_command(brands)
 cli.add_command(check)
 cli.add_command(investigate)
 cli.add_command(brief)

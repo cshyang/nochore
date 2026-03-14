@@ -1,0 +1,61 @@
+# Example client configuration.
+# Copy this file and rename to <client-id>.yaml to add a new client.
+
+context:
+  business: "Description of the client's business"
+  notes:
+    - "Key context the agent should know"
+
+sources:
+  google_ads:
+    main_ads:
+      customer_id: "XXX-XXX-XXXX"
+  meta:
+    main_meta:
+      account_id: "act_XXXXXXXXXX"
+      name: "Account Name"
+  ga4:
+    main_site_ga4:
+      property_id: "123456789"
+  search_console:
+    main_site_sc:
+      site_url: "sc-domain:example.com"
+
+business:
+  brands:
+    - name: "Brand Name"
+      context:
+        market: "Country"
+        ticket_size: "low | medium | high"
+        objective: "leads | awareness | sales"
+        quality_signals:
+          - "What signals indicate good performance for this brand"
+      sources:
+        - "main_ads"
+        - "main_meta"
+        - "main_site_ga4"
+        - "main_site_sc"
+      default_theme: "Always On"
+      filters:
+        main_site_ga4:
+          landing_page_regex: "(?i)^/(brand|product)"
+          key_events:
+            - "generate_lead"
+            - "whatsapp_click"
+        main_site_sc:
+          page_regex: "(?i)^https://www.example.com/(brand|product)"
+          brand_terms:
+            - "brand name"
+
+  theme_rules:
+    - source: "main_meta"
+      theme: "Theme Name"
+      campaign_name_regex: "(?i)pattern"
+    - source: "main_ads"
+      theme: "Theme Name"
+      campaign_name_regex: "(?i)pattern"
+
+  lead_rules:
+    google_ads:
+      exclude_conversion_actions:
+        - "Page View"

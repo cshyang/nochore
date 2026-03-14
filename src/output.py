@@ -9,6 +9,7 @@ import sys
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -31,6 +32,8 @@ def _serialize(obj: Any) -> Any:
         return obj.isoformat()
     if isinstance(obj, Enum):
         return obj.value
+    if isinstance(obj, Path):
+        return str(obj)
     if isinstance(obj, set):
         return list(obj)
     return obj

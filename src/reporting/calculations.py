@@ -47,7 +47,12 @@ def compute_currency_breakdown(df: pl.DataFrame) -> List[Dict[str, Any]]:
         )
         .sort("spend", descending=True)
     )
-    return list(agg.iter_rows(named=True))
+    rows = list(agg.iter_rows(named=True))
+    for row in rows:
+        spend = float(row.get("spend", 0) or 0)
+        leads = float(row.get("leads_primary", 0) or 0)
+        row["cpl"] = round(spend / leads, 2) if leads > 0 else None
+    return rows
 
 
 def compute_platform_currency_breakdown(df: pl.DataFrame) -> List[Dict[str, Any]]:

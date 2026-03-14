@@ -1,231 +1,156 @@
 # Ads Report Automation CLI
 
-A command-line tool for automated advertising performance reports that pulls data from Meta and Google Ads APIs, stores it in partitioned Parquet files, and generates dual markdown outputs from one pipeline run: an internal diagnostic report and a compact client summary.
+A CLI for fetching advertising and web analytics data, storing it in partitioned Parquet files, and generating both an internal diagnostic report and a client-facing summary.
 
-## 🚀 Features
-
-- **Multi-platform data aggregation** (Meta Ads, Google Ads)
-- **Configurable historical windows** (`--days`)
-- **Partitioned Parquet storage** per client/data type (monthly partitions)
-- **LLM-optimized markdown reports** in `reports/`
-- **Search terms analysis** (negative keyword candidates, match-type distribution)
-- **Impression share analysis** (budget vs rank loss, recommendations)
-- **Quality score analysis** (changes, low-QS alerts, distribution)
-- **Trends & anomaly detection** (campaign performance time series)
-
-## 📋 Requirements
-
-- Python 3.9+
-- UV (recommended package manager)
-
-## 🛠️ Installation
+## Installation
 
 ```bash
-# Clone the repository
 git clone <repository-url>
 cd ads-report-automation
-
-# Install dependencies with UV
 uv sync
-
-# Or with pip (if you prefer)
-pip install -r requirements.txt
 ```
 
-## ⚙️ Configuration
+The installed command is `campaign`.
 
-### 1. API Credentials
+## Credentials
 
-Create a `.env.local` file in the project root with your API credentials:
+Create `.env.local` in the project root:
 
 ```bash
-# Meta Ads API (required)
+# Meta Ads API
 META_ACCESS_TOKEN=your_meta_access_token
 
-# Google Ads API (required - all 4 credentials needed)
+# Google Ads API
 GOOGLE_ADS_DEVELOPER_TOKEN=your_developer_token
 GOOGLE_ADS_CLIENT_ID=your_client_id
 GOOGLE_ADS_CLIENT_SECRET=your_client_secret
 GOOGLE_ADS_REFRESH_TOKEN=your_refresh_token
+
+# Optional: GA4/Search Console service account
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/google-service-account.json
 ```
 
-**Note**:
-- For **Meta Ads**, you only need the `META_ACCESS_TOKEN` (API v22.0)
-- For **Google Ads**, you need all 4 OAuth credentials (API v21)
-- If credentials are missing, the tool will skip API fetching (you can still re-generate reports from existing stored data with `--no-fetch`)
+Check configured credentials with:
 
-**Getting Google Ads OAuth Credentials:**
+```bash
+uv run campaign config check-creds
+```
 
-Follow the detailed guide: [docs/GOOGLE_ADS_OAUTH_SETUP.md](docs/GOOGLE_ADS_OAUTH_SETUP.md)
+## Client Config Schema
 
-### 2. Client Configuration
+Client config now uses three top-level sections:
+- `context`: business context for humans and agents
+- `sources`: fetchable source registry keyed by alias
+- `business`: brands, themes, and lead-normalization rules
 
-Edit `clients.yaml` to configure your ad accounts:
+Example:
 
 ```yaml
-clients:
-  your_client:
-    meta:
-      system_user_id: "your_system_user_id"
-      ad_accounts:
-        - id: "act_123456789"
-          name: "Account Name"
+context:
+  business: "Refined Contemporary Restaurant Cafe"
+  notes:
+    - "Google Maps presence is important for foot traffic"
+
+sources:
+  google_ads:
+    nota_ads:
+      customer_id: "556-178-5391"
+  meta:
+    nota_meta:
+      account_id: "act_356408676260419"
+      name: "Nota Cafe"
+  ga4:
+    nota_site:
+      property_id: "400716907"
+
+business:
+  brands:
+    - name: "Nota Cafe"
+      sources:
+        - "nota_ads"
+        - "nota_meta"
+        - "nota_site"
+      filters:
+        nota_site:
+          landing_page_regex: "/"
+          key_events:
+            - "form_submission"
+            - "whatsapp_link_click"
+
+  theme_rules:
+    - source: "nota_meta"
+      theme: "Seasonal - CNY"
+      campaign_name_regex: "(?i)cny|seasonal"
+    - source: "nota_ads"
+      theme: "Performance Max - Google Map"
+      campaign_name_regex: "(?i)performance max|pmax|map"
+
+  lead_rules:
     google_ads:
-      customer_ids:
-        - "123-456-7890"
+      exclude_conversion_actions:
+        - "Page View"
 ```
 
-### Configuration Validation
+Defaults live in `config/defaults.yaml`. Client files live in `config/clients/<client>.yaml`.
 
-The CLI automatically validates your configuration and logs any errors:
+## Usage
 
-- ✅ Validates client structure
-- ✅ Checks required fields
-- ✅ Validates account ID formats
-- ✅ Provides clear error messages
-
-### Check Credentials
-
-Verify your API credentials are configured correctly:
+Fetch configured sources:
 
 ```bash
-uv run ads-report --check-creds
+uv run campaign fetch nota
+uv run campaign fetch nota --month 2026-01
 ```
 
-## 📊 Usage
-
-### Basic Usage
+Analyze cached data:
 
 ```bash
-# Run reports for all clients
-uv run ads-report
-
-# Run for specific client
-uv run ads-report --client homescape
-
-# Specify custom window length
-uv run ads-report --days 90
-
-# Use stored data only (skip API fetch)
-uv run ads-report --no-fetch
+uv run campaign analyze nota --month 2026-01
+uv run campaign analyze nota --brand "Nota Cafe" --format json
 ```
 
-### Advanced Options
+High-level workflows:
 
 ```bash
-# Custom configuration file
-uv run ads-report --config custom_clients.yaml
-
-# Custom output directory
-uv run ads-report --output-dir custom_reports
-
-# Verbose logging
-uv run ads-report --verbose
-
-# View help
-uv run ads-report --help
+uv run campaign check nota --month 2026-01
+uv run campaign investigate nota --brand "Nota Cafe" --metric cpl --month 2026-01
+uv run campaign brief nota --month 2026-01
+uv run campaign report nota --brand "Nota Cafe" --month 2026-01
 ```
 
-### Make Targets
+Discovery helpers:
 
 ```bash
-make sync
-make run CLIENT=nota MONTH=2026-01
-make no-fetch CLIENT=nota MONTH=2026-01
-make test
+uv run campaign config list
+uv run campaign brands list nota
+uv run campaign tools --format json
 ```
 
-## 📈 Output
+## Output
 
-### Reports
-- **Internal diagnostic report**: `reports/{client}_{YYYY-MM}.md`
-- **Client summary report**: `reports/{client}_{YYYY-MM}_summary.md`
+- Reports: `reports/{client}_{YYYY-MM}.md` and `reports/{client}_{YYYY-MM}_summary.md`
+- Brand-scoped reports: `reports/{client}_{brand}_{YYYY-MM}.md`
+- Stored data: `data/{client_id}/{data_type}/{YYYY-MM}.parquet`
 
-### Data Files
-- **Partitioned Parquet**: `data/{client_id}/{data_type}/{YYYY-MM}.parquet`
-- Data types include: `campaigns`, `conversion_actions`, `search_terms`, `impression_share`, `quality_scores`
+Persisted records now include `source_alias` alongside raw IDs. After a config-schema cutover, rerun `campaign fetch` so stored data matches the current source registry.
 
-### Logs
-- **Log files**: `logs/ads_report.log`
+## Project Structure
 
-## 📊 Fact Performance Schema
-
-The unified `fact_performance_daily` table includes:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| client_id | string | Client identifier |
-| platform | string | 'meta' or 'google_ads' |
-| source_account_id | string | Original account/customer ID |
-| date | date | Performance date |
-| campaign_id | string | Campaign identifier |
-| campaign_name | string | Campaign name |
-| spend | float | Total spend |
-| impressions | int | Ad impressions |
-| clicks | int | Click count |
-| conversions_primary | int | Primary conversions |
-| conversion_value | float | Conversion value |
-
-## 🔍 KPI Calculations
-
-### Core Metrics
-- **CPC**: Cost Per Click
-- **CTR**: Click-Through Rate
-- **Conversion Rate**: Conversions per click
-- **ROAS**: Return On Ad Spend
-
-### Comparisons
-- **Last 30 days** vs **Previous 30 days**
-- **Percentage changes** with trend indicators
-- **Platform-level** breakdowns
-- **Campaign-level** performance
-
-### Anomaly Detection
-- **High spend, zero conversions** (> $1,000 threshold)
-- **Low CTR** (< 0.5% threshold)
-- **High CPC** (> $10 threshold)
-
-## 🔧 Development
-
-### Project Structure
-```
+```text
 ads-report-automation/
+├── config/
+│   ├── defaults.yaml
+│   └── clients/
 ├── src/
-│   ├── main.py              # CLI entry point
-│   ├── pipeline.py          # Fetch -> store -> analyze -> report orchestration
-│   ├── storage.py           # Partitioned Parquet storage
-│   ├── config/              # Client/reporting config and diagnostic config
-│   ├── models/              # Core records, diagnostics, reporting view models
-│   ├── fetchers/            # API data fetchers
-│   ├── analyzers/           # Insight engines
-│   ├── diagnostics/         # Diagnostic tree logic
-│   └── reporting/           # Internal + client report generation
-├── data/                    # Parquet data files
-├── logs/                    # Application logs
-├── reports/                 # Generated reports
-├── clients.yaml             # Client config, theme rules, brand rules
-├── config/diagnostic_tree.yaml
-├── tests/
-├── pyproject.toml
-└── README.md
+│   ├── cli/
+│   ├── config/
+│   ├── fetchers/
+│   ├── analyzers/
+│   ├── reporting/
+│   ├── models/
+│   ├── pipeline.py
+│   └── storage.py
+├── data/
+├── reports/
+└── tests/
 ```
-
-### Key Technologies
-- **Polars**: Fast data processing
-- **Rich**: CLI output
-- **Click**: Command-line interface
-- **PyYAML**: Configuration parsing
-
-## 🔮 Future Enhancements
-
-- [x] Real API integration (Meta Business SDK, Google Ads API)
-- [x] Authentication handling for production APIs
-- [ ] More sophisticated anomaly detection
-- [ ] Additional platform support
-- [ ] Web dashboard for reports
-- [ ] Scheduled report generation
-- [ ] Data quality checks and validation
-
-## 📝 License
-
-This project is open source and available under the MIT License.

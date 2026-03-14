@@ -5,10 +5,22 @@ High-level workflow shortcuts that chain plumbing operations together.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
+from .brand_support import resolve_brand_name, scope_payload
 from .context import resolve_client_id
 from .plumbing import resolve_dates
+
+
+def _read_knowledge(client_id: str) -> str | None:
+    """Read the knowledge file for a client, if it exists."""
+    knowledge_file = Path("data") / client_id / "knowledge.md"
+    try:
+        return knowledge_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -17,10 +29,19 @@ from .plumbing import resolve_dates
 
 @click.command()
 @click.argument("client_id", required=False, default=None)
+@click.option("--brand", default=None, help="Filter health checks to a single configured brand.")
+@click.option("--no-fetch", is_flag=True, help="Skip fetching, use cached data only.")
 @click.option("--month", "-m", default=None, help="Target month YYYY-MM.")
 @click.option("--days", "-d", type=int, default=None, help="Number of trailing days.")
 @click.pass_context
-def check(ctx: click.Context, client_id: str | None, month: str | None, days: int | None) -> None:
+def check(
+    ctx: click.Context,
+    client_id: str | None,
+    brand: str | None,
+    no_fetch: bool,
+    month: str | None,
+    days: int | None,
+) -> None:
     """Quick health dashboard -- fetches data, runs all analyzers, shows alerts.
 
     Equivalent to running ``fetch`` then ``analyze`` in sequence, with
@@ -42,49 +63,53 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
     if not client_config:
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
-    reporting_config = cm.get_reporting_config(cid)
+    business_config = cm.get_business_config(cid)
     client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
+    selected_brand = resolve_brand_name(business_config, brand)
 
-    # Phase 1: fetch
-    if not ctx.obj["quiet"]:
-        click.echo(f"Fetching data for {cid}...", err=True)
-    fetch_client(
-        client_id=cid,
-        client_config=client_config,
-        reporting_config=reporting_config,
-        start_date=start,
-        end_date=end,
-        storage=storage,
-        cred_manager=cred,
-    )
+    # Phase 1: fetch (unless --no-fetch)
+    if not no_fetch:
+        if not ctx.obj["quiet"]:
+            click.echo(f"Fetching data for {cid}...", err=True)
+        fetch_client(
+            client_id=cid,
+            business_config=business_config,
+            start_date=start,
+            end_date=end,
+            storage=storage,
+            cred_manager=cred,
+        )
 
     # Phase 2: analyze
     if not ctx.obj["quiet"]:
         click.echo(f"Analyzing {cid}...", err=True)
     results = analyze_client(
         client_id=cid,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=start,
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
         context=client_context,
+        brand=selected_brand,
     )
 
     if results is None:
         output_data(
-            {"client_id": cid, "status": "no_data", "message": "No data available."},
+            {**scope_payload(cid, selected_brand), "status": "no_data", "message": "No data available."},
             fmt,
             title="Health Check",
         )
         return
 
     # Build a compact health summary
+    knowledge = _read_knowledge(cid)
     summary = {
-        "client_id": cid,
+        **scope_payload(cid, selected_brand),
         "context": results.context,
+        "knowledge": knowledge,
         "period": results.period_current,
         "comparison_period": results.period_previous,
         "currency": results.currency,
@@ -98,6 +123,19 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
         },
     }
 
+    if results.web_quality:
+        from dataclasses import asdict
+
+        summary["web_quality"] = {
+            "summary": results.web_quality.summary,
+            "low_engagement_page_count": len(results.web_quality.low_engagement_pages),
+            "low_key_event_page_count": len(results.web_quality.low_key_event_pages),
+            "paid_engagement_gap_count": len(results.web_quality.paid_engagement_gaps),
+            "top_landing_pages": [
+                asdict(p) for p in results.web_quality.top_landing_pages[:10]
+            ],
+        }
+
     output_data(summary, fmt, title=f"Health Check: {cid}")
 
 
@@ -107,11 +145,21 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
 
 @click.command()
 @click.argument("client_id", required=False, default=None)
+@click.option("--brand", default=None, help="Filter investigation to a single configured brand.")
 @click.option("--metric", required=True, type=click.Choice(["cpl", "cvr", "volume"], case_sensitive=False), help="Metric to investigate.")
+@click.option("--no-fetch", is_flag=True, help="Skip fetching, use cached data only.")
 @click.option("--month", "-m", default=None, help="Target month YYYY-MM.")
 @click.option("--days", "-d", type=int, default=None, help="Number of trailing days.")
 @click.pass_context
-def investigate(ctx: click.Context, client_id: str | None, metric: str, month: str | None, days: int | None) -> None:
+def investigate(
+    ctx: click.Context,
+    client_id: str | None,
+    brand: str | None,
+    metric: str,
+    no_fetch: bool,
+    month: str | None,
+    days: int | None,
+) -> None:
     """Deep diagnostic investigation into why a specific metric changed.
 
     Requires --metric to focus the investigation on CPL, CVR, or lead volume.
@@ -132,44 +180,52 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
     if not client_config:
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
-    reporting_config = cm.get_reporting_config(cid)
+    business_config = cm.get_business_config(cid)
     client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
+    selected_brand = resolve_brand_name(business_config, brand)
 
-    # Fetch + analyze
-    fetch_client(
-        client_id=cid,
-        client_config=client_config,
-        reporting_config=reporting_config,
-        start_date=start,
-        end_date=end,
-        storage=storage,
-        cred_manager=cred,
-    )
+    # Fetch (unless --no-fetch)
+    if not no_fetch:
+        fetch_client(
+            client_id=cid,
+            business_config=business_config,
+            start_date=start,
+            end_date=end,
+            storage=storage,
+            cred_manager=cred,
+        )
 
     results = analyze_client(
         client_id=cid,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=start,
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
         context=client_context,
+        brand=selected_brand,
     )
 
     if results is None:
         output_data(
-            {"client_id": cid, "status": "no_data", "message": "No data available for investigation."},
+            {
+                **scope_payload(cid, selected_brand),
+                "status": "no_data",
+                "message": "No data available for investigation.",
+            },
             fmt,
             title="Investigation",
         )
         return
 
     # Build investigation result focused on the chosen metric
+    knowledge = _read_knowledge(cid)
     investigation: dict = {
-        "client_id": cid,
+        **scope_payload(cid, selected_brand),
         "context": results.context,
+        "knowledge": knowledge,
         "metric": metric,
         "period": results.period_current,
         "comparison_period": results.period_previous,
@@ -182,12 +238,29 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
             "budget_recommendations": results.budget_recommendations,
             "impression_share_opportunities": results.lost_impression_share,
         }
+        if results.web_quality:
+            from dataclasses import asdict
+
+            investigation["related_data"]["paid_engagement_gaps"] = [
+                asdict(p) for p in results.web_quality.paid_engagement_gaps
+            ]
     elif metric == "cvr":
         investigation["related_data"] = {
             "quality_score_alerts": results.low_qs_alerts,
             "quality_score_changes": results.qs_changes,
             "negative_keyword_candidates": results.negative_keywords[:20],
         }
+        if results.web_quality:
+            from dataclasses import asdict
+
+            investigation["related_data"]["web_quality"] = {
+                "low_engagement_pages": [
+                    asdict(p) for p in results.web_quality.low_engagement_pages
+                ],
+                "paid_engagement_gaps": [
+                    asdict(p) for p in results.web_quality.paid_engagement_gaps
+                ],
+            }
     elif metric == "volume":
         investigation["related_data"] = {
             "trends": results.trends,
@@ -205,10 +278,19 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
 
 @click.command()
 @click.argument("client_id", required=False, default=None)
+@click.option("--brand", default=None, help="Generate reports for a single configured brand.")
+@click.option("--no-fetch", is_flag=True, help="Skip fetching, use cached data only.")
 @click.option("--month", "-m", default=None, help="Target month YYYY-MM.")
 @click.option("--days", "-d", type=int, default=None, help="Number of trailing days.")
 @click.pass_context
-def brief(ctx: click.Context, client_id: str | None, month: str | None, days: int | None) -> None:
+def brief(
+    ctx: click.Context,
+    client_id: str | None,
+    brand: str | None,
+    no_fetch: bool,
+    month: str | None,
+    days: int | None,
+) -> None:
     """Generate a client-ready summary report.
 
     Chains fetch + analyze + report generation, producing both the
@@ -231,40 +313,46 @@ def brief(ctx: click.Context, client_id: str | None, month: str | None, days: in
     if not client_config:
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
-    reporting_config = cm.get_reporting_config(cid)
+    business_config = cm.get_business_config(cid)
     client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
+    selected_brand = resolve_brand_name(business_config, brand)
 
-    # Phase 1: fetch
-    if not ctx.obj["quiet"]:
-        click.echo(f"Fetching data for {cid}...", err=True)
-    fetch_client(
-        client_id=cid,
-        client_config=client_config,
-        reporting_config=reporting_config,
-        start_date=start,
-        end_date=end,
-        storage=storage,
-        cred_manager=cred,
-    )
+    # Phase 1: fetch (unless --no-fetch)
+    if not no_fetch:
+        if not ctx.obj["quiet"]:
+            click.echo(f"Fetching data for {cid}...", err=True)
+        fetch_client(
+            client_id=cid,
+            business_config=business_config,
+            start_date=start,
+            end_date=end,
+            storage=storage,
+            cred_manager=cred,
+        )
 
     # Phase 2: analyze
     if not ctx.obj["quiet"]:
         click.echo(f"Analyzing {cid}...", err=True)
     results = analyze_client(
         client_id=cid,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=start,
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
         context=client_context,
+        brand=selected_brand,
     )
 
     if results is None:
         output_data(
-            {"client_id": cid, "status": "no_data", "message": "No data available to generate brief."},
+            {
+                **scope_payload(cid, selected_brand),
+                "status": "no_data",
+                "message": "No data available to generate brief.",
+            },
             fmt,
             title="Brief",
         )
@@ -278,16 +366,19 @@ def brief(ctx: click.Context, client_id: str | None, month: str | None, days: in
 
     internal_path, summary_path = generate_reports(
         results=results,
-        reporting_config=reporting_config,
+        business_config=business_config,
         current_start=start,
         current_end=end,
         storage=storage,
         internal_report_generator=internal_gen,
         client_summary_generator=summary_gen,
+        report_type="all",
     )
 
+    knowledge = _read_knowledge(cid)
     result = {
-        "client_id": cid,
+        **scope_payload(cid, selected_brand),
+        "knowledge": knowledge,
         "period": results.period_current,
         "internal_report": internal_path,
         "client_summary": summary_path,

@@ -7,13 +7,16 @@ import unittest
 
 from src.credentials import CredentialManager
 from src.models import (
+    BusinessConfig,
+    GoogleAdsSource,
     GoogleLeadRule,
     GoogleConversionActionRecord,
+    LeadRules,
+    MetaSource,
     MetaLeadRule,
     PerformanceRecord,
     Platform,
-    PrimaryLeadRules,
-    ReportingConfig,
+    SourceRegistry,
     ThemeRule,
 )
 from src.pipeline import process_client
@@ -33,20 +36,34 @@ class PipelineDualReportsTests(unittest.TestCase):
             self._seed_campaign_data(storage, current_start)
             self._seed_conversion_actions(storage, current_start)
 
-            reporting_config = ReportingConfig(
+            business_config = BusinessConfig(
+                sources=SourceRegistry(
+                    google_ads={
+                        "nota_ads": GoogleAdsSource(
+                            alias="nota_ads",
+                            customer_id="556-178-5391",
+                        )
+                    },
+                    meta={
+                        "nota_meta": MetaSource(
+                            alias="nota_meta",
+                            account_id="act_123",
+                        )
+                    },
+                ),
                 theme_rules=[
                     ThemeRule(
-                        platform="google_ads",
+                        source="nota_ads",
                         theme="Performance Max",
                         campaign_name_regex="(?i)performance max",
                     ),
                     ThemeRule(
-                        platform="meta",
+                        source="nota_meta",
                         theme="Leads",
                         campaign_name_regex="(?i)lead",
                     ),
                 ],
-                primary_lead_rules=PrimaryLeadRules(
+                lead_rules=LeadRules(
                     google_ads=GoogleLeadRule(include_conversion_actions=["Qualified Lead"]),
                     meta=MetaLeadRule(include_action_types=["messaging_conversation_started_7d"]),
                 ),
@@ -55,11 +72,7 @@ class PipelineDualReportsTests(unittest.TestCase):
 
             process_client(
                 client_id="nota",
-                client_config={
-                    "google_ads": {"customer_ids": ["556-178-5391"]},
-                    "meta": {"ad_accounts": [{"id": "act_123"}]},
-                },
-                reporting_config=reporting_config,
+                business_config=business_config,
                 current_start=current_start,
                 current_end=current_end,
                 storage=storage,
@@ -86,6 +99,7 @@ class PipelineDualReportsTests(unittest.TestCase):
                 PerformanceRecord(
                     client_id="nota",
                     platform=Platform.GOOGLE_ADS,
+                    source_alias="nota_ads",
                     source_account_id="g1",
                     date=day,
                     campaign_id="g-campaign",
@@ -102,6 +116,7 @@ class PipelineDualReportsTests(unittest.TestCase):
                 PerformanceRecord(
                     client_id="nota",
                     platform=Platform.META,
+                    source_alias="nota_meta",
                     source_account_id="m1",
                     date=day,
                     campaign_id="m-campaign",
@@ -120,6 +135,7 @@ class PipelineDualReportsTests(unittest.TestCase):
                 PerformanceRecord(
                     client_id="nota",
                     platform=Platform.GOOGLE_ADS,
+                    source_alias="nota_ads",
                     source_account_id="g1",
                     date=day,
                     campaign_id="g-campaign",
@@ -136,6 +152,7 @@ class PipelineDualReportsTests(unittest.TestCase):
                 PerformanceRecord(
                     client_id="nota",
                     platform=Platform.META,
+                    source_alias="nota_meta",
                     source_account_id="m1",
                     date=day,
                     campaign_id="m-campaign",
@@ -158,6 +175,7 @@ class PipelineDualReportsTests(unittest.TestCase):
             records.append(
                 GoogleConversionActionRecord(
                     client_id="nota",
+                    source_alias="nota_ads",
                     source_account_id="g1",
                     date=day,
                     campaign_id="g-campaign",
@@ -173,6 +191,7 @@ class PipelineDualReportsTests(unittest.TestCase):
             records.append(
                 GoogleConversionActionRecord(
                     client_id="nota",
+                    source_alias="nota_ads",
                     source_account_id="g1",
                     date=day,
                     campaign_id="g-campaign",
@@ -186,6 +205,7 @@ class PipelineDualReportsTests(unittest.TestCase):
             records.append(
                 GoogleConversionActionRecord(
                     client_id="nota",
+                    source_alias="nota_ads",
                     source_account_id="g1",
                     date=day,
                     campaign_id="g-campaign",

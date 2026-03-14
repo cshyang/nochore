@@ -1,25 +1,100 @@
-"""Client reporting configuration and view models."""
+"""Client business configuration and reporting view models."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
-class BrandRule:
-    """Maps campaigns to a client-facing brand bucket."""
+class GoogleAdsSource:
+    """Google Ads source definition."""
 
-    platform: str
-    brand: str
-    source_account_ids: List[str] = field(default_factory=list)
+    alias: str
+    customer_id: str
+
+
+@dataclass
+class MetaSource:
+    """Meta Ads source definition."""
+
+    alias: str
+    account_id: str
+    name: Optional[str] = None
+
+
+@dataclass
+class GA4Source:
+    """GA4 source definition."""
+
+    alias: str
+    property_id: str
+
+
+@dataclass
+class SearchConsoleSource:
+    """Search Console source definition."""
+
+    alias: str
+    site_url: str
+
+
+@dataclass
+class SourceRegistry:
+    """Registry of configured client data sources keyed by alias."""
+
+    google_ads: Dict[str, GoogleAdsSource] = field(default_factory=dict)
+    meta: Dict[str, MetaSource] = field(default_factory=dict)
+    ga4: Dict[str, GA4Source] = field(default_factory=dict)
+    search_console: Dict[str, SearchConsoleSource] = field(default_factory=dict)
+
+    def aliases(self) -> List[str]:
+        """Return all configured aliases in declaration order."""
+        return (
+            list(self.google_ads.keys())
+            + list(self.meta.keys())
+            + list(self.ga4.keys())
+            + list(self.search_console.keys())
+        )
+
+    def get(self, alias: str) -> Optional[Tuple[str, object]]:
+        """Return ``(source_type, source)`` for *alias*, or ``None``."""
+        if alias in self.google_ads:
+            return "google_ads", self.google_ads[alias]
+        if alias in self.meta:
+            return "meta", self.meta[alias]
+        if alias in self.ga4:
+            return "ga4", self.ga4[alias]
+        if alias in self.search_console:
+            return "search_console", self.search_console[alias]
+        return None
+
+
+@dataclass
+class SourceFilterSet:
+    """Alias-specific brand scoping rules."""
+
     campaign_name_regex: str = ".*"
+    landing_page_regex: str = ".*"
+    key_events: List[str] = field(default_factory=list)
+    page_regex: str = ".*"
+    brand_terms: List[str] = field(default_factory=list)
+
+
+@dataclass
+class BrandDefinition:
+    """Business-facing brand definition."""
+
+    name: str
+    sources: List[str] = field(default_factory=list)
+    context: Dict[str, Any] = field(default_factory=dict)
     default_theme: Optional[str] = None
+    filters: Dict[str, SourceFilterSet] = field(default_factory=dict)
 
 
 @dataclass
 class ThemeRule:
-    """Maps campaigns to a client-facing theme."""
+    """Maps a source alias to a client-facing theme."""
 
-    platform: str
+    source: str
     theme: str
     campaign_name_regex: str
     brand: Optional[str] = None
@@ -41,7 +116,7 @@ class MetaLeadRule:
 
 
 @dataclass
-class PrimaryLeadRules:
+class LeadRules:
     """Per-platform primary lead rules."""
 
     google_ads: GoogleLeadRule = field(default_factory=GoogleLeadRule)
@@ -49,12 +124,13 @@ class PrimaryLeadRules:
 
 
 @dataclass
-class ReportingConfig:
-    """Client-facing reporting configuration."""
+class BusinessConfig:
+    """Typed business config for analysis and reporting."""
 
-    brand_rules: List[BrandRule] = field(default_factory=list)
+    sources: SourceRegistry = field(default_factory=SourceRegistry)
+    brands: List[BrandDefinition] = field(default_factory=list)
     theme_rules: List[ThemeRule] = field(default_factory=list)
-    primary_lead_rules: PrimaryLeadRules = field(default_factory=PrimaryLeadRules)
+    lead_rules: LeadRules = field(default_factory=LeadRules)
     data_notes: List[str] = field(default_factory=list)
 
 
@@ -142,5 +218,6 @@ class ClientSummaryReport:
     insights: List[InsightRow]
     recommendations: List[str]
     data_notes: List[str]
+    brand: Optional[str] = None
     brand_sections: List[BrandSection] = field(default_factory=list)
     lead_corrections: List[LeadCorrectionSummary] = field(default_factory=list)

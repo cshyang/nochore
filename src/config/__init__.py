@@ -4,7 +4,7 @@ from .clients import (
     DEFAULT_META_ACTION_TYPES,
     ConfigManager,
     ConfigValidator,
-    parse_reporting_config,
+    parse_business_config,
 )
 from .diagnostics import DiagnosticTreeConfigLoader
 
@@ -13,5 +13,5 @@ __all__ = [
     "ConfigManager",
     "ConfigValidator",
     "DiagnosticTreeConfigLoader",
-    "parse_reporting_config",
+    "parse_business_config",
 ]
