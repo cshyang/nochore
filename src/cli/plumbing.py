@@ -4,6 +4,8 @@ These are granular building blocks that map 1-to-1 to the pipeline phases
 defined in ``src.pipeline``.  Porcelain commands chain them together.
 """
 
+from __future__ import annotations
+
 from datetime import date, timedelta
 
 import click

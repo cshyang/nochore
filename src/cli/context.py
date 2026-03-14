@@ -6,6 +6,8 @@ subsequent commands can omit the ``client_id`` argument.
 ``status`` displays the current context and data-freshness overview.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -109,11 +111,10 @@ def status(ctx: click.Context) -> None:
         data_types = storage.list_data_types(active)
         info["data_types"] = data_types if data_types else []
 
-        from pathlib import Path as _P
         import datetime
 
         freshness: dict = {}
-        data_dir = _P("data") / active
+        data_dir = Path("data") / active
         if data_dir.exists():
             for dt_dir in sorted(data_dir.iterdir()):
                 if dt_dir.is_dir():

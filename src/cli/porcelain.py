@@ -3,6 +3,8 @@
 High-level workflow shortcuts that chain plumbing operations together.
 """
 
+from __future__ import annotations
+
 import click
 
 from .context import resolve_client_id
