@@ -232,6 +232,7 @@ def analyze_client(
     current_end: date,
     storage: StorageManager,
     is_monthly: bool = True,
+    context: Optional[Dict[str, Any]] = None,
 ) -> Optional[AnalysisResults]:
     """Phase 2: Run analyzers on stored data and return structured results.
 
@@ -351,6 +352,7 @@ def analyze_client(
         period_current=f"{current_start.isoformat()} to {current_end.isoformat()}",
         period_previous=f"{previous_start.isoformat()} to {previous_end.isoformat()}",
         currency=currency,
+        context=context or {},
         kpi_summary=kpi_summary,
         negative_keywords=neg_keywords,
         top_search_terms=top_search_terms,

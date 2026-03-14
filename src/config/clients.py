@@ -164,6 +164,11 @@ class ConfigManager:
             return {}
         return self.config.get("clients", {}).get(client_id, {})
 
+    def get_client_context(self, client_id: str) -> Dict[str, Any]:
+        """Get the business context for a client (optimization goals, notes, etc.)."""
+        client_config = self.get_client_config(client_id)
+        return dict(client_config.get("context", {}))
+
     def get_reporting_config(self, client_id: str) -> ReportingConfig:
         """Get typed reporting config for a specific client."""
         return parse_reporting_config(self.get_client_config(client_id))

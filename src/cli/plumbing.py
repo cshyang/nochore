@@ -116,6 +116,7 @@ def analyze(ctx: click.Context, client_id: str | None, month: str | None, days: 
     cm = ConfigManager(ctx.obj["config_path"])
     cm.load_config()
     reporting_config = cm.get_reporting_config(cid)
+    client_context = cm.get_client_context(cid)
     storage = StorageManager()
 
     results = analyze_client(
@@ -125,6 +126,7 @@ def analyze(ctx: click.Context, client_id: str | None, month: str | None, days: 
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
+        context=client_context,
     )
 
     if results is None:

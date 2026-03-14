@@ -43,6 +43,7 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
     reporting_config = cm.get_reporting_config(cid)
+    client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
 
@@ -69,6 +70,7 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
+        context=client_context,
     )
 
     if results is None:
@@ -82,6 +84,7 @@ def check(ctx: click.Context, client_id: str | None, month: str | None, days: in
     # Build a compact health summary
     summary = {
         "client_id": cid,
+        "context": results.context,
         "period": results.period_current,
         "comparison_period": results.period_previous,
         "currency": results.currency,
@@ -130,6 +133,7 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
     reporting_config = cm.get_reporting_config(cid)
+    client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
 
@@ -151,6 +155,7 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
+        context=client_context,
     )
 
     if results is None:
@@ -164,6 +169,7 @@ def investigate(ctx: click.Context, client_id: str | None, metric: str, month: s
     # Build investigation result focused on the chosen metric
     investigation: dict = {
         "client_id": cid,
+        "context": results.context,
         "metric": metric,
         "period": results.period_current,
         "comparison_period": results.period_previous,
@@ -226,6 +232,7 @@ def brief(ctx: click.Context, client_id: str | None, month: str | None, days: in
         raise click.UsageError(f"Client '{cid}' not found in config.")
 
     reporting_config = cm.get_reporting_config(cid)
+    client_context = cm.get_client_context(cid)
     storage = StorageManager()
     cred = CredentialManager()
 
@@ -252,6 +259,7 @@ def brief(ctx: click.Context, client_id: str | None, month: str | None, days: in
         current_end=end,
         storage=storage,
         is_monthly=is_monthly,
+        context=client_context,
     )
 
     if results is None:

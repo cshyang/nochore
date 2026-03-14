@@ -180,7 +180,8 @@ class AnalysisResults:
     period_current: str
     period_previous: str
     currency: str
-    kpi_summary: Dict[str, Any]
+    context: Dict[str, Any] = field(default_factory=dict)
+    kpi_summary: Dict[str, Any] = field(default_factory=dict)
     composition_device: Optional[CompositionBreakdown] = None
     composition_geo: Optional[CompositionBreakdown] = None
     composition_hour: Optional[CompositionBreakdown] = None

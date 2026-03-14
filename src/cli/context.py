@@ -101,8 +101,16 @@ def status(ctx: click.Context) -> None:
         "context_file_exists": CONTEXT_FILE.exists(),
     }
 
-    # If there is an active client, show data freshness
+    # If there is an active client, show context and data freshness
     if active:
+        from src.config import ConfigManager
+
+        cm = ConfigManager(ctx.obj["config_path"])
+        cm.load_config()
+        client_context = cm.get_client_context(active)
+        if client_context:
+            info["context"] = client_context
+
         from src.storage import StorageManager
 
         storage = StorageManager()
