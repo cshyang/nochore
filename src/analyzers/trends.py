@@ -5,7 +5,7 @@ from datetime import date
 import polars as pl
 import numpy as np
 
-from ..data_models import TrendResult, Anomaly, Forecast
+from ..models import TrendResult, Anomaly, Forecast
 
 logger = logging.getLogger(__name__)
 

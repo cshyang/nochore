@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, List, Optional
 
 from ..config import DiagnosticTreeConfigLoader
-from ..data_models import (
+from ..models import (
     DiagnosticTreeConfig,
     DiagnosticCheckConfig,
     Diagnosis,

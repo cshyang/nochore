@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Dict, Any, List, Optional
 
-from ..data_models import (
+from ..models import (
     Diagnosis,
     Recommendation,
     DiagnosticCheckConfig,

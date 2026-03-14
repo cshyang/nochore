@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 
 import polars as pl
 
-from ..data_models import (
+from ..models import (
     CompositionBreakdown,
     CompositionSegment,
     CompositionShift,

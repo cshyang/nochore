@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List
 import polars as pl
 
-from ..data_models import NegativeKeywordRec, TopSearchTerm, MatchTypeBreakdown
+from ..models import NegativeKeywordRec, TopSearchTerm, MatchTypeBreakdown
 
 logger = logging.getLogger(__name__)
 

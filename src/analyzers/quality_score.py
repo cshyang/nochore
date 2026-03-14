@@ -3,7 +3,7 @@ import logging
 from typing import List, Dict
 import polars as pl
 
-from ..data_models import QSChange, LowQSAlert
+from ..models import QSChange, LowQSAlert
 
 logger = logging.getLogger(__name__)
 

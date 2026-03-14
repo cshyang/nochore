@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Dict, Any, List, Optional, Tuple
 
-from ..data_models import (
+from ..models import (
     EvidenceRule,
     EvidenceResult,
     ThresholdConfig,

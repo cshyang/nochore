@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
-from ..data_models import (
+from ..models import (
     DiagnosticCheckConfig,
     Diagnosis,
     EvidenceResult,

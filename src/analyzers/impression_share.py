@@ -3,7 +3,7 @@ import logging
 from typing import List
 import polars as pl
 
-from ..data_models import LostISInsight, BudgetRec
+from ..models import LostISInsight, BudgetRec
 
 logger = logging.getLogger(__name__)
 
