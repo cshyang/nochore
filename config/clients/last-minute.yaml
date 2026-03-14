@@ -1,0 +1,59 @@
+context:
+  business: "Multi-brand home services company (renovation, tinting, wrapping)"
+  market: "Singapore, Malaysia"
+  ticket_size: "high"
+  stage: "mature"
+  objective: "leads"
+  quality_signals:
+    - "High CTR indicates good targeting and ad relevance"
+    - "High CVR indicates quality traffic and landing page fit"
+    - "Messaging conversations are real leads, not page views"
+  notes:
+    - "Homescape is the priority brand, others are secondary"
+    - "MY market is price-sensitive, expect higher CPL than SG"
+    - "CNY seasonal campaigns run Jan-Feb only"
+    - "Meta leads are counted from messaging conversation starts"
+
+meta:
+  ad_accounts:
+    - id: "act_1163453211889702"
+      name: "DMP Singapore"
+    - id: "act_475543895521800"
+      name: "DMP MY"
+    - id: "act_655792112740573"
+      name: "Tint n' Wrap"
+    - id: "act_3588231148124410"
+      name: "Homescape"
+
+google_ads:
+  customer_ids:
+    - "107-310-0792"
+
+reporting:
+  brands:
+    - name: "Homescape"
+      sources:
+        - platform: "google_ads"
+          account_id: "107-310-0792"
+        - platform: "meta"
+          account_id: "act_3588231148124410"
+      default_theme: "Always On"
+    - name: "Tint n' Wrap"
+      sources:
+        - platform: "meta"
+          account_id: "act_655792112740573"
+    - name: "DMP Singapore"
+      sources:
+        - platform: "meta"
+          account_id: "act_1163453211889702"
+    - name: "DMP MY"
+      sources:
+        - platform: "meta"
+          account_id: "act_475543895521800"
+  theme_rules:
+    - platform: "meta"
+      theme: "Seasonal"
+      campaign_name_regex: "(?i)cny|seasonal|promo"
+    - platform: "google_ads"
+      theme: "Performance Max"
+      campaign_name_regex: "(?i)performance max|pmax"

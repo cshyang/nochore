@@ -1,0 +1,29 @@
+## Shared defaults applied to all clients.
+## Client configs override or extend these values.
+## Lists (theme_rules, notes, etc.) are appended, not replaced.
+
+meta:
+  system_user_id: "61577869030671"
+
+reporting:
+  theme_rules:
+    - platform: "meta"
+      theme: "Leads"
+      campaign_name_regex: "(?i)lead"
+    - platform: "meta"
+      theme: "Engagement - Retargeting"
+      campaign_name_regex: "(?i)retarget"
+    - platform: "meta"
+      theme: "Engagement - Acquisition"
+      campaign_name_regex: "(?i)engagement|acquisition"
+    - platform: "google_ads"
+      theme: "Search"
+      campaign_name_regex: "(?i)search|event"
+  primary_lead_rules:
+    meta:
+      include_action_types:
+        - "messaging_conversation_started_7d"
+        - "onsite_conversion.messaging_conversation_started_7d"
+    google_ads:
+      include_conversion_actions: []
+      exclude_conversion_actions: []

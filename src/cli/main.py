@@ -27,9 +27,9 @@ from .tools_cmd import tools
 @click.option(
     "--config",
     "config_path",
-    default="clients.yaml",
+    default="config",
     show_default=True,
-    help="Path to client configuration file.",
+    help="Path to config directory or legacy clients.yaml file.",
 )
 @click.pass_context
 def cli(ctx: click.Context, output_format: str, quiet: bool, verbose: bool, config_path: str) -> None:
