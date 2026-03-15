@@ -36,13 +36,23 @@ def build_optimization_plan(results: AnalysisResults, memory_rows: List[Dict[str
                 platform="google_ads",
                 client_id=results.client_id,
                 brand=brand,
-                source_alias=None,
+                source_alias=item.source_alias or None,
                 target_kind="campaign",
-                target_id=item.campaign,
+                target_id=item.campaign_id or item.campaign,
                 confidence="high",
                 risk_level="low",
-                idempotency_key=f"{results.client_id}:{brand or 'client'}:neg:{item.campaign}:{item.search_term}",
-                payload={"campaign": item.campaign, "search_term": item.search_term},
+                idempotency_key=(
+                    f"{results.client_id}:{brand or 'client'}:"
+                    f"{item.source_alias or 'google_ads'}:neg:{item.campaign_id or item.campaign}:{item.search_term}"
+                ),
+                payload={
+                    "campaign_id": item.campaign_id,
+                    "campaign_name": item.campaign,
+                    "ad_group_id": item.ad_group_id,
+                    "ad_group_name": item.ad_group,
+                    "search_term": item.search_term,
+                    "match_type": item.match_type,
+                },
             )
         )
 
@@ -64,59 +74,25 @@ def build_optimization_plan(results: AnalysisResults, memory_rows: List[Dict[str
             ActionPlan(
                 action_id=f"ACT-GADS-BUD-{index}",
                 hypothesis_id=hypothesis_id,
-                action_type="increase_campaign_budget",
+                action_type="adjust_google_ads_budget",
                 platform="google_ads",
                 client_id=results.client_id,
                 brand=brand,
-                source_alias=None,
+                source_alias=item.source_alias or None,
                 target_kind="campaign",
-                target_id=item.campaign,
+                target_id=item.campaign_id or item.campaign,
                 confidence="medium",
                 risk_level="medium",
-                idempotency_key=f"{results.client_id}:{brand or 'client'}:budget:{item.campaign}",
+                idempotency_key=(
+                    f"{results.client_id}:{brand or 'client'}:"
+                    f"{item.source_alias or 'google_ads'}:budget:{item.campaign_id or item.campaign}"
+                ),
                 payload={
-                    "campaign": item.campaign,
+                    "campaign_id": item.campaign_id,
+                    "campaign_name": item.campaign,
                     "current_daily": item.current_daily,
                     "recommended_daily": item.recommended_daily,
-                },
-            )
-        )
-
-    has_meta = any(
-        row.get("platform") == "meta"
-        for row in results.kpi_summary.get("platform_currency_breakdown_current", [])
-    )
-    if has_meta:
-        hypothesis_id = "HYP-META-CREATIVE-1"
-        hypotheses.append(
-            ExperimentHypothesis(
-                hypothesis_id=hypothesis_id,
-                client_id=results.client_id,
-                brand=brand,
-                title="Launch a new Meta creative angle test",
-                summary="Meta spend is active; create a new ad variant to test a fresh angle against the current control.",
-                confidence="low",
-                expected_outcome="Generate a controlled learning loop for Meta creative performance.",
-                evidence={"platform": "meta", "reason": "skeleton creative test"},
-            )
-        )
-        actions.append(
-            ActionPlan(
-                action_id="ACT-META-CREATIVE-1",
-                hypothesis_id=hypothesis_id,
-                action_type="create_meta_ad_variant",
-                platform="meta",
-                client_id=results.client_id,
-                brand=brand,
-                source_alias=None,
-                target_kind="adset",
-                target_id=None,
-                confidence="low",
-                risk_level="medium",
-                idempotency_key=f"{results.client_id}:{brand or 'client'}:meta:creative-variant",
-                payload={
-                    "variant_name": f"{brand or results.client_id} Variant A",
-                    "message": "Placeholder creative variant generated for dry-run planning.",
+                    "recommended_delta_pct": item.recommended_delta_pct,
                 },
             )
         )

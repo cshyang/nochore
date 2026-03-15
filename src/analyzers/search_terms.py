@@ -27,7 +27,19 @@ class SearchTermsAnalyzer:
         if self.df.is_empty():
             return []
         
-        group_keys = ["source_account_id", "currency", "search_term", "campaign_name", "ad_group_name"]
+        if "source_alias" not in self.df.columns:
+            self.df = self.df.with_columns(pl.lit("unknown").alias("source_alias"))
+
+        group_keys = [
+            "source_alias",
+            "source_account_id",
+            "currency",
+            "search_term",
+            "campaign_id",
+            "campaign_name",
+            "ad_group_id",
+            "ad_group_name",
+        ]
 
         agg_df = self.df.group_by(group_keys).agg(
             pl.col("cost").sum().alias("total_cost"),
@@ -59,7 +71,12 @@ class SearchTermsAnalyzer:
                 clicks=row["total_clicks"],
                 leads=row["total_leads"],
                 reason="high_spend_no_conv",
-                note="Review as potential negative keyword (exact match)"
+                note="Review as potential negative keyword (exact match)",
+                source_alias=row["source_alias"],
+                source_account_id=row["source_account_id"],
+                campaign_id=row["campaign_id"],
+                ad_group_id=row["ad_group_id"],
+                match_type="EXACT",
             ))
         
         # Medium priority: Low CTR
@@ -70,7 +87,13 @@ class SearchTermsAnalyzer:
         )
         
         for row in med_priority.iter_rows(named=True):
-            if not any(c.search_term == row["search_term"] and c.currency == row["currency"] for c in candidates):
+            if not any(
+                c.search_term == row["search_term"]
+                and c.currency == row["currency"]
+                and c.campaign_id == row["campaign_id"]
+                and c.source_alias == row["source_alias"]
+                for c in candidates
+            ):
                 candidates.append(NegativeKeywordRec(
                     search_term=row["search_term"],
                     campaign=row["campaign_name"],
@@ -80,7 +103,12 @@ class SearchTermsAnalyzer:
                     clicks=row["total_clicks"],
                     leads=row["total_leads"],
                     reason="low_ctr",
-                    note="Review for relevance / intent"
+                    note="Review for relevance / intent",
+                    source_alias=row["source_alias"],
+                    source_account_id=row["source_account_id"],
+                    campaign_id=row["campaign_id"],
+                    ad_group_id=row["ad_group_id"],
+                    match_type="EXACT",
                 ))
         
         logger.info(f"Identified {len(candidates)} negative keyword candidates")

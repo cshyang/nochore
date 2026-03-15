@@ -13,6 +13,8 @@ class ImpressionShareAnalyzer:
     def __init__(self, impression_share_df: pl.DataFrame, low_is_threshold: float = 50.0):
         self.df = impression_share_df
         if not self.df.is_empty():
+            if "source_alias" not in self.df.columns:
+                self.df = self.df.with_columns(pl.lit("unknown").alias("source_alias"))
             if "source_account_id" not in self.df.columns:
                 self.df = self.df.with_columns(pl.lit("unknown").alias("source_account_id"))
             if "campaign_id" not in self.df.columns:
@@ -33,7 +35,7 @@ class ImpressionShareAnalyzer:
         # Get most recent data per campaign (scoped by source account)
         latest_df = (
             self.df.sort("date", descending=True)
-            .group_by(["source_account_id", "campaign_id", "campaign_name"])
+            .group_by(["source_alias", "source_account_id", "campaign_id", "campaign_name"])
             .first()
         )
         
@@ -86,7 +88,7 @@ class ImpressionShareAnalyzer:
 
         latest_df = (
             self.df.sort("date", descending=True)
-            .group_by(["source_account_id", "campaign_id", "campaign_name"])
+            .group_by(["source_alias", "source_account_id", "campaign_id", "campaign_name"])
             .first()
         )
         
@@ -109,6 +111,10 @@ class ImpressionShareAnalyzer:
                     current_daily=current_daily,
                     recommended_daily=recommended_daily,
                     expected_is_gain=budget_lost_pct * 0.7,  # heuristic
+                    source_alias=row["source_alias"],
+                    source_account_id=row["source_account_id"],
+                    campaign_id=row["campaign_id"],
+                    recommended_delta_pct=min(15.0, max(5.0, round(budget_lost_pct / 2, 1))),
                 )
             )
         

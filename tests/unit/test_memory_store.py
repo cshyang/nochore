@@ -30,7 +30,7 @@ class MemoryStoreTests(unittest.TestCase):
                 brand="Nota Cafe",
                 experiment_id="EXP-1",
                 action_id="ACT-1",
-                action_type="increase_campaign_budget",
+                action_type="adjust_google_ads_budget",
                 platform="google_ads",
                 source_alias="nota_ads",
                 target_kind="campaign",

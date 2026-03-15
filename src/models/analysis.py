@@ -23,6 +23,11 @@ class NegativeKeywordRec:
     leads: float
     reason: str
     note: str
+    source_alias: str = ""
+    source_account_id: str = ""
+    campaign_id: str = ""
+    ad_group_id: str = ""
+    match_type: str = "EXACT"
 
 
 @dataclass
@@ -69,6 +74,10 @@ class BudgetRec:
     current_daily: float
     recommended_daily: float
     expected_is_gain: float
+    source_alias: str = ""
+    source_account_id: str = ""
+    campaign_id: str = ""
+    recommended_delta_pct: float = 0.0
 
 
 @dataclass

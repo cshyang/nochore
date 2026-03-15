@@ -44,8 +44,8 @@ TOOL_MANIFEST = {
         },
         {
             "name": "google-ads",
-            "description": "Google Ads dry-run mutation primitives",
-            "subcommands": ["add-negative", "increase-budget"],
+            "description": "Google Ads mutation primitives with a live Homescape canary path",
+            "subcommands": ["add-negative", "adjust-budget"],
         },
         {
             "name": "meta",
