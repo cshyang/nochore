@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from google.analytics.data_v1beta.types import MetricType
 
-from src.fetchers.ga4 import GA4Fetcher
+from src.integrations.ga4 import GA4Fetcher
 
 
 def _value(value: str) -> SimpleNamespace:
@@ -43,7 +43,7 @@ class GA4FetcherTests(unittest.TestCase):
             metadata=SimpleNamespace(data_loss_from_other_row=False),
         )
 
-        with patch("src.fetchers.ga4.BetaAnalyticsDataClient") as client_cls:
+        with patch("src.integrations.ga4.fetcher.BetaAnalyticsDataClient") as client_cls:
             client = Mock()
             client.run_report.return_value = response
             client_cls.return_value = client

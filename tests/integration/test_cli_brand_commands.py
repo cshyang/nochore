@@ -1,4 +1,4 @@
-"""Integration tests for brand-aware CLI commands."""
+"""Integration tests for grouped analysis/report commands."""
 
 from __future__ import annotations
 
@@ -54,15 +54,13 @@ class CliBrandCommandsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.runner = CliRunner()
 
-    def test_analyze_brand_json_is_parseable_and_scoped(self) -> None:
+    def test_analyze_run_json_is_parseable_and_scoped(self) -> None:
         with self.runner.isolated_filesystem():
             self._write_config()
             self._seed_campaign_data()
 
             result = self._invoke(
-                cli,
-                ["--format", "json", "--config", "config", "analyze", "acme", "--brand", "homescape", "--month", "2026-01"],
-                catch_exceptions=False,
+                ["--format", "json", "--config", "config", "analyze", "run", "acme", "--brand", "homescape", "--month", "2026-01"]
             )
 
             self.assertEqual(result.exit_code, 0)
@@ -73,23 +71,21 @@ class CliBrandCommandsTests(unittest.TestCase):
             self.assertNotIn("Phase 2", result.stdout)
             self.assertIn("Phase 2", result.stderr)
 
-    def test_check_and_investigate_include_brand_scope_metadata(self) -> None:
+    def test_analyze_check_and_investigate_include_brand_scope_metadata(self) -> None:
         with self.runner.isolated_filesystem():
             self._write_config()
             self._seed_campaign_data()
 
             check_result = self._invoke(
-                cli,
-                ["--format", "json", "--config", "config", "check", "acme", "--brand", "Tint n' Wrap", "--month", "2026-01"],
-                catch_exceptions=False,
+                ["--format", "json", "--config", "config", "analyze", "check", "acme", "--brand", "Tint n' Wrap", "--month", "2026-01"]
             )
             investigate_result = self._invoke(
-                cli,
                 [
                     "--format",
                     "json",
                     "--config",
                     "config",
+                    "analyze",
                     "investigate",
                     "acme",
                     "--brand",
@@ -98,8 +94,7 @@ class CliBrandCommandsTests(unittest.TestCase):
                     "cpl",
                     "--month",
                     "2026-01",
-                ],
-                catch_exceptions=False,
+                ]
             )
 
             self.assertEqual(check_result.exit_code, 0)
@@ -113,15 +108,13 @@ class CliBrandCommandsTests(unittest.TestCase):
             self.assertEqual(investigate_payload["scope"], "brand")
             self.assertEqual(investigate_payload["brand"], "Tint n' Wrap")
 
-    def test_report_brand_generates_brand_specific_files(self) -> None:
+    def test_report_generate_brand_writes_brand_specific_files(self) -> None:
         with self.runner.isolated_filesystem():
             self._write_config()
             self._seed_campaign_data()
 
             result = self._invoke(
-                cli,
-                ["--format", "json", "--config", "config", "report", "acme", "--brand", "homescape", "--month", "2026-01"],
-                catch_exceptions=False,
+                ["--format", "json", "--config", "config", "report", "generate", "acme", "--brand", "homescape", "--month", "2026-01"]
             )
 
             self.assertEqual(result.exit_code, 0)
@@ -138,33 +131,43 @@ class CliBrandCommandsTests(unittest.TestCase):
             self.assertIn("**Brand:** Homescape", internal_path.read_text(encoding="utf-8"))
             self.assertIn("**Brand:** Homescape", summary_path.read_text(encoding="utf-8"))
 
-    def test_brands_list_and_tools_manifest_advertise_brand_support(self) -> None:
+    def test_analyze_brands_and_tools_manifest_use_new_surface(self) -> None:
         with self.runner.isolated_filesystem():
             self._write_config()
 
             brands_result = self._invoke(
-                cli,
-                ["--format", "json", "--config", "config", "brands", "list", "acme"],
-                catch_exceptions=False,
+                ["--format", "json", "--config", "config", "analyze", "brands", "acme"]
             )
             tools_result = self._invoke(
-                cli,
-                ["--format", "json", "--config", "config", "tools"],
-                catch_exceptions=False,
+                ["--format", "json", "--config", "config", "tools"]
             )
 
             self.assertEqual(brands_result.exit_code, 0)
             self.assertEqual(tools_result.exit_code, 0)
 
             brands_payload = json.loads(brands_result.stdout)
-            tools_payload = json.loads(tools_result.stdout)["commands"]
+            tools_payload = json.loads(tools_result.stdout)["groups"]
 
             self.assertEqual(
                 [row["brand"] for row in brands_payload],
                 ["Homescape", "Tint n' Wrap"],
             )
-            self.assertTrue(any(tool["name"] == "brands list" for tool in tools_payload))
-            self.assertTrue(any(tool["name"] == "check" and "--brand" in tool["params"] for tool in tools_payload))
+            self.assertTrue(any(group["name"] == "analyze" for group in tools_payload))
+            self.assertTrue(any(group["name"] == "optimize" for group in tools_payload))
+
+    def test_old_top_level_commands_are_unknown(self) -> None:
+        with self.runner.isolated_filesystem():
+            self._write_config()
+
+            for argv in (
+                ["--format", "json", "--config", "config", "analyze", "acme"],
+                ["--format", "json", "--config", "config", "check", "acme"],
+                ["--format", "json", "--config", "config", "report", "acme"],
+                ["--format", "json", "--config", "config", "fetch", "acme"],
+                ["--format", "json", "--config", "config", "brands", "list", "acme"],
+            ):
+                result = self._invoke(argv)
+                self.assertNotEqual(result.exit_code, 0)
 
     def _write_config(self) -> None:
         config_dir = Path("config/clients")
@@ -219,8 +222,8 @@ class CliBrandCommandsTests(unittest.TestCase):
         ]
         storage.append("acme", "campaigns", records)
 
-    def _invoke(self, *args, **kwargs):
-        return self.runner.invoke(*args, **kwargs)
+    def _invoke(self, args):
+        return self.runner.invoke(cli, args, catch_exceptions=False)
 
 
 if __name__ == "__main__":

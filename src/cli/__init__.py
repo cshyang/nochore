@@ -1,1 +1,1 @@
-"""Campaign CLI package — porcelain + plumbing command layers."""
+"""Campaign CLI package for grouped agent workflows and tool commands."""

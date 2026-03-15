@@ -1,11 +1,10 @@
-"""Integration tests for dual report generation."""
+"""Integration tests for analysis/reporting tool parity."""
 
 from datetime import date, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from src.credentials import CredentialManager
 from src.models import (
     BusinessConfig,
     GoogleAdsSource,
@@ -19,13 +18,14 @@ from src.models import (
     SourceRegistry,
     ThemeRule,
 )
-from src.pipeline import process_client
 from src.reporting import ClientSummaryGenerator, InternalReportGenerator
 from src.storage import StorageManager
+from src.tools.analysis import run_analysis
+from src.tools.reporting import generate_reports
 
 
-class PipelineDualReportsTests(unittest.TestCase):
-    def test_process_client_writes_internal_and_summary_reports(self) -> None:
+class ToolDualReportsTests(unittest.TestCase):
+    def test_run_analysis_and_generate_reports_write_internal_and_summary_reports(self) -> None:
         current_start = date(2026, 1, 1)
         current_end = date(2026, 1, 7)
 
@@ -39,29 +39,15 @@ class PipelineDualReportsTests(unittest.TestCase):
             business_config = BusinessConfig(
                 sources=SourceRegistry(
                     google_ads={
-                        "nota_ads": GoogleAdsSource(
-                            alias="nota_ads",
-                            customer_id="556-178-5391",
-                        )
+                        "nota_ads": GoogleAdsSource(alias="nota_ads", customer_id="556-178-5391")
                     },
                     meta={
-                        "nota_meta": MetaSource(
-                            alias="nota_meta",
-                            account_id="act_123",
-                        )
+                        "nota_meta": MetaSource(alias="nota_meta", account_id="act_123")
                     },
                 ),
                 theme_rules=[
-                    ThemeRule(
-                        source="nota_ads",
-                        theme="Performance Max",
-                        campaign_name_regex="(?i)performance max",
-                    ),
-                    ThemeRule(
-                        source="nota_meta",
-                        theme="Leads",
-                        campaign_name_regex="(?i)lead",
-                    ),
+                    ThemeRule(source="nota_ads", theme="Performance Max", campaign_name_regex="(?i)performance max"),
+                    ThemeRule(source="nota_meta", theme="Leads", campaign_name_regex="(?i)lead"),
                 ],
                 lead_rules=LeadRules(
                     google_ads=GoogleLeadRule(include_conversion_actions=["Qualified Lead"]),
@@ -70,25 +56,32 @@ class PipelineDualReportsTests(unittest.TestCase):
                 data_notes=["Meta leads are counted from messaging conversation starts."],
             )
 
-            process_client(
+            results = run_analysis(
                 client_id="nota",
+                business_config=business_config,
+                current_start=current_start,
+                current_end=current_end,
+                storage=storage,
+                is_monthly=False,
+            )
+            self.assertIsNotNone(results)
+
+            internal_path, summary_path = generate_reports(
+                results=results,
                 business_config=business_config,
                 current_start=current_start,
                 current_end=current_end,
                 storage=storage,
                 internal_report_generator=InternalReportGenerator(output_dir=str(report_dir)),
                 client_summary_generator=ClientSummaryGenerator(output_dir=str(report_dir)),
-                cred_manager=CredentialManager(env_file=str(Path(tmp_dir) / ".env.local")),
-                no_fetch=True,
-                is_monthly=False,
             )
 
-            internal_path = report_dir / "nota_2026-01.md"
-            summary_path = report_dir / "nota_2026-01_summary.md"
-            self.assertTrue(internal_path.exists())
-            self.assertTrue(summary_path.exists())
-            self.assertIn("## Executive Summary", internal_path.read_text(encoding="utf-8"))
-            self.assertIn("## Spending Overview", summary_path.read_text(encoding="utf-8"))
+            self.assertIsNotNone(internal_path)
+            self.assertIsNotNone(summary_path)
+            self.assertTrue(Path(internal_path).exists())
+            self.assertTrue(Path(summary_path).exists())
+            self.assertIn("## Executive Summary", Path(internal_path).read_text(encoding="utf-8"))
+            self.assertIn("## Spending Overview", Path(summary_path).read_text(encoding="utf-8"))
 
     def _seed_campaign_data(self, storage: StorageManager, current_start: date) -> None:
         records = []

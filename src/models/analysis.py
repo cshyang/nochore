@@ -210,6 +210,64 @@ class WebQualityResults:
 
 
 @dataclass
+class OrganicQueryInsight:
+    """Single organic search query insight."""
+
+    query: str
+    clicks: int
+    impressions: int
+    ctr: float
+    position: float
+    is_branded: bool = False
+
+
+@dataclass
+class OrganicPageInsight:
+    """Single organic search page insight."""
+
+    page: str
+    clicks: int
+    impressions: int
+    ctr: float
+    avg_position: float
+
+
+@dataclass
+class CTROpportunity:
+    """High-impression, low-CTR organic opportunity."""
+
+    query: str
+    impressions: int
+    clicks: int
+    ctr: float
+    position: float
+    estimated_click_gain: int = 0
+
+
+@dataclass
+class DemandTrend:
+    """Rising or falling organic demand signal."""
+
+    query: str
+    direction: str
+    current_impressions: int
+    previous_impressions: int
+    change_pct: float
+
+
+@dataclass
+class OrganicSearchResults:
+    """Search Console organic search analysis results."""
+
+    top_queries: List[OrganicQueryInsight] = field(default_factory=list)
+    top_pages: List[OrganicPageInsight] = field(default_factory=list)
+    ctr_opportunities: List[CTROpportunity] = field(default_factory=list)
+    demand_trends: List[DemandTrend] = field(default_factory=list)
+    branded_vs_nonbranded: Dict[str, Any] = field(default_factory=dict)
+    summary: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class AnalysisResults:
     """Complete analysis results for a client/period."""
 
@@ -222,6 +280,7 @@ class AnalysisResults:
     context: Dict[str, Any] = field(default_factory=dict)
     kpi_summary: Dict[str, Any] = field(default_factory=dict)
     web_quality: Optional[WebQualityResults] = None
+    organic_search: Optional[OrganicSearchResults] = None
     composition_device: Optional[CompositionBreakdown] = None
     composition_geo: Optional[CompositionBreakdown] = None
     composition_hour: Optional[CompositionBreakdown] = None

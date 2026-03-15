@@ -1,21 +1,20 @@
-"""Top-level Click group for the campaign CLI.
-
-Provides global flags (--format, --quiet, --verbose, --config) and
-registers all subcommands and subgroups.  When invoked with no
-subcommand, drops into an interactive REPL.
-"""
+"""Top-level Click group for the campaign CLI."""
 
 import click
 
-from .context import use, status
-from .brands_cmd import brands
-from .plumbing import fetch, analyze, report
-from .porcelain import check, investigate, brief
-from .config_cmd import config
-from .tools_cmd import tools
+from .commands.analyze import analyze
+from .commands.config import config
+from .commands.context import context
+from .commands.data import data
+from .commands.google_ads import google_ads
+from .commands.memory import memory
+from .commands.meta import meta
+from .commands.optimize import optimize
+from .commands.report import report
+from .commands.tools import tools
 
 
-@click.group(invoke_without_command=True)
+@click.group()
 @click.option(
     "--format",
     "output_format",
@@ -48,21 +47,15 @@ def cli(ctx: click.Context, output_format: str, quiet: bool, verbose: bool, conf
         import logging
         logging.basicConfig(level=logging.DEBUG)
 
-    # No subcommand → launch interactive REPL
-    if ctx.invoked_subcommand is None:
-        from .repl import start_repl
-        start_repl(cli, ctx)
-
 
 # Register commands
-cli.add_command(use)
-cli.add_command(status)
-cli.add_command(brands)
-cli.add_command(check)
-cli.add_command(investigate)
-cli.add_command(brief)
-cli.add_command(fetch)
+cli.add_command(context)
+cli.add_command(data)
 cli.add_command(analyze)
 cli.add_command(report)
+cli.add_command(optimize)
+cli.add_command(memory)
+cli.add_command(google_ads)
+cli.add_command(meta)
 cli.add_command(config)
 cli.add_command(tools)

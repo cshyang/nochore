@@ -185,3 +185,19 @@ class GoogleConversionActionRecord:
     conversions: float
     all_conversions: float
     currency: str
+
+
+@dataclass
+class SearchConsoleRecord:
+    """Search Console search analytics row."""
+
+    client_id: str
+    source_alias: str
+    site_url: str
+    date: date
+    query: str
+    page: str
+    clicks: int
+    impressions: int
+    ctr: float
+    position: float

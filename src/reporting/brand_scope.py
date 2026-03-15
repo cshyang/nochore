@@ -173,6 +173,39 @@ def filter_ga4_to_brand(
     return pl.concat(frames, how="diagonal")
 
 
+def filter_sc_to_brand(
+    df: pl.DataFrame,
+    business_config: BusinessConfig,
+    brand_name: str,
+) -> pl.DataFrame:
+    """Filter Search Console data by source alias and page regex."""
+    if df.is_empty() or "source_alias" not in df.columns:
+        return df.head(0)
+
+    brand = get_brand_definition(business_config, brand_name)
+    if brand is None:
+        return df.head(0)
+
+    frames: List[pl.DataFrame] = []
+    for alias in brand.sources:
+        source = business_config.sources.get(alias)
+        if source is None or source[0] != "search_console":
+            continue
+        scoped = df.filter(pl.col("source_alias") == alias)
+        filters = brand.filters.get(alias)
+        regex = filters.page_regex if filters else ".*"
+        if regex and regex != ".*":
+            scoped = scoped.filter(pl.col("page").str.contains(regex))
+        if not scoped.is_empty():
+            frames.append(scoped)
+
+    if not frames:
+        return df.head(0)
+    if len(frames) == 1:
+        return frames[0]
+    return pl.concat(frames, how="diagonal")
+
+
 def _with_empty_brand_columns(df: pl.DataFrame) -> pl.DataFrame:
     if "brand" in df.columns and "brand_default_theme" in df.columns:
         return df.head(0)

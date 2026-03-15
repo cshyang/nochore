@@ -1,6 +1,6 @@
 # Ads Report Automation CLI
 
-A CLI for fetching advertising and web analytics data, storing it in partitioned Parquet files, and generating both an internal diagnostic report and a client-facing summary.
+An agent-native CLI for syncing advertising and web analytics data, running brand-scoped analysis, generating reports, and building structured optimization memory.
 
 ## Installation
 
@@ -38,7 +38,7 @@ uv run campaign config check-creds
 
 ## Client Config Schema
 
-Client config now uses three top-level sections:
+Client config uses three top-level sections:
 - `context`: business context for humans and agents
 - `sources`: fetchable source registry keyed by alias
 - `business`: brands, themes, and lead-normalization rules
@@ -95,34 +95,59 @@ Defaults live in `config/defaults.yaml`. Client files live in `config/clients/<c
 
 ## Usage
 
-Fetch configured sources:
+Context:
 
 ```bash
-uv run campaign fetch nota
-uv run campaign fetch nota --month 2026-01
+uv run campaign context use nota
+uv run campaign context status
 ```
 
-Analyze cached data:
+Data sync and cache inspection:
 
 ```bash
-uv run campaign analyze nota --month 2026-01
-uv run campaign analyze nota --brand "Nota Cafe" --format json
+uv run campaign data sync nota --month 2026-01
+uv run campaign data sources nota
+uv run campaign data freshness nota
 ```
 
-High-level workflows:
+Analysis workflows:
 
 ```bash
-uv run campaign check nota --month 2026-01
-uv run campaign investigate nota --brand "Nota Cafe" --metric cpl --month 2026-01
-uv run campaign brief nota --month 2026-01
-uv run campaign report nota --brand "Nota Cafe" --month 2026-01
+uv run campaign analyze run nota --month 2026-01
+uv run campaign analyze check nota --brand "Nota Cafe" --month 2026-01 --refresh
+uv run campaign analyze investigate nota --brand "Nota Cafe" --metric cpl --month 2026-01
+uv run campaign analyze brands nota
+```
+
+Reporting:
+
+```bash
+uv run campaign report brief nota --month 2026-01 --refresh
+uv run campaign report generate nota --brand "Nota Cafe" --type all --month 2026-01
+```
+
+Optimization and memory:
+
+```bash
+uv run campaign optimize plan nota --brand "Nota Cafe" --month 2026-01
+uv run campaign optimize run nota --brand "Nota Cafe" --month 2026-01 --dry-run
+uv run campaign optimize review EXP-12345678
+uv run campaign memory list nota
+uv run campaign memory summarize nota --brand "Nota Cafe"
+```
+
+Low-level dry-run mutation tools:
+
+```bash
+uv run campaign google-ads add-negative nota --source nota_ads --campaign "Search" --search-term "junk query" --dry-run
+uv run campaign meta create-variant nota --source nota_meta --adset-id 123 --name "Variant A" --message "Test copy" --dry-run
 ```
 
 Discovery helpers:
 
 ```bash
 uv run campaign config list
-uv run campaign brands list nota
+uv run campaign config check-creds
 uv run campaign tools --format json
 ```
 
@@ -131,8 +156,10 @@ uv run campaign tools --format json
 - Reports: `reports/{client}_{YYYY-MM}.md` and `reports/{client}_{YYYY-MM}_summary.md`
 - Brand-scoped reports: `reports/{client}_{brand}_{YYYY-MM}.md`
 - Stored data: `data/{client_id}/{data_type}/{YYYY-MM}.parquet`
+- Structured memory: `data/{client_id}/memory/*.jsonl`
+- Derived memory summary: `data/{client_id}/memory/summary.md`
 
-Persisted records now include `source_alias` alongside raw IDs. After a config-schema cutover, rerun `campaign fetch` so stored data matches the current source registry.
+Persisted source records include `source_alias` alongside raw IDs. Optimization memory is append-only JSONL; markdown summaries are generated from those records.
 
 ## Project Structure
 
@@ -143,13 +170,16 @@ ads-report-automation/
 │   └── clients/
 ├── src/
 │   ├── cli/
+│   │   ├── commands/
+│   │   └── workflows/
+│   ├── tools/
+│   ├── engine/
+│   ├── integrations/
 │   ├── config/
-│   ├── fetchers/
 │   ├── analyzers/
 │   ├── reporting/
 │   ├── models/
-│   ├── pipeline.py
-│   └── storage.py
+│   └── storage/
 ├── data/
 ├── reports/
 └── tests/
