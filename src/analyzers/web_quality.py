@@ -56,6 +56,7 @@ class WebQualityAnalyzer:
                 pl.col("sessions").sum().alias("total_sessions"),
                 pl.col("engaged_sessions").sum().alias("total_engaged"),
                 pl.col("key_events").sum().alias("total_key_events"),
+                pl.col("bounce_rate").mean().alias("avg_bounce_rate"),
             )
             .with_columns(
                 (pl.col("total_engaged") / pl.col("total_sessions")).alias(
@@ -208,12 +209,11 @@ class WebQualityAnalyzer:
         )
         top_channels = page_channels["channel_group"].head(3).to_list()
 
-        engagement_rate = row["engagement_rate"]
         return LandingPageInsight(
             landing_page=row["landing_page"],
             sessions=row["total_sessions"],
-            engagement_rate=round(engagement_rate, 4),
-            bounce_rate=round(1 - engagement_rate, 4),
+            engagement_rate=round(row["engagement_rate"], 4),
+            bounce_rate=round(row["avg_bounce_rate"], 4),
             key_events=round(float(row["total_key_events"]), 4),
             key_event_rate=round(row["key_event_rate"], 4),
             top_channels=top_channels,

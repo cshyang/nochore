@@ -25,6 +25,9 @@ sources:
   ga4:
     homescape_site:
       property_id: "451924825"
+  search_console:
+    main_site_sc:
+      site_url: "https://www.homescape.com.sg/"
 
 business:
   brands:
@@ -40,8 +43,13 @@ business:
         - "homescape_ads"
         - "homescape_meta"
         - "homescape_site"
+        - "main_site_sc"
       default_theme: "Always On"
       filters:
+        main_site_sc:
+          page_regex: "(?i)homescape"
+          brand_terms:
+            - "homescape"
         homescape_site:
           landing_page_regex: "/"
           key_events:

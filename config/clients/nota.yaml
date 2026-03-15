@@ -24,6 +24,9 @@ sources:
   ga4:
     nota_site:
       property_id: "400716907"
+  search_console:
+    main_site_sc:
+      site_url: "sc-domain:notakl.com"
 
 business:
   brands:
@@ -39,7 +42,13 @@ business:
         - "nota_ads"
         - "nota_meta"
         - "nota_site"
+        - "main_site_sc"
       filters:
+        main_site_sc:
+          page_regex: "(?i)notakl"
+          brand_terms:
+            - "nota"
+            - "notakl"
         nota_site:
           landing_page_regex: "/"
           key_events:
