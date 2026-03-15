@@ -5,13 +5,16 @@ from __future__ import annotations
 import click
 
 from src.cli.workflows.common import load_runtime, resolve_brand
-from src.engine.policy import evaluate_action_plan
+from src.engine.policy import evaluate_action_plan, evaluate_canary_scope_only
 from src.integrations.google_ads import GoogleAdsMutationError, GoogleAdsMutator
 from src.models import ActionPlan
 from src.output import output_data
 from src.tools.analysis import init_google_ads_client
 from src.tools.experiments import record_manual_live_execution
 from src.tools.memory import MemoryStore
+
+# Match type aliases for CLI convenience
+_MATCH_TYPE_ALIASES = {"exact": "EXACT", "phrase": "PHRASE", "broad": "BROAD"}
 
 
 def _require_google_source(business_config, alias: str) -> None:
@@ -105,6 +108,16 @@ def add_negative(
         )
         return
 
+    # Early scope check — blocks non-canary clients before any API calls
+    scope_block = evaluate_canary_scope_only(action)
+    if scope_block:
+        output_data(
+            {"action": action, "decision": scope_block, "live": True},
+            ctx.obj["format"],
+            title="Google Ads Action",
+        )
+        return
+
     mutator = _init_mutator(runtime, source_alias)
     try:
         campaign_details = mutator.resolve_campaign(campaign)
@@ -120,6 +133,7 @@ def add_negative(
             "campaign_name": campaign_details["campaign_name"],
         }
     )
+    # Full policy check — payload validation with resolved campaign details
     decision = evaluate_action_plan(
         action,
         dry_run=False,
@@ -214,6 +228,16 @@ def adjust_budget(
         )
         return
 
+    # Early scope check — blocks non-canary clients before any API calls
+    scope_block = evaluate_canary_scope_only(action)
+    if scope_block:
+        output_data(
+            {"action": action, "decision": scope_block, "live": True},
+            ctx.obj["format"],
+            title="Google Ads Action",
+        )
+        return
+
     mutator = _init_mutator(runtime, source_alias)
     try:
         campaign_details = mutator.resolve_campaign(campaign)
@@ -229,6 +253,7 @@ def adjust_budget(
             "campaign_name": campaign_details["campaign_name"],
         }
     )
+    # Full policy check — budget delta + cooldown with resolved campaign details
     decision = evaluate_action_plan(
         action,
         dry_run=False,
@@ -275,4 +300,142 @@ def adjust_budget(
         },
         ctx.obj["format"],
         title="Google Ads Action",
+    )
+
+
+@google_ads.command("create-negative-list")
+@click.argument("client_id", required=False)
+@click.option("--source", "source_alias", required=True, help="Google Ads source alias.")
+@click.option("--name", "list_name", required=True, help="Name for the shared negative list.")
+@click.option(
+    "--keyword", "keywords", multiple=True, required=True,
+    help="Keyword to add (repeat for multiple). Format: 'text' or 'text:phrase' (default: phrase).",
+)
+@click.option(
+    "--campaigns", "campaign_scope", default="all",
+    help="Comma-separated campaign names/ids, or 'all' for every active campaign.",
+)
+@click.pass_context
+def create_negative_list(
+    ctx: click.Context,
+    client_id: str | None,
+    source_alias: str,
+    list_name: str,
+    keywords: tuple[str, ...],
+    campaign_scope: str,
+) -> None:
+    """Create a shared negative keyword list and attach to campaigns."""
+    runtime = load_runtime(ctx, client_id)
+    _require_google_source(runtime["business_config"], source_alias)
+    mutator = _init_mutator(runtime, source_alias)
+
+    # Parse keywords — format "text" or "text:match_type"
+    parsed_keywords = []
+    for kw in keywords:
+        if ":" in kw:
+            text, mt = kw.rsplit(":", 1)
+            mt = _MATCH_TYPE_ALIASES.get(mt.lower(), mt.upper())
+        else:
+            text, mt = kw, "PHRASE"
+        parsed_keywords.append((text, mt))
+
+    # Build confirmation summary
+    lines = [f"Create shared negative list: \"{list_name}\"", ""]
+    lines.append("Keywords:")
+    for text, mt in parsed_keywords:
+        lines.append(f"  [{mt}] \"{text}\"")
+
+    # Resolve campaigns to attach
+    if campaign_scope.lower() == "all":
+        try:
+            campaigns = mutator.list_active_campaigns()
+        except GoogleAdsMutationError as exc:
+            raise click.ClickException(str(exc)) from exc
+        campaign_ids = [c["campaign_id"] for c in campaigns]
+        lines.append("")
+        lines.append(f"Attach to ALL {len(campaigns)} active campaigns:")
+        for c in campaigns:
+            lines.append(f"  - {c['campaign_name']} ({c['campaign_id']})")
+    else:
+        campaign_refs = [s.strip() for s in campaign_scope.split(",")]
+        campaigns = []
+        campaign_ids = []
+        for ref in campaign_refs:
+            try:
+                details = mutator.resolve_campaign(ref)
+                campaigns.append(details)
+                campaign_ids.append(details["campaign_id"])
+            except GoogleAdsMutationError as exc:
+                raise click.ClickException(str(exc)) from exc
+        lines.append("")
+        lines.append(f"Attach to {len(campaigns)} campaigns:")
+        for c in campaigns:
+            lines.append(f"  - {c['campaign_name']} ({c['campaign_id']})")
+
+    _confirm_live("\n".join(lines))
+
+    # 1. Create shared set
+    try:
+        shared_set_rn = mutator.create_shared_negative_list(list_name)
+    except GoogleAdsMutationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Created shared list: {shared_set_rn}", err=True)
+
+    # 2. Add keywords
+    try:
+        criterion_rns = mutator.add_keywords_to_shared_set(shared_set_rn, parsed_keywords)
+    except GoogleAdsMutationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Added {len(criterion_rns)} keywords", err=True)
+
+    # 3. Attach to campaigns
+    try:
+        attach_rns = mutator.attach_shared_set_to_campaigns(shared_set_rn, campaign_ids)
+    except GoogleAdsMutationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Attached to {len(attach_rns)} campaigns", err=True)
+
+    # 4. Record to memory
+    result_payload = {
+        "list_name": list_name,
+        "shared_set_resource": shared_set_rn,
+        "keywords": [{"text": t, "match_type": m} for t, m in parsed_keywords],
+        "campaigns_attached": [
+            {"campaign_id": c["campaign_id"], "campaign_name": c.get("campaign_name", "")}
+            for c in campaigns
+        ],
+    }
+    selected_brand = resolve_brand(runtime["business_config"], None)
+    action = ActionPlan(
+        action_id=f"manual-shared-negatives-{list_name}",
+        hypothesis_id="manual",
+        action_type="create_shared_negative_list",
+        platform="google_ads",
+        client_id=runtime["client_id"],
+        brand=selected_brand,
+        source_alias=source_alias,
+        target_kind="account",
+        target_id=shared_set_rn,
+        confidence="manual",
+        risk_level="low",
+        idempotency_key=f"{runtime['client_id']}:{source_alias}:shared_neg:{list_name}",
+        payload=result_payload,
+    )
+    memory_store = MemoryStore()
+    recorded = record_manual_live_execution(
+        memory_store,
+        action,
+        summary=f"Created shared negative list '{list_name}' with {len(parsed_keywords)} keywords, attached to {len(attach_rns)} campaigns",
+        execution_result={
+            "pre_mutation_state": {"list_existed": False},
+            "mutation_result": result_payload,
+            "rollback": {"shared_set_resource": shared_set_rn},
+        },
+    )
+    click.echo("Recorded to memory", err=True)
+
+    output_data(
+        {**result_payload, "recorded": recorded},
+        ctx.obj["format"],
+        title="Shared Negative List",
     )

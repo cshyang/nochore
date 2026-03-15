@@ -18,6 +18,24 @@ ALLOWED_ACTIONS = {
 }
 
 
+def evaluate_canary_scope_only(action: ActionPlan) -> ExecutionDecision | None:
+    """Quick canary scope check before any API calls.
+
+    Returns an ExecutionDecision if blocked, None if approved.
+    Only checks action_type and canary scope (client, brand, source, platform).
+    Budget delta and cooldown checks require API data and run later.
+    """
+    allowed = action.action_type in ALLOWED_ACTIONS.get(action.platform, set())
+    if not allowed:
+        return ExecutionDecision(
+            action_id=action.action_id,
+            decision="rejected",
+            reason=f"Unsupported action type '{action.action_type}' for platform '{action.platform}'",
+            checks={"platform": action.platform, "action_type": action.action_type},
+        )
+    return evaluate_live_canary_scope(action)
+
+
 def evaluate_action_plan(
     action: ActionPlan,
     *,

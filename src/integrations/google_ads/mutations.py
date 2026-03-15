@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
@@ -23,6 +23,9 @@ class GoogleAdsMutator:
         self.campaign_service = client.get_service("CampaignService")
         self.campaign_criterion_service = client.get_service("CampaignCriterionService")
         self.campaign_budget_service = client.get_service("CampaignBudgetService")
+        self.shared_set_service = client.get_service("SharedSetService")
+        self.shared_criterion_service = client.get_service("SharedCriterionService")
+        self.campaign_shared_set_service = client.get_service("CampaignSharedSetService")
 
     def resolve_campaign(self, campaign_ref: str) -> Dict[str, Any]:
         """Resolve a campaign by id or exact name."""
@@ -140,3 +143,108 @@ class GoogleAdsMutator:
                 "new_daily_budget": daily_budget,
             },
         }
+
+    # ── Shared negative keyword list operations ─────────────────────────
+
+    def list_active_campaigns(self) -> List[Dict[str, Any]]:
+        """Return all non-removed campaigns for this customer."""
+        query = """
+            SELECT campaign.id, campaign.name
+            FROM campaign
+            WHERE campaign.status != 'REMOVED'
+        """
+        rows = list(self.ga_service.search(customer_id=self.customer_id, query=query))
+        return [
+            {"campaign_id": str(row.campaign.id), "campaign_name": row.campaign.name}
+            for row in rows
+        ]
+
+    def create_shared_negative_list(self, name: str) -> str:
+        """Create a shared negative keyword list and return its resource name."""
+        operation = self.client.get_type("SharedSetOperation")
+        shared_set = operation.create
+        shared_set.name = name
+        shared_set.type_ = self.client.enums.SharedSetTypeEnum.NEGATIVE_KEYWORDS
+
+        try:
+            response = self.shared_set_service.mutate_shared_sets(
+                customer_id=self.customer_id,
+                operations=[operation],
+            )
+        except GoogleAdsException as exc:
+            raise GoogleAdsMutationError(
+                f"Failed to create shared negative list '{name}': {exc}"
+            ) from exc
+
+        return response.results[0].resource_name
+
+    def add_keywords_to_shared_set(
+        self,
+        shared_set_resource_name: str,
+        keywords: List[Tuple[str, str]],
+    ) -> List[str]:
+        """Add keywords to a shared set. Each keyword is (text, match_type).
+
+        match_type should be 'EXACT', 'PHRASE', or 'BROAD'.
+        Returns list of created criterion resource names.
+        """
+        match_type_enum = self.client.enums.KeywordMatchTypeEnum
+        match_type_map = {
+            "EXACT": match_type_enum.EXACT,
+            "PHRASE": match_type_enum.PHRASE,
+            "BROAD": match_type_enum.BROAD,
+        }
+
+        operations = []
+        for text, match_type in keywords:
+            op = self.client.get_type("SharedCriterionOperation")
+            criterion = op.create
+            criterion.shared_set = shared_set_resource_name
+            criterion.keyword.text = text
+            criterion.keyword.match_type = match_type_map.get(
+                match_type.upper(), match_type_enum.EXACT
+            )
+            operations.append(op)
+
+        try:
+            response = self.shared_criterion_service.mutate_shared_criteria(
+                customer_id=self.customer_id,
+                operations=operations,
+            )
+        except GoogleAdsException as exc:
+            raise GoogleAdsMutationError(
+                f"Failed to add keywords to shared set: {exc}"
+            ) from exc
+
+        return [r.resource_name for r in response.results]
+
+    def attach_shared_set_to_campaigns(
+        self,
+        shared_set_resource_name: str,
+        campaign_ids: List[str],
+    ) -> List[str]:
+        """Link a shared set to one or more campaigns.
+
+        Returns list of created CampaignSharedSet resource names.
+        """
+        operations = []
+        for campaign_id in campaign_ids:
+            op = self.client.get_type("CampaignSharedSetOperation")
+            campaign_set = op.create
+            campaign_set.campaign = self.campaign_service.campaign_path(
+                self.customer_id, campaign_id
+            )
+            campaign_set.shared_set = shared_set_resource_name
+            operations.append(op)
+
+        try:
+            response = self.campaign_shared_set_service.mutate_campaign_shared_sets(
+                customer_id=self.customer_id,
+                operations=operations,
+            )
+        except GoogleAdsException as exc:
+            raise GoogleAdsMutationError(
+                f"Failed to attach shared set to campaigns: {exc}"
+            ) from exc
+
+        return [r.resource_name for r in response.results]
