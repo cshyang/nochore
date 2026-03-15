@@ -42,7 +42,6 @@ reports/*
 .worktrees/
 
 # local
-.claude/
 .gemini/
 .kilocode/
 .opencode/
