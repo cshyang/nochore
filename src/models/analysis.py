@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
-
-if TYPE_CHECKING:
-    from .diagnostics import Investigation
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -89,12 +86,15 @@ class QSChange:
     previous_qs: int
     current_qs: int
     change_direction: str
-    component_issue: Optional[str]
+    landing_page_exp: str = ""
+    ad_relevance: str = ""
+    expected_ctr: str = ""
+    component_issue: Optional[str] = None  # kept for backward compat
 
 
 @dataclass
-class LowQSAlert:
-    """Low quality score alert."""
+class QualityScoreSummary:
+    """Per-keyword quality score summary with all components."""
 
     keyword: str
     campaign: str
@@ -104,6 +104,11 @@ class LowQSAlert:
     landing_page: str
     ad_relevance: str
     expected_ctr: str
+    qs_change: Optional[int] = None  # change from previous period (None if no prior data)
+
+
+# Backward-compat alias
+LowQSAlert = QualityScoreSummary
 
 
 @dataclass
@@ -113,7 +118,8 @@ class TrendResult:
     metric: str
     direction: str
     rate_per_day: float
-    significance: str
+    r_squared: float = 0.0
+    significance: str = ""  # kept for backward compat in reporting
 
 
 @dataclass
@@ -126,7 +132,7 @@ class Anomaly:
     expected: float
     actual: float
     z_score: float
-    severity: str
+    severity: str = ""  # kept for backward compat in reporting
 
 
 @dataclass
@@ -294,17 +300,19 @@ class AnalysisResults:
     composition_geo: Optional[CompositionBreakdown] = None
     composition_hour: Optional[CompositionBreakdown] = None
     composition_shifts: List[CompositionShift] = field(default_factory=list)
-    cpl_investigation: Optional[Investigation] = None
-    cvr_investigation: Optional[Investigation] = None
-    volume_investigation: Optional[Investigation] = None
     negative_keywords: List[NegativeKeywordRec] = field(default_factory=list)
     top_search_terms: List[TopSearchTerm] = field(default_factory=list)
     match_type_breakdown: List[MatchTypeBreakdown] = field(default_factory=list)
     lost_impression_share: List[LostISInsight] = field(default_factory=list)
     budget_recommendations: List[BudgetRec] = field(default_factory=list)
     qs_changes: List[QSChange] = field(default_factory=list)
-    low_qs_alerts: List[LowQSAlert] = field(default_factory=list)
+    qs_summaries: List[QualityScoreSummary] = field(default_factory=list)
+    low_qs_alerts: List[LowQSAlert] = field(default_factory=list)  # backward compat alias
     qs_distribution: Dict[str, int] = field(default_factory=dict)
     trends: List[TrendResult] = field(default_factory=list)
     anomalies: List[Anomaly] = field(default_factory=list)
     forecasts: List[Forecast] = field(default_factory=list)
+    search_term_summary: Dict[str, Any] = field(default_factory=dict)
+    impression_share_summary: List[Dict[str, Any]] = field(default_factory=list)
+    knowledge: Optional[str] = None
+    memory_summary: Dict[str, Any] = field(default_factory=dict)

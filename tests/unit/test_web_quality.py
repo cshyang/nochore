@@ -28,7 +28,7 @@ class WebQualityAnalyzerTests(unittest.TestCase):
             ]
         )
 
-        results = WebQualityAnalyzer(df, min_sessions=1).analyze()
+        results = WebQualityAnalyzer(df).analyze()
 
         self.assertIsNotNone(results)
         assert results is not None

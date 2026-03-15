@@ -17,33 +17,28 @@ PAID_CHANNELS = {"Paid Search", "Paid Social", "Paid Shopping", "Paid Video", "D
 
 
 class WebQualityAnalyzer:
-    """Analyzes post-click quality from GA4 landing page data."""
+    """Analyzes post-click quality from GA4 landing page data.
 
-    def __init__(
-        self,
-        ga4_df: pl.DataFrame,
-        min_sessions: int = 10,
-        low_engagement_threshold: float = 0.40,
-    ):
+    Returns ALL landing pages with their metrics. Threshold-based
+    judgement is left to the LLM consumer.
+    """
+
+    def __init__(self, ga4_df: pl.DataFrame):
         self.df = ga4_df
-        self.min_sessions = min_sessions
-        self.low_engagement_threshold = low_engagement_threshold
 
     def analyze(self) -> Optional[WebQualityResults]:
         """Run full web quality analysis. Returns None if no data."""
         if self.df.is_empty():
             return None
 
-        top_pages = self._get_top_landing_pages()
-        low_engagement = self._get_low_engagement_pages()
-        low_key_events = self._get_low_key_event_pages()
+        all_pages = self._get_all_landing_pages()
         paid_gaps = self._get_paid_engagement_gaps()
         summary = self._compute_summary()
 
         return WebQualityResults(
-            top_landing_pages=top_pages,
-            low_engagement_pages=low_engagement,
-            low_key_event_pages=low_key_events,
+            top_landing_pages=all_pages,
+            low_engagement_pages=[],
+            low_key_event_pages=[],
             paid_engagement_gaps=paid_gaps,
             summary=summary,
         )
@@ -66,34 +61,15 @@ class WebQualityAnalyzer:
                     "key_event_rate"
                 ),
             )
-            .filter(pl.col("total_sessions") >= self.min_sessions)
         )
 
-    def _get_top_landing_pages(self, limit: int = 15) -> List[LandingPageInsight]:
-        """Top landing pages by session volume."""
-        agg = self._aggregate_by_page().sort("total_sessions", descending=True).head(limit)
+    def _get_all_landing_pages(self) -> List[LandingPageInsight]:
+        """All landing pages sorted by session volume, with paid vs organic gap attached."""
+        agg = self._aggregate_by_page().sort("total_sessions", descending=True)
         return [self._row_to_insight(row) for row in agg.iter_rows(named=True)]
 
-    def _get_low_engagement_pages(self) -> List[LandingPageInsight]:
-        """Pages with engagement rate below threshold."""
-        agg = self._aggregate_by_page()
-        low = agg.filter(pl.col("engagement_rate") < self.low_engagement_threshold)
-        return [
-            self._row_to_insight(row, signal="low_engagement")
-            for row in low.sort("total_sessions", descending=True).iter_rows(named=True)
-        ]
-
-    def _get_low_key_event_pages(self) -> List[LandingPageInsight]:
-        """Pages with high sessions but zero or very low key events."""
-        agg = self._aggregate_by_page()
-        low = agg.filter(pl.col("key_event_rate") < 0.01)
-        return [
-            self._row_to_insight(row, signal="low_key_events")
-            for row in low.sort("total_sessions", descending=True).iter_rows(named=True)
-        ]
-
     def _get_paid_engagement_gaps(self) -> List[PaidVsEngagementInsight]:
-        """Pages where paid traffic engagement is notably worse than organic."""
+        """All pages with paid traffic, including organic engagement gap when available."""
         if "channel_group" not in self.df.columns:
             return []
 
@@ -108,20 +84,16 @@ class WebQualityAnalyzer:
             .agg(
                 pl.col("sessions").sum().alias("paid_sessions"),
                 pl.col("engaged_sessions").sum().alias("paid_engaged"),
-                pl.col("bounce_rate")
-                .mean()
-                .alias("paid_bounce_rate"),
+                pl.col("bounce_rate").mean().alias("paid_bounce_rate"),
             )
             .with_columns(
                 (pl.col("paid_engaged") / pl.col("paid_sessions")).alias(
                     "paid_engagement_rate"
                 ),
             )
-            .filter(pl.col("paid_sessions") >= self.min_sessions)
         )
 
         if organic.is_empty():
-            # No organic baseline — flag paid pages with low engagement
             return [
                 PaidVsEngagementInsight(
                     landing_page=row["landing_page"],
@@ -131,10 +103,7 @@ class WebQualityAnalyzer:
                     organic_engagement_rate=None,
                     gap=0.0,
                 )
-                for row in paid_agg.filter(
-                    pl.col("paid_engagement_rate") < self.low_engagement_threshold
-                )
-                .sort("paid_sessions", descending=True)
+                for row in paid_agg.sort("paid_sessions", descending=True)
                 .iter_rows(named=True)
             ]
 
@@ -158,20 +127,16 @@ class WebQualityAnalyzer:
             organic_rate = row.get("organic_engagement_rate")
             paid_rate = row["paid_engagement_rate"]
             gap = (organic_rate - paid_rate) if organic_rate else 0.0
-            if gap > 0.15 or (
-                organic_rate is None
-                and paid_rate < self.low_engagement_threshold
-            ):
-                insights.append(
-                    PaidVsEngagementInsight(
-                        landing_page=row["landing_page"],
-                        paid_sessions=row["paid_sessions"],
-                        paid_engagement_rate=paid_rate,
-                        paid_bounce_rate=row["paid_bounce_rate"],
-                        organic_engagement_rate=organic_rate,
-                        gap=gap,
-                    )
+            insights.append(
+                PaidVsEngagementInsight(
+                    landing_page=row["landing_page"],
+                    paid_sessions=row["paid_sessions"],
+                    paid_engagement_rate=paid_rate,
+                    paid_bounce_rate=row["paid_bounce_rate"],
+                    organic_engagement_rate=organic_rate,
+                    gap=gap,
                 )
+            )
         insights.sort(key=lambda x: x.paid_sessions, reverse=True)
         return insights
 

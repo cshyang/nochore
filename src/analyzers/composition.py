@@ -1,6 +1,6 @@
 """Composition analyzer for dimension breakdown analysis."""
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
 
 import polars as pl
 
@@ -16,15 +16,8 @@ logger = logging.getLogger(__name__)
 class CompositionAnalyzer:
     """Analyzes metric composition across dimensions."""
 
-    def __init__(
-        self,
-        df: pl.DataFrame,
-        thresholds: Optional[Dict[str, float]] = None,
-    ):
+    def __init__(self, df: pl.DataFrame):
         self.df = df
-        self.thresholds = thresholds or {
-            "shift_threshold": 0.15,  # 15 percentage points
-        }
 
     def analyze_dimension(
         self,
@@ -102,7 +95,11 @@ class CompositionAnalyzer:
         current: CompositionBreakdown,
         previous: CompositionBreakdown,
     ) -> List[CompositionShift]:
-        """Detect significant composition shifts between periods."""
+        """Detect ALL composition shifts between periods.
+
+        Returns every shift with its raw magnitude -- no threshold filtering.
+        The LLM decides what is significant.
+        """
         if not current or not previous:
             return []
 
@@ -110,13 +107,10 @@ class CompositionAnalyzer:
             logger.warning("Cannot compare different dimension types")
             return []
 
-        shifts = []
-        threshold = self.thresholds.get("shift_threshold", 0.15) * 100  # Convert to percentage points
+        shifts: List[CompositionShift] = []
 
         # Build lookup for previous period
-        prev_lookup = {
-            s.dimension_value: s for s in previous.segments
-        }
+        prev_lookup = {s.dimension_value: s for s in previous.segments}
 
         for curr_segment in current.segments:
             prev_segment = prev_lookup.get(curr_segment.dimension_value)
@@ -129,54 +123,50 @@ class CompositionAnalyzer:
                 # Use the larger of the two shifts
                 shift_magnitude = max(spend_shift, conv_shift)
 
-                if shift_magnitude >= threshold:
-                    # Determine direction based on spend shift
-                    direction = "increased" if curr_segment.spend_pct > prev_segment.spend_pct else "decreased"
+                # Determine direction based on spend shift
+                direction = "increased" if curr_segment.spend_pct > prev_segment.spend_pct else "decreased"
 
-                    # Estimate impact on overall metrics
-                    estimated_impact = self._estimate_shift_impact(
-                        curr_segment, prev_segment, current, previous
-                    )
+                estimated_impact = self._estimate_shift_impact(
+                    curr_segment, prev_segment, current, previous
+                )
 
-                    # Determine quality signal
-                    quality_signal = self._determine_quality_signal(
-                        curr_segment, prev_segment
-                    )
+                quality_signal = self._determine_quality_signal(
+                    curr_segment, prev_segment
+                )
 
-                    shifts.append(CompositionShift(
-                        dimension_type=current.dimension_type,
-                        dimension_value=curr_segment.dimension_value,
-                        previous_spend_pct=prev_segment.spend_pct,
-                        previous_conv_pct=prev_segment.conversions_pct,
-                        previous_cpl=prev_segment.cpl,
-                        current_spend_pct=curr_segment.spend_pct,
-                        current_conv_pct=curr_segment.conversions_pct,
-                        current_cpl=curr_segment.cpl,
-                        shift_magnitude=shift_magnitude,
-                        direction=direction,
-                        estimated_impact=estimated_impact,
-                        quality_signal=quality_signal,
-                    ))
+                shifts.append(CompositionShift(
+                    dimension_type=current.dimension_type,
+                    dimension_value=curr_segment.dimension_value,
+                    previous_spend_pct=prev_segment.spend_pct,
+                    previous_conv_pct=prev_segment.conversions_pct,
+                    previous_cpl=prev_segment.cpl,
+                    current_spend_pct=curr_segment.spend_pct,
+                    current_conv_pct=curr_segment.conversions_pct,
+                    current_cpl=curr_segment.cpl,
+                    shift_magnitude=shift_magnitude,
+                    direction=direction,
+                    estimated_impact=estimated_impact,
+                    quality_signal=quality_signal,
+                ))
 
-        # Check for new segments in current period
+        # Segments that disappeared (present in previous, absent in current)
         curr_lookup = {s.dimension_value: s for s in current.segments}
         for prev_segment in previous.segments:
             if prev_segment.dimension_value not in curr_lookup:
-                if prev_segment.spend_pct >= threshold:
-                    shifts.append(CompositionShift(
-                        dimension_type=previous.dimension_type,
-                        dimension_value=prev_segment.dimension_value,
-                        previous_spend_pct=prev_segment.spend_pct,
-                        previous_conv_pct=prev_segment.conversions_pct,
-                        previous_cpl=prev_segment.cpl,
-                        current_spend_pct=0.0,
-                        current_conv_pct=0.0,
-                        current_cpl=None,
-                        shift_magnitude=prev_segment.spend_pct,
-                        direction="decreased",
-                        estimated_impact=0.0,
-                        quality_signal="neutral",
-                    ))
+                shifts.append(CompositionShift(
+                    dimension_type=previous.dimension_type,
+                    dimension_value=prev_segment.dimension_value,
+                    previous_spend_pct=prev_segment.spend_pct,
+                    previous_conv_pct=prev_segment.conversions_pct,
+                    previous_cpl=prev_segment.cpl,
+                    current_spend_pct=0.0,
+                    current_conv_pct=0.0,
+                    current_cpl=None,
+                    shift_magnitude=prev_segment.spend_pct,
+                    direction="decreased",
+                    estimated_impact=0.0,
+                    quality_signal="neutral",
+                ))
 
         # Sort by magnitude descending
         shifts.sort(key=lambda s: s.shift_magnitude, reverse=True)
@@ -191,17 +181,11 @@ class CompositionAnalyzer:
         previous: CompositionBreakdown,
     ) -> float:
         """Estimate the CPL impact of a composition shift."""
-        # Calculate overall CPL for both periods
         curr_overall_cpl = (
             current.total_spend / current.total_conversions
             if current.total_conversions > 0 else 0
         )
-        prev_overall_cpl = (
-            previous.total_spend / previous.total_conversions
-            if previous.total_conversions > 0 else 0
-        )
 
-        # Calculate mix effect: what would CPL be if this segment stayed at previous mix?
         if prev_segment.cpl is None or curr_segment.cpl is None:
             return 0.0
 
@@ -212,8 +196,7 @@ class CompositionAnalyzer:
 
         # If segment CPL is higher than average and weight increased, that hurts overall CPL
         if segment_cpl > 0 and avg_cpl > 0:
-            impact = weight_change * (segment_cpl - avg_cpl)
-            return impact
+            return weight_change * (segment_cpl - avg_cpl)
 
         return 0.0
 
@@ -223,13 +206,11 @@ class CompositionAnalyzer:
         prev_segment: CompositionSegment,
     ) -> str:
         """Determine if the shift is positive, negative, or neutral for quality."""
-        # Compare efficiency ratios
         curr_efficiency = curr_segment.efficiency_ratio
         prev_efficiency = prev_segment.efficiency_ratio
 
         # If efficiency improved significantly
         if curr_efficiency > prev_efficiency * 1.1:
-            # But only if spend increased
             if curr_segment.spend_pct > prev_segment.spend_pct:
                 return "positive"
 
@@ -248,11 +229,10 @@ class CompositionAnalyzer:
         if not breakdown or not breakdown.segments:
             return {}
 
-        efficiencies = {}
-        for segment in breakdown.segments:
-            efficiencies[segment.dimension_value] = segment.efficiency_ratio
-
-        return efficiencies
+        return {
+            segment.dimension_value: segment.efficiency_ratio
+            for segment in breakdown.segments
+        }
 
     def estimate_quality_impact(
         self,
@@ -280,12 +260,10 @@ class CompositionAnalyzer:
             return {}
 
         dimensions = self.df["dimension_type"].unique().to_list()
-        results = {}
-
-        for dimension in dimensions:
-            results[dimension] = self.analyze_dimension(dimension, currency)
-
-        return results
+        return {
+            dimension: self.analyze_dimension(dimension, currency)
+            for dimension in dimensions
+        }
 
     @staticmethod
     def handle_missing_data(

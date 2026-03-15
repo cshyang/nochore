@@ -1,4 +1,4 @@
-"""Internal markdown report generator optimized for diagnostics and LLM parsing."""
+"""Internal markdown report generator optimized for LLM parsing."""
 
 import logging
 import re
@@ -12,13 +12,11 @@ from ..models import (
     CompositionBreakdown,
     CompositionShift,
     Forecast,
-    Investigation,
     LostISInsight,
     LowQSAlert,
     MatchTypeBreakdown,
     NegativeKeywordRec,
     QSChange,
-    Recommendation,
     TopSearchTerm,
     TrendResult,
 )
@@ -57,10 +55,6 @@ class InternalReportGenerator:
         trends: List[TrendResult],
         anomalies: List[Anomaly],
         forecast: List[Forecast],
-        # New diagnostic parameters
-        cpl_investigation: Optional[Investigation] = None,
-        cvr_investigation: Optional[Investigation] = None,
-        volume_investigation: Optional[Investigation] = None,
         composition_device: Optional[CompositionBreakdown] = None,
         composition_geo: Optional[CompositionBreakdown] = None,
         composition_hour: Optional[CompositionBreakdown] = None,
@@ -93,14 +87,7 @@ class InternalReportGenerator:
             # Executive Summary
             f.write(self._format_executive_summary(kpi_summary))
 
-            # Root Cause Investigation (new)
-            if any([cpl_investigation, cvr_investigation, volume_investigation]):
-                f.write(self._format_investigation_section(
-                    cpl_investigation, cvr_investigation, volume_investigation,
-                    kpi_summary.get("currency", "USD")
-                ))
-
-            # Composition Analysis (new)
+            # Composition Analysis
             if any([composition_device, composition_geo, composition_hour, composition_shifts]):
                 f.write(self._format_composition_section(
                     composition_device, composition_geo, composition_hour,
@@ -123,24 +110,13 @@ class InternalReportGenerator:
             # Trends & Forecasting
             f.write(self._format_trends_section(trends, anomalies, forecast))
 
-            # Recommendations (new)
-            all_recs = []
-            if cpl_investigation:
-                all_recs.extend(cpl_investigation.recommendations)
-            if cvr_investigation:
-                all_recs.extend(cvr_investigation.recommendations)
-            if volume_investigation:
-                all_recs.extend(volume_investigation.recommendations)
-            if all_recs:
-                f.write(self._format_recommendations_section(all_recs, kpi_summary.get("currency", "USD")))
-
             # Notes & Caveats
             f.write(self._format_notes(neg_keywords, lost_is, low_qs_alerts))
 
             # Footer
             f.write("---\n\n")
             f.write("**Data Sources:** Google Ads API, Meta Ads API\n")
-            f.write("**Report Version:** 3.0 (Diagnostic Tree)\n")
+            f.write("**Report Version:** 4.0 (LLM Reasoning)\n")
 
         logger.info("Generated markdown report: %s", file_path)
         return file_path
@@ -335,35 +311,37 @@ class InternalReportGenerator:
             
             if improved:
                 out += "### QS Changes This Month\n\n**Improved**\n\n"
-                out += "| Keyword | Campaign | Previous | Current | Component |\n"
-                out += "|---------|----------|----------|---------|-----------|\n"
+                out += "| Keyword | Campaign | Previous | Current | Landing Page | Ad Rel | Expected CTR |\n"
+                out += "|---------|----------|----------|---------|--------------|--------|--------------|\n"
                 for change in improved[:5]:
                     keyword = escape_table_cell(change.keyword)
                     campaign = escape_table_cell(change.campaign)
-                    comp = change.component_issue or "Overall"
-                    comp = escape_table_cell(comp)
-                    out += f"| {keyword} | {campaign} | {change.previous_qs} | {change.current_qs} | {comp} |\n"
+                    lp = escape_table_cell(change.landing_page_exp)
+                    ar = escape_table_cell(change.ad_relevance)
+                    ec = escape_table_cell(change.expected_ctr)
+                    out += f"| {keyword} | {campaign} | {change.previous_qs} | {change.current_qs} | {lp} | {ar} | {ec} |\n"
                 out += "\n"
-            
+
             if declined:
                 out += "**Declined**\n\n"
-                out += "| Keyword | Campaign | Previous | Current | Issue |\n"
-                out += "|---------|----------|----------|---------|-------|\n"
+                out += "| Keyword | Campaign | Previous | Current | Landing Page | Ad Rel | Expected CTR |\n"
+                out += "|---------|----------|----------|---------|--------------|--------|--------------|\n"
                 for change in declined[:5]:
                     keyword = escape_table_cell(change.keyword)
                     campaign = escape_table_cell(change.campaign)
-                    issue = change.component_issue or "Review all components"
-                    issue = escape_table_cell(issue)
-                    out += f"| {keyword} | {campaign} | {change.previous_qs} | {change.current_qs} | {issue} |\n"
+                    lp = escape_table_cell(change.landing_page_exp)
+                    ar = escape_table_cell(change.ad_relevance)
+                    ec = escape_table_cell(change.expected_ctr)
+                    out += f"| {keyword} | {campaign} | {change.previous_qs} | {change.current_qs} | {lp} | {ar} | {ec} |\n"
                 out += "\n"
         
-        # Low QS Alerts
+        # Quality Score Summary
         if low_qs:
-            out += "### Low QS Alerts\n\n"
-            out += "Keywords with QS ≤ 5 and significant spend (diagnostic list):\n\n"
+            out += "### Quality Score Summary\n\n"
+            out += "All keywords with quality score data:\n\n"
             out += "| Currency | Keyword | Campaign | QS | Spend | Landing Page | Ad Rel | Expected CTR |\n"
             out += "|----------|---------|----------|----|-------|--------------|--------|--------------|\n"
-            for alert in low_qs[:10]:
+            for alert in low_qs:
                 currency = escape_table_cell(alert.currency)
                 keyword = escape_table_cell(alert.keyword)
                 campaign = escape_table_cell(alert.campaign)
@@ -400,22 +378,22 @@ class InternalReportGenerator:
 
         if trends:
             out += "### Performance Trends\n\n"
-            out += "| Metric | Trend | Rate | Significance |\n"
-            out += "|--------|-------|------|--------------|\n"
+            out += "| Metric | Trend | Rate | R-squared |\n"
+            out += "|--------|-------|------|-----------|\n"
             for trend in trends:
                 metric = escape_table_cell(metric_label(trend.metric))
                 arrow = "↑" if trend.direction == "up" else "↓" if trend.direction == "down" else "→"
-                out += f"| {metric} | {arrow} {trend.direction} | {trend.rate_per_day:+.2f}/day | {trend.significance} |\n"
+                out += f"| {metric} | {arrow} {trend.direction} | {trend.rate_per_day:+.2f}/day | {trend.r_squared:.3f} |\n"
             out += "\n"
         
         if anomalies:
             out += "### Anomalies Detected\n\n"
-            out += "| Date | Campaign | Metric | Expected | Actual | Severity |\n"
+            out += "| Date | Campaign | Metric | Expected | Actual | Z-score |\n"
             out += "|------|----------|--------|----------|--------|----------|\n"
             for anomaly in anomalies[:10]:
                 campaign = escape_table_cell(anomaly.campaign)
                 metric = escape_table_cell(metric_label(anomaly.metric))
-                out += f"| {anomaly.date} | {campaign} | {metric} | {anomaly.expected:.2f} | {anomaly.actual:.2f} | {anomaly.severity.upper()} |\n"
+                out += f"| {anomaly.date} | {campaign} | {metric} | {anomaly.expected:.2f} | {anomaly.actual:.2f} | {anomaly.z_score:+.2f} |\n"
             out += "\n"
         
         if forecasts:
@@ -450,62 +428,6 @@ class InternalReportGenerator:
         out += "- Quality Score components are diagnostic signals; improvements are not guaranteed and may have limited direct levers.\n"
         out += "- Secondary conversions are available for Google Ads only (All conversions − Conversions).\n\n"
 
-        return out
-
-    def _format_investigation_section(
-        self,
-        cpl_investigation: Optional[Investigation],
-        cvr_investigation: Optional[Investigation],
-        volume_investigation: Optional[Investigation],
-        currency: str,
-    ) -> str:
-        """Format root cause investigation section."""
-        out = "## Root Cause Investigation\n\n"
-
-        investigations = []
-        if cpl_investigation and cpl_investigation.triggered:
-            investigations.append(("CPL", cpl_investigation))
-        if cvr_investigation and cvr_investigation.triggered:
-            investigations.append(("CVR", cvr_investigation))
-        if volume_investigation and volume_investigation.triggered:
-            investigations.append(("Volume", volume_investigation))
-
-        if not investigations:
-            out += "_No significant metric changes detected that triggered investigation._\n\n"
-            out += "---\n\n"
-            return out
-
-        for metric_name, investigation in investigations:
-            out += f"### {investigation.metric_name} Investigation\n\n"
-
-            # Change summary
-            direction = "increased" if investigation.change_absolute > 0 else "decreased"
-            out += f"**Status:** TRIGGERED\n"
-            out += f"**Change:** {investigation.previous_value:.2f} → {investigation.current_value:.2f} "
-            out += f"({investigation.change_pct:+.1f}%, {direction})\n"
-            out += f"**Threshold:** ±{investigation.threshold:.0f}%\n\n"
-
-            # Diagnoses
-            if investigation.diagnoses:
-                out += "#### Confirmed Diagnoses\n\n"
-                out += "| Check | Confidence | Impact | Evidence |\n"
-                out += "|-------|------------|--------|----------|\n"
-                for diagnosis in investigation.diagnoses:
-                    evidence_summary = ", ".join(
-                        e.metric for e in diagnosis.evidence[:3] if e.passed
-                    )
-                    out += (
-                        f"| {escape_table_cell(diagnosis.check_name)} | "
-                        f"{diagnosis.confidence.upper()} ({diagnosis.confidence_score:.0%}) | "
-                        f"{currency} {diagnosis.estimated_impact:.2f} | "
-                        f"{escape_table_cell(evidence_summary)} |\n"
-                    )
-                out += "\n"
-                out += f"**Attribution Accuracy:** {investigation.attribution_accuracy:.0%} of change explained\n\n"
-            else:
-                out += "_Investigation inconclusive - no root causes confirmed._\n\n"
-
-        out += "---\n\n"
         return out
 
     def _format_composition_section(
@@ -567,46 +489,6 @@ class InternalReportGenerator:
 
         if not any([device, geo, hour, shifts]):
             out += "_No dimension breakdown data available._\n\n"
-
-        out += "---\n\n"
-        return out
-
-    def _format_recommendations_section(
-        self,
-        recommendations: List[Recommendation],
-        currency: str,
-    ) -> str:
-        """Format recommendations section."""
-        out = "## Action Queue\n\n"
-
-        if not recommendations:
-            out += "_No actionable recommendations at this time._\n\n"
-            out += "---\n\n"
-            return out
-
-        # Sort by priority
-        sorted_recs = sorted(recommendations, key=lambda r: (r.priority, -r.expected_impact))
-
-        out += "| Priority | Action | Expected Impact | Effort | Confidence |\n"
-        out += "|----------|--------|-----------------|--------|------------|\n"
-
-        for rec in sorted_recs[:15]:
-            impact_str = f"{currency} {rec.expected_impact:.2f} {rec.impact_unit}"
-            out += (
-                f"| P{rec.priority} | "
-                f"{escape_table_cell(rec.title)} | "
-                f"{impact_str} | "
-                f"{rec.effort.upper()} | "
-                f"{rec.confidence.upper()} |\n"
-            )
-
-        out += "\n### Details\n\n"
-        for rec in sorted_recs[:10]:
-            out += f"**{rec.action_id}: {rec.title}**\n"
-            out += f"- {rec.description}\n"
-            if rec.affected_items:
-                out += f"- Affected: {', '.join(rec.affected_items[:5])}\n"
-            out += "\n"
 
         out += "---\n\n"
         return out

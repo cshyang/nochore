@@ -1,4 +1,4 @@
-"""Search terms analyzer for negative keyword identification."""
+"""Search terms analyzer for search term insights."""
 import logging
 from typing import Any, Dict, List
 import polars as pl
@@ -7,114 +7,135 @@ from ..models import NegativeKeywordRec, TopSearchTerm, MatchTypeBreakdown
 
 logger = logging.getLogger(__name__)
 
+_SEARCH_TERM_GROUP_KEYS = [
+    "source_alias",
+    "source_account_id",
+    "currency",
+    "search_term",
+    "campaign_name",
+    "ad_group_name",
+    "campaign_id",
+    "ad_group_id",
+]
+
+# Cap on rows returned by summarize_search_terms to keep prompt size manageable.
+_SUMMARY_VOLUME_LIMIT = 200
+
+
 class SearchTermsAnalyzer:
     """Analyzes search terms for actionable insights."""
-    
-    def __init__(self, search_terms_df: pl.DataFrame, 
-                 neg_kw_spend_threshold: float = 50.0,
-                 neg_kw_ctr_threshold: float = 0.5):
+
+    def __init__(self, search_terms_df: pl.DataFrame):
         self.df = search_terms_df
         if not self.df.is_empty():
             if "currency" not in self.df.columns:
                 self.df = self.df.with_columns(pl.lit("UNKNOWN").alias("currency"))
             if "source_account_id" not in self.df.columns:
                 self.df = self.df.with_columns(pl.lit("unknown").alias("source_account_id"))
-        self.neg_kw_spend_threshold = neg_kw_spend_threshold
-        self.neg_kw_ctr_threshold = neg_kw_ctr_threshold
-    
-    def get_negative_keyword_candidates(self) -> List[NegativeKeywordRec]:
-        """Identify search terms suitable for negative keywords."""
+
+    def summarize_search_terms(self) -> Dict[str, Any]:
+        """Return all search terms with computed metrics -- no filtering.
+
+        The LLM downstream decides which terms are wasteful, promising, etc.
+        Results are sorted by spend descending and capped at _SUMMARY_VOLUME_LIMIT.
+        """
         if self.df.is_empty():
-            return []
-        
+            return {
+                "terms": [],
+                "total_terms": 0,
+                "converting_terms": 0,
+                "zero_conversion_terms": 0,
+                "total_spend": 0.0,
+                "zero_conversion_spend": 0.0,
+            }
+
         if "source_alias" not in self.df.columns:
             self.df = self.df.with_columns(pl.lit("unknown").alias("source_alias"))
 
-        group_keys = [
-            "source_alias",
-            "source_account_id",
-            "currency",
-            "search_term",
-            "campaign_id",
-            "campaign_name",
-            "ad_group_id",
-            "ad_group_name",
-        ]
-
-        agg_df = self.df.group_by(group_keys).agg(
+        agg_df = self.df.group_by(_SEARCH_TERM_GROUP_KEYS).agg(
             pl.col("cost").sum().alias("total_cost"),
             pl.col("clicks").sum().alias("total_clicks"),
-            pl.col("conversions").sum().alias("total_leads"),
+            pl.col("conversions").sum().alias("total_conversions"),
             pl.col("impressions").sum().alias("total_impressions"),
         )
-        
-        # Calculate CTR
+
         agg_df = agg_df.with_columns(
-            (pl.col("total_clicks") / pl.col("total_impressions") * 100).alias("ctr")
+            (pl.col("total_clicks") / pl.col("total_impressions") * 100).alias("ctr"),
+            pl.when(pl.col("total_conversions") > 0)
+            .then(pl.col("total_cost") / pl.col("total_conversions"))
+            .otherwise(pl.lit(None))
+            .alias("cpl"),
         )
-        
+
+        agg_df = agg_df.sort("total_cost", descending=True).head(_SUMMARY_VOLUME_LIMIT)
+
+        total_terms = agg_df.height
+        converting_mask = agg_df["total_conversions"] > 0
+        converting_terms = converting_mask.sum()
+        zero_conversion_terms = total_terms - converting_terms
+        total_spend = float(agg_df["total_cost"].sum())
+        zero_conversion_spend = float(
+            agg_df.filter(~converting_mask)["total_cost"].sum()
+        )
+
+        terms = []
+        for row in agg_df.iter_rows(named=True):
+            terms.append({
+                "search_term": row["search_term"],
+                "campaign_name": row["campaign_name"],
+                "ad_group_name": row["ad_group_name"],
+                "campaign_id": row["campaign_id"],
+                "ad_group_id": row["ad_group_id"],
+                "source_alias": row["source_alias"],
+                "source_account_id": row["source_account_id"],
+                "currency": row["currency"],
+                "cost": row["total_cost"],
+                "clicks": row["total_clicks"],
+                "impressions": row["total_impressions"],
+                "conversions": row["total_conversions"],
+                "ctr": row["ctr"],
+                "cpl": row["cpl"],
+            })
+
+        return {
+            "terms": terms,
+            "total_terms": total_terms,
+            "converting_terms": int(converting_terms),
+            "zero_conversion_terms": int(zero_conversion_terms),
+            "total_spend": total_spend,
+            "zero_conversion_spend": zero_conversion_spend,
+        }
+
+    def get_negative_keyword_candidates(self) -> List[NegativeKeywordRec]:
+        """Backward-compatible wrapper -- returns all zero-conversion terms.
+
+        Deprecated: prefer summarize_search_terms() and let the LLM judge.
+        """
+        summary = self.summarize_search_terms()
         candidates = []
-        
-        # High priority: High spend, zero conversions
-        high_priority = agg_df.filter(
-            (pl.col("total_cost") > self.neg_kw_spend_threshold) & 
-            (pl.col("total_leads") == 0)
-        )
-        
-        for row in high_priority.iter_rows(named=True):
+        for term in summary["terms"]:
+            if term["conversions"] > 0:
+                continue
             candidates.append(NegativeKeywordRec(
-                search_term=row["search_term"],
-                campaign=row["campaign_name"],
-                ad_group=row["ad_group_name"],
-                currency=row["currency"],
-                spend=row["total_cost"],
-                clicks=row["total_clicks"],
-                leads=row["total_leads"],
-                reason="high_spend_no_conv",
-                note="Review as potential negative keyword (exact match)",
-                source_alias=row["source_alias"],
-                source_account_id=row["source_account_id"],
-                campaign_id=row["campaign_id"],
-                ad_group_id=row["ad_group_id"],
+                search_term=term["search_term"],
+                campaign=term["campaign_name"],
+                ad_group=term["ad_group_name"],
+                currency=term["currency"],
+                spend=term["cost"],
+                clicks=term["clicks"],
+                leads=term["conversions"],
+                reason="zero_conversions",
+                note="Zero-conversion term (LLM should evaluate)",
+                source_alias=term["source_alias"],
+                source_account_id=term["source_account_id"],
+                campaign_id=term["campaign_id"],
+                ad_group_id=term["ad_group_id"],
                 match_type="EXACT",
             ))
-        
-        # Medium priority: Low CTR
-        med_priority = agg_df.filter(
-            (pl.col("ctr") < self.neg_kw_ctr_threshold) & 
-            (pl.col("total_impressions") > 100) &
-            (pl.col("total_leads") == 0)
-        )
-        
-        for row in med_priority.iter_rows(named=True):
-            if not any(
-                c.search_term == row["search_term"]
-                and c.currency == row["currency"]
-                and c.campaign_id == row["campaign_id"]
-                and c.source_alias == row["source_alias"]
-                for c in candidates
-            ):
-                candidates.append(NegativeKeywordRec(
-                    search_term=row["search_term"],
-                    campaign=row["campaign_name"],
-                    ad_group=row["ad_group_name"],
-                    currency=row["currency"],
-                    spend=row["total_cost"],
-                    clicks=row["total_clicks"],
-                    leads=row["total_leads"],
-                    reason="low_ctr",
-                    note="Review for relevance / intent",
-                    source_alias=row["source_alias"],
-                    source_account_id=row["source_account_id"],
-                    campaign_id=row["campaign_id"],
-                    ad_group_id=row["ad_group_id"],
-                    match_type="EXACT",
-                ))
-        
         logger.info(f"Identified {len(candidates)} negative keyword candidates")
         return candidates
-    
-    def get_top_performers(self, limit: int = 10) -> List[TopSearchTerm]:
+
+    def get_top_performers(self, limit: int) -> List[TopSearchTerm]:
         """Identify high-performing search terms for lead generation."""
         if self.df.is_empty():
             return []

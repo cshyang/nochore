@@ -17,17 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 class OrganicSearchAnalyzer:
-    """Analyzes organic search demand and opportunities from Search Console data."""
+    """Analyzes organic search demand and opportunities from Search Console data.
+
+    Returns all data with metrics intact. Threshold-based judgement
+    is left to the LLM consumer.
+    """
 
     def __init__(
         self,
         sc_df: pl.DataFrame,
         brand_terms: Optional[List[str]] = None,
-        min_impressions: int = 50,
     ):
         self.df = sc_df
         self.brand_terms = [t.casefold() for t in (brand_terms or [])]
-        self.min_impressions = min_impressions
 
     def analyze(self) -> Optional[OrganicSearchResults]:
         """Run full organic search analysis."""
@@ -54,8 +56,8 @@ class OrganicSearchAnalyzer:
         q = query.casefold()
         return any(term in q for term in self.brand_terms)
 
-    def _get_top_queries(self, limit: int = 20) -> List[OrganicQueryInsight]:
-        """Top queries by click volume."""
+    def _get_top_queries(self, limit: int = 100) -> List[OrganicQueryInsight]:
+        """All queries sorted by click volume, capped for payload size."""
         agg = (
             self.df.group_by("query")
             .agg(
@@ -66,7 +68,6 @@ class OrganicSearchAnalyzer:
             .with_columns(
                 (pl.col("total_clicks") / pl.col("total_impressions")).alias("ctr"),
             )
-            .filter(pl.col("total_impressions") >= self.min_impressions)
             .sort("total_clicks", descending=True)
             .head(limit)
         )
@@ -110,8 +111,8 @@ class OrganicSearchAnalyzer:
             for row in agg.iter_rows(named=True)
         ]
 
-    def _get_ctr_opportunities(self, limit: int = 10) -> List[CTROpportunity]:
-        """Queries with high impressions but low CTR — title/description improvement candidates."""
+    def _get_ctr_opportunities(self, limit: int = 50) -> List[CTROpportunity]:
+        """All queries with their benchmark CTR gap, sorted by estimated click gain."""
         agg = (
             self.df.group_by("query")
             .agg(
@@ -122,13 +123,6 @@ class OrganicSearchAnalyzer:
             .with_columns(
                 (pl.col("total_clicks") / pl.col("total_impressions")).alias("ctr"),
             )
-            .filter(
-                (pl.col("total_impressions") >= self.min_impressions * 2)
-                & (pl.col("ctr") < 0.03)
-                & (pl.col("avg_position") <= 20)
-            )
-            .sort("total_impressions", descending=True)
-            .head(limit)
         )
 
         results = []
@@ -147,10 +141,15 @@ class OrganicSearchAnalyzer:
                     estimated_click_gain=estimated_gain,
                 )
             )
-        return results
+        results.sort(key=lambda x: x.estimated_click_gain, reverse=True)
+        return results[:limit]
 
     def _get_demand_trends(self) -> List[DemandTrend]:
-        """Compare first half vs second half of the date range for trend detection."""
+        """Compare first half vs second half of the date range for trend detection.
+
+        Returns all trends with raw change percentages and direction labels.
+        Rising and falling are capped at 30 each; stable queries are included.
+        """
         if self.df.is_empty():
             return []
 
@@ -179,20 +178,17 @@ class OrganicSearchAnalyzer:
             )
             .otherwise(100.0)
             .alias("change_pct")
-        ).filter(
-            (pl.col("curr_impressions") >= self.min_impressions)
-            | (pl.col("prev_impressions") >= self.min_impressions)
         )
 
         trends = []
         for row in joined.sort("change_pct", descending=True).iter_rows(named=True):
             change = row["change_pct"]
-            if change > 30:
+            if change > 0:
                 direction = "rising"
-            elif change < -30:
+            elif change < 0:
                 direction = "falling"
             else:
-                continue
+                direction = "stable"
             trends.append(
                 DemandTrend(
                     query=row["query"],
@@ -203,12 +199,13 @@ class OrganicSearchAnalyzer:
                 )
             )
 
-        rising = [t for t in trends if t.direction == "rising"][:10]
+        rising = [t for t in trends if t.direction == "rising"][:30]
         falling = sorted(
             [t for t in trends if t.direction == "falling"],
             key=lambda t: t.change_pct,
-        )[:10]
-        return rising + falling
+        )[:30]
+        stable = [t for t in trends if t.direction == "stable"]
+        return rising + falling + stable
 
     def _compute_branded_split(self) -> Dict[str, Any]:
         """Split clicks/impressions into branded vs non-branded."""

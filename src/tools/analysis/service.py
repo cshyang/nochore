@@ -340,20 +340,22 @@ def run_analysis(
 
     st_analyzer = SearchTermsAnalyzer(search_terms_df)
     neg_keywords = st_analyzer.get_negative_keyword_candidates()
-    top_search_terms = st_analyzer.get_top_performers()
+    top_search_terms = st_analyzer.get_top_performers(limit=10)
     match_type_breakdown = st_analyzer.get_match_type_distribution()
-    console.print(f"  Identified {len(neg_keywords)} negative keyword candidates")
+    search_term_summary = st_analyzer.summarize_search_terms()
+    console.print(f"  Identified {search_term_summary.get('zero_conversion_terms', 0)} zero-conversion search terms")
 
     is_analyzer = ImpressionShareAnalyzer(impression_share_df)
     lost_is = is_analyzer.get_lost_opportunities()
     budget_recs = is_analyzer.get_budget_recommendations()
-    console.print(f"  Found {len(lost_is)} impression share opportunities")
+    is_summary = is_analyzer.summarize_impression_share()
+    console.print(f"  Found {len(is_summary)} campaigns with impression share data")
 
     qs_analyzer = QualityScoreAnalyzer(quality_scores_df)
     qs_changes = qs_analyzer.get_qs_changes()
-    low_qs_alerts = qs_analyzer.get_low_qs_alerts()
+    qs_summaries = qs_analyzer.summarize_quality_scores()
     qs_distribution = qs_analyzer.get_distribution()
-    console.print(f"  Generated {len(low_qs_alerts)} low QS alerts")
+    console.print(f"  Summarized {len(qs_summaries)} keyword quality scores")
 
     trend_analyzer = TrendAnalyzer(campaigns_current)
     leads_trend = trend_analyzer.calculate_trends("conversions_primary")
@@ -401,6 +403,19 @@ def run_analysis(
         if first_currency:
             currency = first_currency
 
+    # Load knowledge.md and memory for the data package
+    knowledge_path = Path("data") / client_id / "knowledge.md"
+    knowledge_text = knowledge_path.read_text(encoding="utf-8") if knowledge_path.exists() else None
+
+    from src.tools.memory import MemoryStore
+
+    memory_store = MemoryStore()
+    memory_rows = memory_store.list_records(client_id, brand=selected_brand)
+    memory_summary: Dict[str, Any] = {
+        "total_records": len(memory_rows),
+        "recent": memory_rows[-10:] if memory_rows else [],
+    }
+
     return AnalysisResults(
         client_id=client_id,
         period_current=f"{current_start.isoformat()} to {current_end.isoformat()}",
@@ -418,9 +433,14 @@ def run_analysis(
         lost_impression_share=lost_is,
         budget_recommendations=budget_recs,
         qs_changes=qs_changes,
-        low_qs_alerts=low_qs_alerts,
+        qs_summaries=qs_summaries,
+        low_qs_alerts=qs_summaries,
         qs_distribution=qs_distribution,
         trends=[leads_trend, clicks_trend],
         anomalies=anomalies,
         forecasts=[leads_forecast],
+        search_term_summary=search_term_summary,
+        impression_share_summary=is_summary,
+        knowledge=knowledge_text,
+        memory_summary=memory_summary,
     )
