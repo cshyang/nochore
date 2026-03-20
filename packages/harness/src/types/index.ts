@@ -52,8 +52,6 @@ export {
   type TriggerConfig,
   PolicyOverrideSchema,
   type PolicyOverride,
-  OperationalConstraintSchema as AgentConstraintSchema,
-  type OperationalConstraint as AgentConstraint,
 } from "./agent-config";
 
 export {
