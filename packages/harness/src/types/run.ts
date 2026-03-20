@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActionProposalSchema } from "./action";
 import type { AgentConfig } from "./agent-config";
 import type { MemoryStore } from "./memory";
 
@@ -44,16 +45,6 @@ export const StepOutputSchema = z.object({
 export type StepOutput = z.infer<typeof StepOutputSchema>;
 
 // ---------------------------------------------------------------------------
-// ActionProposal placeholder
-//
-// Task 2 (action.ts) is being built in parallel. Once it lands we will
-// import ActionProposalSchema from there. Until then, use a permissive
-// passthrough so RunResult can validate without blocking.
-// ---------------------------------------------------------------------------
-
-const ActionProposalPlaceholder = z.record(z.string(), z.unknown());
-
-// ---------------------------------------------------------------------------
 // RunResult — outcome of a completed agent run
 // ---------------------------------------------------------------------------
 
@@ -62,7 +53,7 @@ export const RunResultSchema = z.object({
   agentId: z.string(),
   duration: z.number(),
   steps: z.array(StepOutputSchema),
-  proposals: z.array(ActionProposalPlaceholder),
+  proposals: z.array(ActionProposalSchema),
   eventsLogged: z.number(),
 });
 
