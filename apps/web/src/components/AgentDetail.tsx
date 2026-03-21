@@ -6,6 +6,7 @@ import { Card } from "~/components/Card";
 import { MiniConfidence } from "~/components/MiniConfidence";
 import { AgentMonitor } from "~/components/AgentMonitor";
 import { InsightFeed } from "~/components/InsightFeed";
+import type { InsightFeedProps } from "~/components/InsightFeed";
 import { AgentChat } from "~/components/AgentChat";
 import { MemoryTimeline } from "~/components/MemoryTimeline";
 import {
@@ -20,6 +21,10 @@ interface AgentDetailProps {
   agent: Agent;
   project: Project;
   onBack: () => void;
+  runs?: InsightFeedProps["runs"];
+  pendingActions?: InsightFeedProps["pendingActions"];
+  onApprove?: InsightFeedProps["onApprove"];
+  onReject?: InsightFeedProps["onReject"];
 }
 
 const tabs = [
@@ -32,7 +37,7 @@ const tabs = [
 
 type TabKey = (typeof tabs)[number]["key"];
 
-export function AgentDetail({ agent, project, onBack }: AgentDetailProps) {
+export function AgentDetail({ agent, project, onBack, runs, pendingActions, onApprove, onReject }: AgentDetailProps) {
   const [tab, setTab] = useState<TabKey>("feed");
   const [hoveredTab, setHoveredTab] = useState<TabKey | null>(null);
   const agentColor = getAgentColor(agent.id);
@@ -224,7 +229,14 @@ export function AgentDetail({ agent, project, onBack }: AgentDetailProps) {
 
       {/* Tab content */}
       {tab === "monitor" && <AgentMonitor agent={agent} />}
-      {tab === "feed" && <InsightFeed />}
+      {tab === "feed" && (
+        <InsightFeed
+          runs={runs}
+          pendingActions={pendingActions}
+          onApprove={onApprove}
+          onReject={onReject}
+        />
+      )}
       {tab === "chat" && (
         <AgentChat agentId={agent.id} projectId={project.id} />
       )}
