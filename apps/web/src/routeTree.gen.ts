@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProjectIdRouteImport } from './routes/$projectId'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectIdIndexRouteImport } from './routes/$projectId.index'
+import { Route as ProjectIdCallbackComposioRouteImport } from './routes/$projectId.callback.composio'
 import { Route as ProjectIdAgentsNewRouteImport } from './routes/$projectId.agents.new'
 import { Route as ProjectIdAgentsAgentIdRouteImport } from './routes/$projectId.agents.$agentId'
 
@@ -30,6 +31,12 @@ const ProjectIdIndexRoute = ProjectIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProjectIdRoute,
 } as any)
+const ProjectIdCallbackComposioRoute =
+  ProjectIdCallbackComposioRouteImport.update({
+    id: '/callback/composio',
+    path: '/callback/composio',
+    getParentRoute: () => ProjectIdRoute,
+  } as any)
 const ProjectIdAgentsNewRoute = ProjectIdAgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
@@ -47,12 +54,14 @@ export interface FileRoutesByFullPath {
   '/$projectId/': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
+  '/$projectId/callback/composio': typeof ProjectIdCallbackComposioRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
+  '/$projectId/callback/composio': typeof ProjectIdCallbackComposioRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,6 +70,7 @@ export interface FileRoutesById {
   '/$projectId/': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
+  '/$projectId/callback/composio': typeof ProjectIdCallbackComposioRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -70,12 +80,14 @@ export interface FileRouteTypes {
     | '/$projectId/'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
+    | '/$projectId/callback/composio'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/$projectId'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
+    | '/$projectId/callback/composio'
   id:
     | '__root__'
     | '/'
@@ -83,6 +95,7 @@ export interface FileRouteTypes {
     | '/$projectId/'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
+    | '/$projectId/callback/composio'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -113,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectIdIndexRouteImport
       parentRoute: typeof ProjectIdRoute
     }
+    '/$projectId/callback/composio': {
+      id: '/$projectId/callback/composio'
+      path: '/callback/composio'
+      fullPath: '/$projectId/callback/composio'
+      preLoaderRoute: typeof ProjectIdCallbackComposioRouteImport
+      parentRoute: typeof ProjectIdRoute
+    }
     '/$projectId/agents/new': {
       id: '/$projectId/agents/new'
       path: '/agents/new'
@@ -134,12 +154,14 @@ interface ProjectIdRouteChildren {
   ProjectIdIndexRoute: typeof ProjectIdIndexRoute
   ProjectIdAgentsAgentIdRoute: typeof ProjectIdAgentsAgentIdRoute
   ProjectIdAgentsNewRoute: typeof ProjectIdAgentsNewRoute
+  ProjectIdCallbackComposioRoute: typeof ProjectIdCallbackComposioRoute
 }
 
 const ProjectIdRouteChildren: ProjectIdRouteChildren = {
   ProjectIdIndexRoute: ProjectIdIndexRoute,
   ProjectIdAgentsAgentIdRoute: ProjectIdAgentsAgentIdRoute,
   ProjectIdAgentsNewRoute: ProjectIdAgentsNewRoute,
+  ProjectIdCallbackComposioRoute: ProjectIdCallbackComposioRoute,
 }
 
 const ProjectIdRouteWithChildren = ProjectIdRoute._addFileChildren(

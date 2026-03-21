@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { COLORS } from "~/lib/colors";
 import type { Project } from "~/lib/types";
@@ -6,6 +6,11 @@ import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
 import { createAgent } from "~/server/agents";
+import {
+  initiateConnection,
+  checkConnection,
+  pollComposioConnection,
+} from "~/server/connections";
 
 export interface AvailableSkill {
   id: string;
@@ -62,6 +67,100 @@ export function SetupFlow({ projectId, project, availableSkills = [], onComplete
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [globalApproval, setGlobalApproval] = useState(false);
+  const [connecting, setConnecting] = useState<string | null>(null); // provider being connected
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Provider key → Composio toolkit slug mapping
+  const providerSlug: Record<string, string> = {
+    google: "googleads",
+    slack: "slack",
+  };
+
+  // Check connection status on mount (e.g., after returning from OAuth callback)
+  useEffect(() => {
+    async function checkExisting() {
+      try {
+        const [googleResult, slackResult] = await Promise.all([
+          checkConnection({ data: { projectId, provider: "googleads" } }),
+          checkConnection({ data: { projectId, provider: "slack" } }),
+        ]);
+        const g = googleResult as { connected: boolean };
+        const s = slackResult as { connected: boolean };
+        setConnections((prev) => ({
+          google: g.connected || prev.google,
+          slack: s.connected || prev.slack,
+        }));
+      } catch {
+        // Ignore errors on initial check
+      }
+    }
+    if (projectId) checkExisting();
+  }, [projectId]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // Start OAuth flow: open Composio in a new tab, then poll for completion
+  const handleConnect = useCallback(
+    async (key: "google" | "slack") => {
+      if (connecting) return; // already connecting something
+      setConnecting(key);
+
+      const provider = providerSlug[key];
+      const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}&returnTo=${encodeURIComponent(window.location.pathname)}`;
+
+      try {
+        const result = (await initiateConnection({
+          data: { projectId, provider, callbackUrl },
+        })) as { connectionId: string; redirectUrl: string | null };
+
+        if (result.redirectUrl) {
+          // Open OAuth page in a new tab
+          window.open(result.redirectUrl, "_blank", "noopener");
+
+          // Poll for connection to become active every 2 seconds
+          let attempts = 0;
+          pollRef.current = setInterval(async () => {
+            attempts++;
+            if (attempts > 60) {
+              // Stop after ~2 minutes
+              if (pollRef.current) clearInterval(pollRef.current);
+              pollRef.current = null;
+              setConnecting(null);
+              return;
+            }
+
+            try {
+              const poll = (await pollComposioConnection({
+                data: { projectId, provider },
+              })) as { connected: boolean };
+
+              if (poll.connected) {
+                if (pollRef.current) clearInterval(pollRef.current);
+                pollRef.current = null;
+                setConnections((prev) => ({ ...prev, [key]: true }));
+                setConnecting(null);
+              }
+            } catch {
+              // Keep polling on transient errors
+            }
+          }, 2000);
+        } else {
+          // No redirect URL — connection may already be active
+          setConnections((prev) => ({ ...prev, [key]: true }));
+          setConnecting(null);
+        }
+      } catch (err) {
+        console.error("Failed to initiate connection:", err);
+        setConnecting(null);
+      }
+    },
+    [connecting, projectId],
+  );
 
   const templates = [
     { icon: "📊", name: "Ad Spend Manager", desc: "Monitor and optimize advertising budgets", apps: ["Google Ads", "Slack"], appIcons: ["📊", "💬"] },
@@ -196,10 +295,18 @@ export function SetupFlow({ projectId, project, availableSkills = [], onComplete
                   {(needsAction || isOptional) && item.actionLabel && (
                     <Button size="sm" variant={needsAction ? "primary" : "secondary"}
                       onClick={() => {
-                        if (item.label === "Google Ads") setConnections(p => ({ ...p, google: true }));
-                        if (item.label === "Slack") setConnections(p => ({ ...p, slack: true }));
-                      }}>
-                      {item.actionLabel}
+                        if (item.label === "Google Ads") handleConnect("google");
+                        if (item.label === "Slack") handleConnect("slack");
+                      }}
+                      style={
+                        connecting === (item.label === "Google Ads" ? "google" : "slack")
+                          ? { opacity: 0.6, cursor: "wait" }
+                          : undefined
+                      }
+                    >
+                      {connecting === (item.label === "Google Ads" ? "google" : "slack")
+                        ? "Connecting..."
+                        : item.actionLabel}
                     </Button>
                   )}
                 </div>
