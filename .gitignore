@@ -11,6 +11,7 @@ dist/
 .vinxi/
 
 # Data and credentials
+data/
 *.csv
 credentials.json
 config.json
@@ -46,3 +47,5 @@ legacy/logs/*
 .kilocode/
 .opencode/
 .windsurf/
+
+.trigger
