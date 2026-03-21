@@ -225,7 +225,9 @@ export function AgentDetail({ agent, project, onBack }: AgentDetailProps) {
       {/* Tab content */}
       {tab === "monitor" && <AgentMonitor agent={agent} />}
       {tab === "feed" && <InsightFeed />}
-      {tab === "chat" && <AgentChat />}
+      {tab === "chat" && (
+        <AgentChat agentId={agent.id} projectId={project.id} />
+      )}
       {tab === "memory" && <MemoryTimeline />}
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

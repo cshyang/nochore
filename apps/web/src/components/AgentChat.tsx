@@ -1,49 +1,89 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
 import { Button } from "~/components/Button";
-import { Sparkle } from "@phosphor-icons/react";
+import { Sparkle, CircleNotch } from "@phosphor-icons/react";
+import { sendChat, getChatHistory } from "~/server/chat";
 
 interface ChatMessage {
-  from: "agent" | "user";
-  text: string;
-  followUp?: string;
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: Date;
 }
 
-const agentColor = getAgentColor("ad-guardian");
+interface AgentChatProps {
+  agentId: string;
+  projectId: string;
+}
 
-export function AgentChat() {
+export function AgentChat({ agentId, projectId }: AgentChatProps) {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      from: "agent",
-      text: "I noticed a budget reallocation opportunity. Campaign \"Generic - Broad\" could use more budget. Want me to walk you through my reasoning?",
-    },
-    {
-      from: "user",
-      text: "Why do you think Generic will convert better with more budget?",
-    },
-    {
-      from: "agent",
-      text: "Three reasons:\n\n1. Historical data shows Generic maintains its $8 CPL even during high-spend periods (we tested $150/day in January).\n\n2. Impression share data shows 42% of available searches aren't being shown \u2014 that's untapped demand, not just more spend on the same audience.\n\n3. The search terms feeding Generic are high intent (\"buy marketing software\", \"marketing tool pricing\") \u2014 these aren't window shoppers.",
-      followUp:
-        "Want me to run this as a 7-day experiment instead of a permanent change?",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages((prev) => [...prev, { from: "user", text: input }]);
+  // Load chat history on mount
+  useEffect(() => {
+    getChatHistory({ data: { agentId, projectId, limit: 50 } })
+      .then((history) => {
+        setMessages(
+          (history as Array<{ id: string; role: string; content: string; createdAt: string | number }>).map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            createdAt: new Date(m.createdAt),
+          })),
+        );
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, [agentId, projectId]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, sending]);
+
+  const handleSend = async () => {
+    if (!input.trim() || sending) return;
+
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: input,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          from: "agent",
-          text: "Good thinking. I'll set up a 7-day experiment: increase Generic budget by $80/day starting Monday. I'll track CPL, conversion volume, and impression share daily. If CPL rises above $10, I'll pause the experiment early.\n\nI'll send you a mid-week check-in on Wednesday and a full report next Monday.",
-          followUp: "Should I go ahead and set this up?",
-        },
-      ]);
-    }, 800);
+    setSending(true);
+
+    try {
+      const result = await sendChat({
+        data: { agentId, projectId, message: userMsg.content },
+      });
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: (result as { response: string }).response,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -56,6 +96,7 @@ export function AgentChat() {
     >
       {/* Messages */}
       <div
+        ref={scrollRef}
         style={{
           flex: 1,
           overflowY: "auto",
@@ -65,79 +106,126 @@ export function AgentChat() {
           paddingBottom: 16,
         }}
       >
-        {messages.map((msg, i) => (
+        {loading ? (
           <div
-            key={i}
             style={{
               display: "flex",
-              justifyContent:
-                msg.from === "user" ? "flex-end" : "flex-start",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: 32,
+              color: COLORS.textDim,
+              fontSize: 13,
+            }}
+          >
+            <CircleNotch
+              size={16}
+              weight="light"
+              style={{ animation: "spin 1s linear infinite" }}
+            />
+            Loading conversation...
+          </div>
+        ) : messages.length === 0 ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 32,
+              color: COLORS.textDim,
+              fontSize: 13,
+            }}
+          >
+            No messages yet. Start a conversation with your agent.
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <div
+              key={msg.id}
+              style={{
+                display: "flex",
+                justifyContent:
+                  msg.role === "user" ? "flex-end" : "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "80%",
+                  padding: 16,
+                  borderRadius: RADIUS.sharp,
+                  background:
+                    msg.role === "user"
+                      ? COLORS.surfaceHover
+                      : COLORS.surface,
+                  border: `1px solid ${COLORS.border}`,
+                  borderLeft: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                }}
+              >
+                {msg.role === "assistant" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Sparkle
+                      size={12}
+                      weight="light"
+                      color={COLORS.textDim}
+                    />
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: COLORS.textSecondary,
+                        fontFamily: '"Satoshi", sans-serif',
+                      }}
+                    >
+                      Agent
+                    </span>
+                  </div>
+                )}
+                <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+              </div>
+            </div>
+          ))
+        )}
+
+        {/* Sending indicator */}
+        {sending && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-start",
             }}
           >
             <div
               style={{
-                maxWidth: "80%",
                 padding: 16,
                 borderRadius: RADIUS.sharp,
-                background:
-                  msg.from === "user"
-                    ? COLORS.surfaceHover
-                    : COLORS.surface,
-                border:
-                  msg.from === "agent"
-                    ? `1px solid ${COLORS.border}`
-                    : `1px solid ${COLORS.border}`,
-                borderLeft: `1px solid ${COLORS.border}`,
-                color: COLORS.text,
-                fontSize: 14,
-                lineHeight: 1.6,
+                background: COLORS.surface,
+                border: `1px solid ${COLORS.border}`,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: COLORS.textDim,
+                fontSize: 13,
               }}
             >
-              {msg.from === "agent" && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Sparkle
-                    size={12}
-                    weight="light"
-                    color={COLORS.textDim}
-                  />
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: COLORS.textSecondary,
-                      fontFamily: '"Satoshi", sans-serif',
-                    }}
-                  >
-                    Ad Spend Guardian
-                  </span>
-                </div>
-              )}
-              <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
-              {msg.followUp && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: "10px 12px",
-                    background: "transparent",
-                    borderLeft: `1px solid ${COLORS.border}`,
-                    paddingLeft: 12,
-                    fontSize: 13,
-                    color: COLORS.textSecondary,
-                  }}
-                >
-                  {msg.followUp}
-                </div>
-              )}
+              <CircleNotch
+                size={14}
+                weight="light"
+                style={{ animation: "spin 1s linear infinite" }}
+              />
+              Thinking...
             </div>
           </div>
-        ))}
+        )}
       </div>
 
       {/* Input */}
@@ -181,9 +269,14 @@ export function AgentChat() {
           <Button
             size="sm"
             onClick={handleSend}
-            style={{ flexShrink: 0, borderRadius: RADIUS.button }}
+            style={{
+              flexShrink: 0,
+              borderRadius: RADIUS.button,
+              opacity: sending ? 0.5 : 1,
+              pointerEvents: sending ? "none" : "auto",
+            }}
           >
-            Send
+            {sending ? "Sending..." : "Send"}
           </Button>
         </div>
         <div
@@ -194,10 +287,18 @@ export function AgentChat() {
             textAlign: "center",
           }}
         >
-          Agent has access to: campaign data, search terms, memory (14 lessons),
-          your policies
+          Agent has access to: workspace data, analysis tools, memory, your
+          policies
         </div>
       </div>
+
+      {/* Keyframe animation for spinner */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
