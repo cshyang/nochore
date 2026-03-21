@@ -1,15 +1,9 @@
 import { generateObject, jsonSchema } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { AgentConfig } from "../../types/agent-config";
 import type { TriggerEvent, StepOutput } from "../../types/run";
 import type { AssembledContext } from "../../context/assembler";
 import type { SkillRegistry } from "../../skills/registry";
-
-// ---------------------------------------------------------------------------
-// resolveScope — determine which skills to run for this pipeline execution
-// ---------------------------------------------------------------------------
-
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+import { createModel } from "../../skills/executor";
 
 export async function resolveScope(params: {
   config: AgentConfig;
@@ -48,11 +42,10 @@ export async function resolveScope(params: {
   }
 
   // Priority 3: LLM-based scope resolution
-  const anthropic = createAnthropic();
-  const modelId = config.model ?? DEFAULT_MODEL;
+  const model = createModel(config.model);
 
   const result = await generateObject({
-    model: anthropic(modelId),
+    model,
     system: context.systemPrompt,
     prompt: JSON.stringify({
       availableSkills: config.skills,

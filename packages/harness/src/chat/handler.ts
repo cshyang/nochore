@@ -1,6 +1,6 @@
 import { generateText } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { CoreMessage } from "ai";
+import { createModel } from "../skills/executor";
 
 import type { MemoryStore } from "../types/memory";
 import type { SkillRegistry } from "../skills/registry";
@@ -107,7 +107,7 @@ export async function handleChat(params: {
 
   // Step 6: Call AI SDK generateText
   const result = await generateText({
-    model: createAnthropic()(config.model ?? "claude-sonnet-4-20250514"),
+    model: createModel(config.model),
     system: context.systemPrompt,
     messages: [
       ...historyMessages,

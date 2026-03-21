@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/openai-compatible": "^2.0.37",
     "@composio/core": "^0.6.6",
     "@composio/vercel": "^0.6.6",
     "ai": "^6.0.134",

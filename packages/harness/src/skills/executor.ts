@@ -1,12 +1,67 @@
 import { generateObject, jsonSchema } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import type { LanguageModelV1 } from "ai";
 import type { SkillDefinition, SkillData } from "../types/skill";
 
 // ---------------------------------------------------------------------------
-// Default model for LLM-powered skills
+// createModel — configurable LLM provider
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+/**
+ * Create an AI SDK model from environment configuration.
+ *
+ * Supports multiple providers via LLM_PROVIDER env var:
+ * - "zhipu" → Zhipu GLM (bigmodel.cn), model default: "glm-4"
+ * - "anthropic" → Anthropic Claude (default), model default: "claude-sonnet-4-20250514"
+ * - "openai" → OpenAI GPT, model default: "gpt-4o"
+ *
+ * Any OpenAI-compatible endpoint can be used by setting:
+ *   LLM_PROVIDER=custom
+ *   LLM_BASE_URL=https://your-api.example.com/v1
+ *   LLM_API_KEY=your-key
+ *   LLM_MODEL=model-name
+ */
+export function createModel(modelOverride?: string): LanguageModelV1 {
+  const provider = process.env.LLM_PROVIDER ?? "anthropic";
+
+  switch (provider) {
+    case "zhipu": {
+      const { createOpenAICompatible } = require("@ai-sdk/openai-compatible");
+      const zhipu = createOpenAICompatible({
+        name: "zhipu",
+        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
+        apiKey: process.env.ZHIPU_API_KEY ?? process.env.LLM_API_KEY,
+      });
+      return zhipu(modelOverride ?? process.env.LLM_MODEL ?? "glm-4");
+    }
+
+    case "openai": {
+      const { createOpenAICompatible } = require("@ai-sdk/openai-compatible");
+      const openai = createOpenAICompatible({
+        name: "openai",
+        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
+        apiKey: process.env.OPENAI_API_KEY ?? process.env.LLM_API_KEY,
+      });
+      return openai(modelOverride ?? process.env.LLM_MODEL ?? "gpt-4o");
+    }
+
+    case "custom": {
+      const { createOpenAICompatible } = require("@ai-sdk/openai-compatible");
+      const custom = createOpenAICompatible({
+        name: "custom",
+        baseURL: process.env.LLM_BASE_URL!,
+        apiKey: process.env.LLM_API_KEY,
+      });
+      return custom(modelOverride ?? process.env.LLM_MODEL ?? "default");
+    }
+
+    case "anthropic":
+    default: {
+      const { createAnthropic } = require("@ai-sdk/anthropic");
+      const anthropic = createAnthropic();
+      return anthropic(modelOverride ?? process.env.LLM_MODEL ?? "claude-sonnet-4-20250514");
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // executeSkill — runs a skill via deterministic compute or LLM
@@ -54,11 +109,10 @@ export async function executeSkill(
       ? `${skill.systemPrompt}\n\nDomain knowledge:\n${options.knowledge}`
       : skill.systemPrompt;
 
-    const anthropic = createAnthropic();
-    const modelId = options?.model ?? DEFAULT_MODEL;
+    const model = createModel(options?.model);
 
     const result = await generateObject({
-      model: anthropic(modelId),
+      model,
       system: systemPrompt,
       prompt: JSON.stringify(data),
       schema: jsonSchema(skill.outputSchema),

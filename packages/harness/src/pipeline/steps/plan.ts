@@ -1,14 +1,8 @@
 import { generateObject, jsonSchema } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ActionProposal } from "../../types/action";
 import type { StepOutput, LlmUsage } from "../../types/run";
 import type { AssembledContext } from "../../context/assembler";
-
-// ---------------------------------------------------------------------------
-// Default model for the planning step
-// ---------------------------------------------------------------------------
-
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+import { createModel } from "../../skills/executor";
 
 // ---------------------------------------------------------------------------
 // JSON Schema for the planning LLM's structured output
@@ -90,11 +84,10 @@ export async function planActions(params: {
   }
 
   // Call AI SDK generateObject to produce proposals
-  const anthropic = createAnthropic();
-  const modelId = params.model ?? DEFAULT_MODEL;
+  const model = createModel(params.model);
 
   const result = await generateObject({
-    model: anthropic(modelId),
+    model,
     system: params.context.systemPrompt,
     prompt: JSON.stringify({ skillOutputs: successfulOutputs }),
     schema: jsonSchema(PROPOSALS_SCHEMA),
