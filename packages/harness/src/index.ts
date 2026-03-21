@@ -5,3 +5,4 @@ export * from "./types/index";
 export * from "./workspace/index";
 export * from "./skills/index";
 export * from "./context/index";
+export * from "./connections/index";
