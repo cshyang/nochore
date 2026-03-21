@@ -10,9 +10,10 @@ import { ProjectConnections } from "~/components/ProjectConnections";
 interface ProjectHomeProps {
   project: Project;
   onSelectAgent: (id: string) => void;
+  onNewAgent?: () => void;
 }
 
-export function ProjectHome({ project, onSelectAgent }: ProjectHomeProps) {
+export function ProjectHome({ project, onSelectAgent, onNewAgent }: ProjectHomeProps) {
   const [projectTab, setProjectTab] = useState("agents");
   const needsAttention = project.agents.filter((a) => a.status === "attention");
 
@@ -103,7 +104,7 @@ export function ProjectHome({ project, onSelectAgent }: ProjectHomeProps) {
         ))}
 
         {/* Add agent to project */}
-        <Card onClick={() => {}} style={{ cursor: "pointer", borderStyle: "dashed", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120 }}>
+        <Card onClick={() => onNewAgent?.()} style={{ cursor: "pointer", borderStyle: "dashed", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120 }}>
           <div style={{ textAlign: "center" }}>
             <span style={{ fontSize: 24, color: COLORS.accent }}>+</span>
             <div style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4 }}>Add agent</div>

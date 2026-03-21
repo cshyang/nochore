@@ -29,6 +29,12 @@ function ProjectIndexPage() {
           params: { projectId: project.id, agentId: id },
         })
       }
+      onNewAgent={() =>
+        navigate({
+          to: "/$projectId/agents/new",
+          params: { projectId: project.id },
+        })
+      }
     />
   );
 }
