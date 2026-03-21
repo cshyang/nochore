@@ -7,6 +7,7 @@ import {
   lessons,
   runs,
   pendingActions,
+  chatMessages,
   connections,
 } from "../schema";
 import { eq, and } from "drizzle-orm";
@@ -247,6 +248,45 @@ describe("Database schema", () => {
         .where(eq(pendingActions.status, "pending"))
         .all();
       expect(result).toHaveLength(1);
+    });
+  });
+
+  describe("chatMessages", () => {
+    it("inserts and queries chat messages by agentId", () => {
+      const now = Date.now();
+      db.insert(chatMessages)
+        .values([
+          { id: "msg_001", agentId: "agent_001", role: "user", content: "Why did CPL spike?", createdAt: now },
+          { id: "msg_002", agentId: "agent_001", role: "assistant", content: "CPL spiked due to...", createdAt: now + 1000 },
+          { id: "msg_003", agentId: "agent_002", role: "user", content: "Different agent", createdAt: now },
+        ])
+        .run();
+      const result = db
+        .select()
+        .from(chatMessages)
+        .where(eq(chatMessages.agentId, "agent_001"))
+        .all();
+      expect(result).toHaveLength(2);
+    });
+
+    it("stores tool call messages", () => {
+      db.insert(chatMessages)
+        .values({
+          id: "msg_004",
+          agentId: "agent_001",
+          role: "tool",
+          content: JSON.stringify({ result: "Analysis complete" }),
+          toolCallId: "call_abc123",
+          createdAt: Date.now(),
+        })
+        .run();
+      const result = db
+        .select()
+        .from(chatMessages)
+        .where(eq(chatMessages.role, "tool"))
+        .all();
+      expect(result).toHaveLength(1);
+      expect(result[0].toolCallId).toBe("call_abc123");
     });
   });
 

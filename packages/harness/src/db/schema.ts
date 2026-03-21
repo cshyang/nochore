@@ -69,6 +69,21 @@ export const pendingActions = sqliteTable("pending_actions", {
   resolvedReason: text("resolved_reason"),
 });
 
+export const chatMessages = sqliteTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    role: text("role").notNull(), // "user" | "assistant" | "tool"
+    content: text("content").notNull(), // Message content (text or JSON for tool calls)
+    toolCallId: text("tool_call_id"), // For tool result messages
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_chat_agent_ts").on(table.agentId, table.createdAt),
+  ]
+);
+
 export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull(),

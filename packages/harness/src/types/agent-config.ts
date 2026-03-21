@@ -41,6 +41,8 @@ export const AgentConfigSchema = z.object({
   name: z.string(),
   description: z.string(),
   intent: z.string(),
+  /** Filesystem path to agent workspace directory (contains AGENT.md, KNOWLEDGE.md, etc.) */
+  workspacePath: z.string(),
   skills: z.array(z.string()),
   skillKnowledge: z.record(z.string(), z.string()),
   triggers: z.array(TriggerConfigSchema),

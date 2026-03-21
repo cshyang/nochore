@@ -81,6 +81,16 @@ function createTables(sqlite: Database.Database) {
       resolved_reason TEXT
     );
 
+    CREATE TABLE chat_messages (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      tool_call_id TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_chat_agent_ts ON chat_messages (agent_id, created_at);
+
     CREATE TABLE connections (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
