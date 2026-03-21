@@ -7,9 +7,16 @@ import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
 import { createAgent } from "~/server/agents";
 
+export interface AvailableSkill {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface SetupFlowProps {
   projectId: string;
   project: Project | null;
+  availableSkills?: AvailableSkill[];
   onComplete: () => void;
 }
 
@@ -20,11 +27,7 @@ interface PolicyOptionProps {
   sublabel?: string;
 }
 
-interface SkillMap {
-  search: boolean;
-  budget: boolean;
-  trend: boolean;
-}
+type SkillMap = Record<string, boolean>;
 
 interface ConnectionMap {
   google: boolean;
@@ -42,12 +45,16 @@ interface SubAccountMap {
   apac: boolean;
 }
 
-export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
+export function SetupFlow({ projectId, project, availableSkills = [], onComplete }: SetupFlowProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [text, setText] = useState("");
   const [showTemplates, setShowTemplates] = useState(true);
-  const [skills, setSkills] = useState<SkillMap>({ search: true, budget: true, trend: false });
+
+  // Build initial skill selection — first skill enabled by default
+  const initialSkills: SkillMap = {};
+  availableSkills.forEach((s, i) => { initialSkills[s.id] = i === 0; });
+  const [skills, setSkills] = useState<SkillMap>(initialSkills);
   const [connections, setConnections] = useState<ConnectionMap>({ google: false, slack: false });
   const [policies, setPolicies] = useState<PolicyMap>({ negatives: "auto", budget: "tiered" });
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -62,11 +69,12 @@ export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
     { icon: "🔍", name: "Competitor Tracker", desc: "Watch competitor pricing and activity", apps: ["Web", "Slack"], appIcons: ["🌐", "💬"] },
   ];
 
-  const skillList = [
-    { key: "search" as const, name: "Search Term Analysis", desc: "Detects wasteful search terms and suggests negatives", recommended: true },
-    { key: "budget" as const, name: "Budget Allocation", desc: "Spots over/under-spending across campaigns", recommended: true },
-    { key: "trend" as const, name: "Trend Forecasting", desc: "Predicts next-week performance trends", recommended: false },
-  ];
+  const skillList = availableSkills.map((s, i) => ({
+    key: s.id,
+    name: s.name,
+    desc: s.description,
+    recommended: i === 0, // first skill is recommended
+  }));
 
   const toolList = [
     { key: "google" as const, name: "Google Ads", icon: "📊", reason: "Pull campaign and search term data" },
@@ -138,10 +146,17 @@ export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
     const allConnected = connections.google && connections.slack;
     const hasSubAccountSelection = Object.values(selectedSubAccounts).some(Boolean);
 
-    // Scaffold status items
+    // Scaffold status items — skills from registry + connections
+    const skillItems = availableSkills
+      .filter((s) => skills[s.id])
+      .map((s) => ({
+        label: s.name,
+        status: "ready" as const,
+        detail: s.description,
+      }));
+
     const scaffoldItems = [
-      { label: "Search Term Analysis", status: "ready", detail: "Detects wasteful terms, suggests negatives" },
-      { label: "Budget Allocation", status: "ready", detail: "Spots over/under-spending across campaigns" },
+      ...skillItems,
       { label: "Google Ads", status: connections.google ? "ready" : "needs_action", detail: connections.google ? "Connected via project" : "Needs connection", actionLabel: "Connect" },
       { label: "Slack", status: connections.slack ? "ready" : "optional", detail: connections.slack ? "Connected for alerts" : "Optional — for sending alerts", actionLabel: "Connect" },
       { label: "Sub-accounts", status: connections.google ? (hasSubAccountSelection ? "ready" : "needs_action") : "blocked", detail: connections.google ? "Select which accounts to monitor" : "Connect Google Ads first" },
@@ -394,11 +409,10 @@ export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
               // Derive agent name from the template or text
               const agentName = text.length > 40 ? text.slice(0, 40) + "..." : text || "New Agent";
 
-              // Collect selected skills
-              const selectedSkills: string[] = [];
-              if (skills.search) selectedSkills.push("search-terms");
-              if (skills.budget) selectedSkills.push("budget-allocation");
-              if (skills.trend) selectedSkills.push("trend-forecasting");
+              // Collect selected skills (use real skill IDs from registry)
+              const selectedSkills = Object.entries(skills)
+                .filter(([, enabled]) => enabled)
+                .map(([id]) => id);
 
               // Collect policy rules from policy selections
               const policyRules: string[] = [];
@@ -448,11 +462,10 @@ export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
 
   // Step 3: Complete
   const agentName = text.length > 40 ? text.slice(0, 40) + "..." : text || "New Agent";
-  const selectedSkillNames = [
-    skills.search && "Search Terms",
-    skills.budget && "Budget",
-    skills.trend && "Trend",
-  ].filter(Boolean).join(" · ");
+  const selectedSkillNames = availableSkills
+    .filter((s) => skills[s.id])
+    .map((s) => s.name)
+    .join(" · ");
   const connectedTools = [
     connections.google && "Google Ads",
     connections.slack && "Slack",
