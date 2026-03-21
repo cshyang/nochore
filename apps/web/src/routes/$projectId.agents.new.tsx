@@ -1,15 +1,21 @@
-import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { PROJECTS } from "~/lib/mock";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SetupFlow } from "~/components/SetupFlow";
+import { getProject } from "~/server/projects";
+import type { Project } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/agents/new")({
+  loader: async ({ params }) => {
+    const project = await getProject({ data: { projectId: params.projectId } });
+    return { project };
+  },
   component: NewAgentPage,
 });
 
 function NewAgentPage() {
-  const { projectId } = useParams({ from: "/$projectId/agents/new" });
   const navigate = useNavigate();
-  const project = PROJECTS.find((p) => p.id === projectId)!;
+  const { project: rawProject } = Route.useLoaderData();
+  const project = rawProject as Project | null;
+  const projectId = project?.id ?? "";
 
   return (
     <SetupFlow

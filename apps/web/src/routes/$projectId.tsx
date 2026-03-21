@@ -1,22 +1,25 @@
-import { useState } from "react";
 import {
   createFileRoute,
   Outlet,
   useNavigate,
-  useParams,
 } from "@tanstack/react-router";
 import { COLORS } from "~/lib/colors";
-import { PROJECTS } from "~/lib/mock";
 import { ProjectSidebar } from "~/components/ProjectSidebar";
+import { getProject } from "~/server/projects";
+import type { Project } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId")({
+  loader: async ({ params }) => {
+    const project = await getProject({ data: { projectId: params.projectId } });
+    return { project };
+  },
   component: ProjectLayout,
 });
 
 function ProjectLayout() {
-  const { projectId } = useParams({ from: "/$projectId" });
   const navigate = useNavigate();
-  const project = PROJECTS.find((p) => p.id === projectId);
+  const { project: rawProject } = Route.useLoaderData();
+  const project = rawProject as Project | null;
 
   if (!project) {
     return (
@@ -40,14 +43,14 @@ function ProjectLayout() {
         onSelectAgent={(id) =>
           navigate({
             to: "/$projectId/agents/$agentId",
-            params: { projectId, agentId: id },
+            params: { projectId: project.id, agentId: id },
           })
         }
         onGoHome={() => navigate({ to: "/" })}
         onNewAgent={() =>
           navigate({
             to: "/$projectId/agents/new",
-            params: { projectId },
+            params: { projectId: project.id },
           })
         }
       />

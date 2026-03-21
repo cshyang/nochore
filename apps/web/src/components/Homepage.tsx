@@ -13,9 +13,11 @@ import {
 export function Homepage({
   projects,
   onSelectProject,
+  onCreateProject,
 }: {
   projects: Project[];
   onSelectProject: (id: string) => void;
+  onCreateProject?: () => void;
 }) {
   const totalAgents = projects.reduce((s, p) => s + p.agents.length, 0);
   const totalAttention = projects.reduce((s, p) => s + p.attentionCount, 0);
@@ -200,7 +202,7 @@ export function Homepage({
               Projects
             </span>
             <button
-              onClick={() => {}}
+              onClick={() => onCreateProject?.()}
               style={{
                 background: "none",
                 border: "none",

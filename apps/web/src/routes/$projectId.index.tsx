@@ -1,15 +1,24 @@
-import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { PROJECTS } from "~/lib/mock";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ProjectHome } from "~/components/ProjectHome";
+import { getProject } from "~/server/projects";
+import type { Project } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/")({
+  loader: async ({ params }) => {
+    const project = await getProject({ data: { projectId: params.projectId } });
+    return { project };
+  },
   component: ProjectIndexPage,
 });
 
 function ProjectIndexPage() {
-  const { projectId } = useParams({ from: "/$projectId/" });
   const navigate = useNavigate();
-  const project = PROJECTS.find((p) => p.id === projectId)!;
+  const { project: rawProject } = Route.useLoaderData();
+  const project = rawProject as Project | null;
+
+  if (!project) {
+    return <div>Project not found.</div>;
+  }
 
   return (
     <ProjectHome
@@ -17,7 +26,7 @@ function ProjectIndexPage() {
       onSelectAgent={(id) =>
         navigate({
           to: "/$projectId/agents/$agentId",
-          params: { projectId, agentId: id },
+          params: { projectId: project.id, agentId: id },
         })
       }
     />

@@ -1,22 +1,24 @@
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { PROJECTS } from "~/lib/mock";
 import { AgentDetail } from "~/components/AgentDetail";
 import { getAgent } from "~/server/agents";
+import { getProject } from "~/server/projects";
 import { getRunHistory } from "~/server/runs";
 import { getPendingActions, approveAction, rejectAction } from "~/server/approvals";
+import type { Project, Agent } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
     const { projectId, agentId } = params;
     try {
-      const [agent, runs, pending] = await Promise.all([
+      const [project, agent, runs, pending] = await Promise.all([
+        getProject({ data: { projectId } }),
         getAgent({ data: { agentId, projectId } }),
         getRunHistory({ data: { agentId, projectId, limit: 20 } }),
         getPendingActions({ data: { agentId, projectId } }),
       ]);
-      return { agent, runs: runs ?? [], pending: pending ?? [], fromHarness: true };
+      return { project, agent, runs: runs ?? [], pending: pending ?? [] };
     } catch {
-      return { agent: null, runs: [], pending: [], fromHarness: false };
+      return { project: null, agent: null, runs: [], pending: [] };
     }
   },
   component: AgentDetailPage,
@@ -29,11 +31,17 @@ function AgentDetailPage() {
   const navigate = useNavigate();
   const loaderData = Route.useLoaderData();
 
-  // Always resolve mock project/agent for the shell (header, tabs, settings)
-  const project = PROJECTS.find((p) => p.id === projectId)!;
-  const mockAgent = project?.agents.find((a) => a.id === agentId);
+  const project = loaderData.project as Project | null;
+  const agentRecord = loaderData.agent as any;
 
-  if (!mockAgent) {
+  if (!project) {
+    return <div>Project not found.</div>;
+  }
+
+  // Find the agent in the project's agents list (built from DB in getProject)
+  const agent = project.agents.find((a) => a.id === agentId);
+
+  if (!agent) {
     return <div>Agent not found.</div>;
   }
 
@@ -55,7 +63,7 @@ function AgentDetailPage() {
 
   return (
     <AgentDetail
-      agent={mockAgent}
+      agent={agent}
       project={project}
       onBack={() =>
         navigate({ to: "/$projectId", params: { projectId } })
