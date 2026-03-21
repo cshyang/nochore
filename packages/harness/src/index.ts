@@ -2,3 +2,4 @@
 // Exports will be added as modules are implemented
 
 export * from "./types/index";
+export * from "./workspace/index";
