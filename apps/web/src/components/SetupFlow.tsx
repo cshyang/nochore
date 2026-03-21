@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { COLORS } from "~/lib/colors";
 import type { Project } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
+import { createAgent } from "~/server/agents";
 
 interface SetupFlowProps {
+  projectId: string;
   project: Project | null;
   onComplete: () => void;
 }
@@ -39,7 +42,8 @@ interface SubAccountMap {
   apac: boolean;
 }
 
-export function SetupFlow({ project, onComplete }: SetupFlowProps) {
+export function SetupFlow({ projectId, project, onComplete }: SetupFlowProps) {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [text, setText] = useState("");
   const [showTemplates, setShowTemplates] = useState(true);
@@ -48,6 +52,9 @@ export function SetupFlow({ project, onComplete }: SetupFlowProps) {
   const [policies, setPolicies] = useState<PolicyMap>({ negatives: "auto", budget: "tiered" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedSubAccounts, setSelectedSubAccounts] = useState<SubAccountMap>({ us: true, eu: true, apac: false });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [globalApproval, setGlobalApproval] = useState(false);
 
   const templates = [
     { icon: "📊", name: "Ad Spend Manager", desc: "Monitor and optimize advertising budgets", apps: ["Google Ads", "Slack"], appIcons: ["📊", "💬"] },
@@ -322,11 +329,20 @@ export function SetupFlow({ project, onComplete }: SetupFlowProps) {
             <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Require approval for ALL actions</div>
             <div style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 4 }}>Override all policies — nothing runs without your OK</div>
           </div>
-          <div style={{
-            width: 48, height: 24, borderRadius: 99, background: COLORS.border, cursor: "pointer",
-            display: "flex", alignItems: "center", padding: 4, transition: "background 0.15s ease",
-          }}>
-            <div style={{ width: 16, height: 16, borderRadius: 99, background: COLORS.textSecondary, transition: "transform 0.15s ease" }} />
+          <div
+            onClick={() => setGlobalApproval((prev) => !prev)}
+            style={{
+              width: 48, height: 24, borderRadius: 99,
+              background: globalApproval ? COLORS.accent : COLORS.border,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", padding: 4, transition: "background 0.15s ease",
+            }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: 99,
+              background: globalApproval ? COLORS.white : COLORS.textSecondary,
+              transition: "transform 0.15s ease",
+              transform: globalApproval ? "translateX(24px)" : "translateX(0)",
+            }} />
           </div>
         </Card>
 
@@ -360,21 +376,98 @@ export function SetupFlow({ project, onComplete }: SetupFlowProps) {
           </Card>
         )}
 
+        {error && (
+          <Card style={{ marginBottom: 16, padding: 16, borderColor: COLORS.red, background: COLORS.redDim }}>
+            <div style={{ fontSize: 13, color: COLORS.red, fontWeight: 600 }}>Failed to create agent</div>
+            <div style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 4 }}>{error}</div>
+          </Card>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <Button variant="ghost" onClick={() => setStep(1)}>← Back</Button>
-          <Button onClick={() => setStep(3)}>Launch agent →</Button>
+          <Button
+            onClick={async () => {
+              if (submitting) return;
+              setSubmitting(true);
+              setError(null);
+
+              // Derive agent name from the template or text
+              const agentName = text.length > 40 ? text.slice(0, 40) + "..." : text || "New Agent";
+
+              // Collect selected skills
+              const selectedSkills: string[] = [];
+              if (skills.search) selectedSkills.push("search-terms");
+              if (skills.budget) selectedSkills.push("budget-allocation");
+              if (skills.trend) selectedSkills.push("trend-forecasting");
+
+              // Collect policy rules from policy selections
+              const policyRules: string[] = [];
+              if (policies.negatives === "auto") policyRules.push("negatives:auto-apply");
+              else if (policies.negatives === "ask") policyRules.push("negatives:ask-first");
+              else if (policies.negatives === "notify") policyRules.push("negatives:auto-notify");
+              if (policies.budget === "tiered") policyRules.push("budget:tiered-thresholds");
+              else if (policies.budget === "ask") policyRules.push("budget:always-ask");
+              else if (policies.budget === "never") policyRules.push("budget:never-touch");
+
+              try {
+                const result = await createAgent({
+                  data: {
+                    projectId,
+                    name: agentName,
+                    description: text,
+                    intent: text,
+                    skills: selectedSkills,
+                    scopeStrategy: "llm",
+                    policyRules,
+                    globalApprovalRequired: globalApproval,
+                  },
+                });
+                const created = result as { id: string };
+                setStep(3);
+                // Navigate to the new agent after a brief moment to show success
+                setTimeout(() => {
+                  navigate({
+                    to: "/$projectId/agents/$agentId",
+                    params: { projectId, agentId: created.id },
+                  });
+                }, 2000);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "An unexpected error occurred");
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+            style={submitting ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+          >
+            {submitting ? "Creating..." : "Launch agent →"}
+          </Button>
         </div>
       </div>
     );
   }
 
   // Step 3: Complete
+  const agentName = text.length > 40 ? text.slice(0, 40) + "..." : text || "New Agent";
+  const selectedSkillNames = [
+    skills.search && "Search Terms",
+    skills.budget && "Budget",
+    skills.trend && "Trend",
+  ].filter(Boolean).join(" · ");
+  const connectedTools = [
+    connections.google && "Google Ads",
+    connections.slack && "Slack",
+  ].filter(Boolean).join(" · ") || "None";
+  const policyDesc = [
+    policies.negatives === "auto" ? "Auto negatives" : policies.negatives === "ask" ? "Ask negatives" : "Notify negatives",
+    policies.budget === "tiered" ? "Tiered budgets" : policies.budget === "ask" ? "Ask budgets" : "No budget changes",
+  ].join(" · ");
+
   return (
     <div style={{ textAlign: "center", paddingTop: 40 }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>✦</div>
       <h2 style={{ color: COLORS.text, fontSize: 24, fontWeight: 600, margin: 0 }}>Your agent is live</h2>
       <p style={{ color: COLORS.textSecondary, marginTop: 8, fontSize: 15, lineHeight: 1.6 }}>
-        Ad Spend Guardian is now monitoring your campaigns.
+        {agentName} is now monitoring your campaigns.
         {project && <><br />Added to {project.icon} {project.name}</>}
       </p>
 
@@ -382,14 +475,14 @@ export function SetupFlow({ project, onComplete }: SetupFlowProps) {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.accentLight})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>✦</div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: COLORS.text }}>Ad Spend Guardian</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: COLORS.text }}>{agentName}</div>
             <Badge color="green">Active</Badge>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
-          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Skills</div><div style={{ color: COLORS.textSecondary }}>Search Terms · Budget</div></div>
-          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Tools</div><div style={{ color: COLORS.textSecondary }}>Google Ads · Slack</div></div>
-          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Policy</div><div style={{ color: COLORS.textSecondary }}>Auto negatives · Ask budgets</div></div>
+          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Skills</div><div style={{ color: COLORS.textSecondary }}>{selectedSkillNames || "None"}</div></div>
+          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Tools</div><div style={{ color: COLORS.textSecondary }}>{connectedTools}</div></div>
+          <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Policy</div><div style={{ color: COLORS.textSecondary }}>{policyDesc}</div></div>
           <div><div style={{ color: COLORS.textDim, marginBottom: 3 }}>Schedule</div><div style={{ color: COLORS.textSecondary }}>Every 6 hours</div></div>
         </div>
       </Card>

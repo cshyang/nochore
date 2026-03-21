@@ -13,6 +13,7 @@ function NewAgentPage() {
 
   return (
     <SetupFlow
+      projectId={projectId}
       project={project}
       onComplete={() =>
         navigate({ to: "/$projectId", params: { projectId } })
