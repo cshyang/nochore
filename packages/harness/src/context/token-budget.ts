@@ -60,7 +60,6 @@ export function assembleSections(
   // Strategy: work backwards through sorted sections, trimming or removing
   // until we fit within budget. High-priority sections are kept intact.
   const result: string[] = [];
-  let usedTokens = 0;
 
   // Account for separators between sections: (n-1) * "\n\n" = 2 chars each
   const separatorTokens = estimateTokens(
