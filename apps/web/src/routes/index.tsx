@@ -14,9 +14,7 @@ function IndexPage() {
   const { projects } = Route.useLoaderData();
   const navigate = useNavigate();
 
-  const handleCreateProject = async () => {
-    const name = window.prompt("Project name:");
-    if (!name) return;
+  const handleCreateProject = async (name: string) => {
     const result = await createProject({ data: { name } });
     if (result && typeof result === "object" && "id" in result) {
       navigate({
@@ -29,7 +27,9 @@ function IndexPage() {
   return (
     <Homepage
       projects={projects as any[]}
-      onSelectProject={(id) => navigate({ to: "/$projectId", params: { projectId: id } })}
+      onSelectProject={(id) =>
+        navigate({ to: "/$projectId", params: { projectId: id } })
+      }
       onCreateProject={handleCreateProject}
     />
   );

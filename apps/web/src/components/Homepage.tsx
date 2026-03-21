@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
 import type { Project } from "~/lib/types";
 import { Badge } from "~/components/Badge";
@@ -8,6 +9,9 @@ import {
   ArrowRight,
   WarningCircle,
   CheckCircle,
+  FolderSimplePlus,
+  CircleNotch,
+  X,
 } from "@phosphor-icons/react";
 
 export function Homepage({
@@ -17,8 +21,37 @@ export function Homepage({
 }: {
   projects: Project[];
   onSelectProject: (id: string) => void;
-  onCreateProject?: () => void;
+  onCreateProject?: (name: string) => Promise<void>;
 }) {
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (creating && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [creating]);
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name || submitting) return;
+    setSubmitting(true);
+    try {
+      await onCreateProject?.(name);
+    } finally {
+      setSubmitting(false);
+      setCreating(false);
+      setNewName("");
+    }
+  };
+
+  const handleCancel = () => {
+    setCreating(false);
+    setNewName("");
+  };
+
   const totalAgents = projects.reduce((s, p) => s + p.agents.length, 0);
   const totalAttention = projects.reduce((s, p) => s + p.attentionCount, 0);
 
@@ -201,34 +234,121 @@ export function Homepage({
             >
               Projects
             </span>
-            <button
-              onClick={() => onCreateProject?.()}
-              style={{
-                background: "none",
-                border: "none",
-                color: COLORS.textSecondary,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "4px 8px",
-                borderRadius: RADIUS.button,
-                transition: "color 0.15s ease",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.text)}
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = COLORS.textSecondary)
-              }
-            >
-              <Plus size={14} weight="light" />
-              New project
-            </button>
+            {!creating && (
+              <button
+                onClick={() => setCreating(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: COLORS.textSecondary,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "4px 8px",
+                  borderRadius: RADIUS.button,
+                  transition: "color 0.15s ease",
+                  fontFamily: "inherit",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.text)}
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.color = COLORS.textSecondary)
+                }
+              >
+                <Plus size={14} weight="light" />
+                New project
+              </button>
+            )}
           </div>
 
           {/* Project list — not cards, more editorial */}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Inline create row */}
+            {creating && (
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: RADIUS.sharp,
+                  background: COLORS.surface,
+                  border: `1px solid ${COLORS.accent}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <FolderSimplePlus
+                  size={20}
+                  weight="duotone"
+                  color={COLORS.accent}
+                  style={{ flexShrink: 0 }}
+                />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreate();
+                    if (e.key === "Escape") handleCancel();
+                  }}
+                  placeholder="Project name..."
+                  disabled={submitting}
+                  style={{
+                    flex: 1,
+                    background: "none",
+                    border: "none",
+                    outline: "none",
+                    color: COLORS.text,
+                    fontSize: 16,
+                    fontWeight: 600,
+                    fontFamily: '"Satoshi", sans-serif',
+                    padding: 0,
+                  }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                  {submitting ? (
+                    <CircleNotch
+                      size={16}
+                      weight="light"
+                      color={COLORS.accent}
+                      style={{ animation: "spin 1s linear infinite" }}
+                    />
+                  ) : (
+                    <>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: COLORS.textDim,
+                          padding: "2px 6px",
+                          borderRadius: RADIUS.sharp,
+                          background: newName.trim() ? COLORS.accentDim : "transparent",
+                          color: newName.trim() ? COLORS.accentLight : COLORS.textDim,
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        Enter
+                      </span>
+                      <button
+                        onClick={handleCancel}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 4,
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <X size={14} weight="light" color={COLORS.textDim} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {projects.map((proj) => {
               const projLessons = proj.agents.reduce(
                 (s, a) => s + a.lessons,
