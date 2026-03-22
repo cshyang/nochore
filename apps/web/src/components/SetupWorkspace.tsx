@@ -110,11 +110,13 @@ export function SetupWorkspace({
 
   const [streamingBlueprint, setStreamingBlueprint] = useState<Partial<Blueprint> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [streamChunkCount, setStreamChunkCount] = useState(0);
 
   const submitBlueprint = useCallback(
     async (body: Record<string, unknown>) => {
       setIsGenerating(true);
       setStreamingBlueprint(null);
+      setStreamChunkCount(0);
 
       try {
         const res = await fetch("/api/blueprint", {
@@ -149,6 +151,11 @@ export function SetupWorkspace({
               if (parsed._error) throw new Error(parsed._error);
               lastPartial = parsed;
               setStreamingBlueprint(parsed);
+              setStreamChunkCount((c) => c + 1);
+              if (process.env.NODE_ENV === "development") {
+                const fields = Object.keys(parsed).filter((k) => parsed[k] != null);
+                console.log(`[blueprint stream] chunk, fields: ${fields.join(", ")}`);
+              }
             } catch (e) {
               if (e instanceof Error && e.message !== "Stream error") throw e;
             }
@@ -599,14 +606,25 @@ export function SetupWorkspace({
             }}
           >
             {messages.map((msg, i) => {
-              // Derive thinking label from what's arrived in the streaming blueprint
+              // Derive thinking label from streaming progress
               let thinkingLabel: string | undefined;
               if ("isLoading" in msg && msg.isLoading && isGenerating) {
-                if (!streamingBlueprint?.agentName) thinkingLabel = "Understanding your intent";
-                else if (!streamingBlueprint?.skills?.length) thinkingLabel = "Selecting skills";
-                else if (!streamingBlueprint?.connections?.length) thinkingLabel = "Identifying connections";
-                else if (!streamingBlueprint?.policies?.length) thinkingLabel = "Drafting policies";
-                else thinkingLabel = "Finalizing blueprint";
+                const bp = streamingBlueprint;
+                if (streamChunkCount === 0) {
+                  thinkingLabel = "Understanding your intent";
+                } else if (!bp?.agentName || bp.agentName.length < 3) {
+                  thinkingLabel = "Naming your agent";
+                } else if (!bp?.skills || bp.skills.length === 0) {
+                  thinkingLabel = "Selecting skills";
+                } else if (!bp?.connections || bp.connections.length === 0) {
+                  thinkingLabel = "Identifying connections";
+                } else if (!bp?.policies || bp.policies.length === 0) {
+                  thinkingLabel = "Drafting policy rules";
+                } else if (!bp?.schedule) {
+                  thinkingLabel = "Setting schedule";
+                } else {
+                  thinkingLabel = "Finalizing blueprint";
+                }
               }
               return (
                 <ChatBubble
