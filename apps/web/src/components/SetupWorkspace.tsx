@@ -111,12 +111,14 @@ export function SetupWorkspace({
   const [streamingBlueprint, setStreamingBlueprint] = useState<Partial<Blueprint> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamChunkCount, setStreamChunkCount] = useState(0);
+  const [reasoningText, setReasoningText] = useState("");
 
   const submitBlueprint = useCallback(
     async (body: Record<string, unknown>) => {
       setIsGenerating(true);
       setStreamingBlueprint(null);
       setStreamChunkCount(0);
+      setReasoningText("");
 
       try {
         const res = await fetch("/api/blueprint", {
@@ -150,19 +152,29 @@ export function SetupWorkspace({
               const parsed = JSON.parse(line);
               if (parsed._error) throw new Error(parsed._error);
 
+              // Handle reasoning events — model thinking out loud
+              if (parsed._type === "reasoning") {
+                setReasoningText((prev) => prev + (parsed.text ?? ""));
+                continue;
+              }
+
+              // Handle blueprint partial snapshots
+              // Strip the _type field before processing
+              const { _type, ...blueprintData } = parsed;
+
               // Normalize field names — some models (e.g., Zhipu GLM) output
               // natural names instead of schema names when structuredOutputs
               // is not supported
               const normalized: Partial<Blueprint> = {
-                ...parsed,
-                agentName: parsed.agentName ?? parsed.name ?? parsed.agent_name,
-                summary: parsed.summary ?? parsed.description ?? parsed.desc,
+                ...blueprintData,
+                agentName: blueprintData.agentName ?? blueprintData.name ?? blueprintData.agent_name,
+                summary: blueprintData.summary ?? blueprintData.description ?? blueprintData.desc,
               };
-              // Clean up alternate keys
               delete (normalized as Record<string, unknown>).name;
               delete (normalized as Record<string, unknown>).description;
               delete (normalized as Record<string, unknown>).desc;
               delete (normalized as Record<string, unknown>).agent_name;
+              delete (normalized as Record<string, unknown>)._type;
 
               lastPartial = normalized;
               setStreamingBlueprint(normalized);
@@ -211,11 +223,15 @@ export function SetupWorkspace({
             ];
           }
           const name = finalBlueprint!.agentName ?? "Your Agent";
+          const r = finalBlueprint!.reasoning;
+          const reasoningSummary = r
+            ? `\n\n**Why this setup:**\n- **Skills:** ${r.skills}\n- **Connections:** ${r.connections}\n- **Policies:** ${r.policies}\n- **Schedule:** ${r.schedule}`
+            : "";
           return [
             ...withoutLoading,
             {
               role: "ai" as const,
-              content: `Here's your blueprint for **${name}**. Review it on the right, adjust anything you like, and launch when ready.`,
+              content: `Here's your blueprint for **${name}**.${reasoningSummary}\n\nReview it on the right, adjust anything you like, and launch when ready.`,
             },
           ];
         });
@@ -621,7 +637,13 @@ export function SetupWorkspace({
               let thinkingLabel: string | undefined;
               if ("isLoading" in msg && msg.isLoading && isGenerating) {
                 const bp = streamingBlueprint;
-                if (streamChunkCount === 0) {
+                if (reasoningText) {
+                  // Model is thinking — show a trimmed snippet
+                  const lastLine = reasoningText.trim().split("\n").pop() ?? "";
+                  thinkingLabel = lastLine.length > 60
+                    ? lastLine.slice(0, 57) + "..."
+                    : lastLine || "Thinking";
+                } else if (streamChunkCount === 0) {
                   thinkingLabel = "Understanding your intent";
                 } else if (!bp?.agentName || bp.agentName.length < 3) {
                   thinkingLabel = "Naming your agent";

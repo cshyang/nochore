@@ -81,6 +81,12 @@ export const BlueprintSchema = z.object({
     }),
   ).describe("1-3 autonomy rules for the agent"),
   schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
+  reasoning: z.object({
+    skills: z.string().describe("Why you chose these skills — what user problem they solve"),
+    connections: z.string().describe("Why these connections are needed and how the agent will use them"),
+    policies: z.string().describe("Why you set these autonomy levels — what's safe to automate vs. what needs human judgment"),
+    schedule: z.string().describe("Why this frequency makes sense for the user's use case"),
+  }).describe("Explain your reasoning for each configuration choice"),
   clarifyingQuestion: z.string().optional().describe("Only include if genuinely needed to understand the intent"),
 });
 
@@ -120,7 +126,7 @@ export const Route = createFileRoute("/api/blueprint")({
           )
           .join("\n");
 
-        const prompt = `You are configuring an AI agent for a business user. Based on their intent, generate a complete agent configuration.
+        const prompt = `You are configuring an AI agent for a business user. Based on their intent, generate a complete agent configuration. Think carefully about what the user actually needs, then explain your reasoning for each choice.
 
 User's intent: "${intent}"
 ${clarification ? `\nUser's clarification: "${clarification}"` : ""}
@@ -128,38 +134,85 @@ ${clarification ? `\nUser's clarification: "${clarification}"` : ""}
 Available skills (select by id):
 ${skillsList || "No skills registered yet."}
 
+Available connections (select by provider slug):
+- googleads: Google Ads — campaign data, search terms, budgets, performance metrics
+- slack: Slack — notifications, alerts, team messaging
+- meta: Meta Ads — Facebook/Instagram ad campaigns and performance
+- ga4: Google Analytics 4 — website traffic, conversions, user behavior
+- shopify: Shopify — orders, products, inventory, revenue
+- stripe: Stripe — payments, subscriptions, revenue data
+- github: GitHub — repositories, issues, pull requests, deployments
+
 ${existingConnections.length ? `Already connected: ${existingConnections.join(", ")}` : "No existing connections."}
 
 Instructions:
 - Select relevant skills from the available list by their id. If no skills match, return an empty array.
-- For connections, suggest providers the agent needs (use slugs: "googleads", "slack", "meta", "ga4", "shopify", "stripe", "github")
-- For policies, generate 1-3 natural-language questions about autonomy. Frame each as "When I [action]..." from the agent's perspective.
-- defaultLevel must be exactly one of: "auto", "ask", "notify"
-- schedule must be exactly one of: "hourly", "6hours", "daily", "weekly", "manual"
-- Extract the project/client name from the intent if mentioned
-- Do NOT include clarifyingQuestion unless genuinely needed`;
+- For connections, suggest ONLY providers the agent actually needs based on the intent. Don't add connections just because they exist.
+- For policies, generate 1-3 rules about autonomy. Frame each question as "When I [action]..." from the agent's perspective. Set defaultLevel to "auto" for low-risk actions, "ask" for high-impact changes, "notify" for informational actions.
+- Choose a schedule that matches the urgency of the use case.
+- In the reasoning object, explain WHY you made each choice — help the user understand your thinking so they can adjust confidently.
+- Do NOT include clarifyingQuestion unless you genuinely cannot determine the agent's purpose.`;
+
+        const providerName = process.env.LLM_PROVIDER ?? "anthropic";
 
         const result = streamText({
           model,
           output: Output.object({ schema: BlueprintSchema }),
           prompt,
+          providerOptions: {
+            [providerName]: {
+              reasoningEffort: "high",
+            },
+          },
         });
 
-        // Stream partial objects as newline-delimited JSON (NDJSON)
-        // Each line is a complete, parseable JSON snapshot of the blueprint so far
+        // Stream NDJSON lines: partial blueprint objects + reasoning events
+        // Line types:
+        //   { _type: "reasoning", text: "..." }   — model thinking (if supported)
+        //   { _type: "blueprint", ...partialObj }  — progressive blueprint snapshot
+        //   { _error: "..." }                      — error
         const encoder = new TextEncoder();
+
         const stream = new ReadableStream({
           async start(controller) {
+            const send = (obj: Record<string, unknown>) => {
+              controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+            };
+
+            let accumulatedText = "";
+            let lastPartialJson = "";
+
             try {
-              for await (const partial of result.partialOutputStream) {
-                const line = JSON.stringify(partial) + "\n";
-                controller.enqueue(encoder.encode(line));
+              for await (const event of result.fullStream) {
+                if (event.type === "reasoning-delta") {
+                  send({ _type: "reasoning", text: event.text });
+                } else if (event.type === "text-delta") {
+                  accumulatedText += event.text;
+
+                  // Try parsing accumulated text as JSON for partial blueprint
+                  try {
+                    const partial = JSON.parse(accumulatedText);
+                    const json = JSON.stringify(partial);
+                    if (json !== lastPartialJson) {
+                      lastPartialJson = json;
+                      send({ _type: "blueprint", ...partial });
+                    }
+                  } catch {
+                    // Not valid JSON yet — keep accumulating
+                  }
+                }
+              }
+
+              // Final parse for complete object
+              try {
+                const final = JSON.parse(accumulatedText);
+                send({ _type: "blueprint", ...final });
+              } catch {
+                // Already sent last valid partial
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Stream error";
-              controller.enqueue(
-                encoder.encode(JSON.stringify({ _error: msg }) + "\n"),
-              );
+              send({ _error: msg });
             } finally {
               controller.close();
             }
