@@ -167,7 +167,12 @@ export function SetupWorkspace({
             }
 
             // Handle blueprint partial snapshots
-            const { _type, ...blueprintData } = parsed;
+            const { _type, ...rawData } = parsed;
+
+            // Some models (Zhipu GLM) wrap output in an "answer" key
+            const blueprintData = rawData.answer && typeof rawData.answer === "object"
+              ? (rawData.answer as Record<string, unknown>)
+              : rawData;
 
             // Normalize field names — some models output natural names
             // instead of schema names when structuredOutputs is not supported
@@ -181,6 +186,7 @@ export function SetupWorkspace({
             delete (normalized as Record<string, unknown>).desc;
             delete (normalized as Record<string, unknown>).agent_name;
             delete (normalized as Record<string, unknown>)._type;
+            delete (normalized as Record<string, unknown>).answer;
 
             lastPartial = normalized;
             setStreamingBlueprint(normalized);
@@ -194,12 +200,15 @@ export function SetupWorkspace({
           try {
             const parsed = JSON.parse(buffer);
             if (!parsed._error && parsed._type !== "reasoning") {
-              const { _type, ...data } = parsed;
+              const { _type, ...rawData } = parsed;
+              const data = rawData.answer && typeof rawData.answer === "object"
+                ? (rawData.answer as Record<string, unknown>)
+                : rawData;
               lastPartial = {
                 ...data,
                 agentName: data.agentName ?? data.name ?? data.agent_name,
                 summary: data.summary ?? data.description ?? data.desc,
-              };
+              } as Partial<Blueprint>;
             }
           } catch {
             console.warn("[blueprint stream] unparseable final buffer:", buffer.slice(0, 100));
