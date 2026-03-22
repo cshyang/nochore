@@ -174,19 +174,36 @@ export function SetupWorkspace({
               ? (rawData.answer as Record<string, unknown>)
               : rawData;
 
-            // Normalize field names — some models output natural names
-            // instead of schema names when structuredOutputs is not supported
+            // Normalize — models without structuredOutputs produce varied shapes
+            const bd = blueprintData as Record<string, unknown>;
+
+            // Normalize connections: string[] → {provider, reason}[]
+            let connections = bd.connections as unknown;
+            if (Array.isArray(connections) && connections.length > 0 && typeof connections[0] === "string") {
+              connections = (connections as string[]).map((p) => ({ provider: p, reason: "" }));
+            }
+
+            // Normalize policies: {rule} → {question}
+            let policies = bd.policies as unknown;
+            if (Array.isArray(policies)) {
+              policies = (policies as Record<string, unknown>[]).map((p) => ({
+                ...p,
+                question: p.question ?? p.rule ?? p.description ?? "",
+                action: p.action ?? "",
+              }));
+            }
+
             const normalized: Partial<Blueprint> = {
               ...blueprintData,
-              agentName: (blueprintData.agentName ?? blueprintData.name ?? blueprintData.agent_name) as string | undefined,
-              summary: (blueprintData.summary ?? blueprintData.description ?? blueprintData.desc) as string | undefined,
+              agentName: (bd.agentName ?? bd.name ?? bd.agent_name ?? bd.agentname) as string | undefined,
+              summary: (bd.summary ?? bd.description ?? bd.desc) as string | undefined,
+              connections: connections as Blueprint["connections"] | undefined,
+              policies: policies as Blueprint["policies"] | undefined,
             };
-            delete (normalized as Record<string, unknown>).name;
-            delete (normalized as Record<string, unknown>).description;
-            delete (normalized as Record<string, unknown>).desc;
-            delete (normalized as Record<string, unknown>).agent_name;
-            delete (normalized as Record<string, unknown>)._type;
-            delete (normalized as Record<string, unknown>).answer;
+            // Clean up alternate keys
+            for (const key of ["name", "description", "desc", "agent_name", "agentname", "_type", "answer", "rule"]) {
+              delete (normalized as Record<string, unknown>)[key];
+            }
 
             lastPartial = normalized;
             setStreamingBlueprint(normalized);
@@ -216,10 +233,20 @@ export function SetupWorkspace({
         }
 
         if (!lastPartial) throw new Error("No blueprint data received from the model. Check the server logs.");
-        if (!lastPartial.agentName && !lastPartial.skills) {
-          console.error("[blueprint stream] final partial missing key fields:", lastPartial);
-          throw new Error("Blueprint generation returned incomplete data. The model may not support structured output.");
+        // Fill defaults for missing fields
+        if (!lastPartial.agentName) {
+          // Derive a name from the intent
+          const words = intent.split(" ").slice(0, 3).join(" ");
+          lastPartial.agentName = words ? `${words} Agent` : "Your Agent";
         }
+        if (!lastPartial.summary) {
+          lastPartial.summary = intent;
+        }
+        if (!lastPartial.skills) lastPartial.skills = [];
+        if (!lastPartial.connections) lastPartial.connections = [];
+        if (!lastPartial.policies) lastPartial.policies = [];
+        if (!lastPartial.schedule) lastPartial.schedule = "daily";
+
         const finalBlueprint = lastPartial as Blueprint;
 
         // Apply completed blueprint to editable state
