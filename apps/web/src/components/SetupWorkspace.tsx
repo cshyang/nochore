@@ -149,13 +149,24 @@ export function SetupWorkspace({
             try {
               const parsed = JSON.parse(line);
               if (parsed._error) throw new Error(parsed._error);
-              lastPartial = parsed;
-              setStreamingBlueprint(parsed);
+
+              // Normalize field names — some models (e.g., Zhipu GLM) output
+              // natural names instead of schema names when structuredOutputs
+              // is not supported
+              const normalized: Partial<Blueprint> = {
+                ...parsed,
+                agentName: parsed.agentName ?? parsed.name ?? parsed.agent_name,
+                summary: parsed.summary ?? parsed.description ?? parsed.desc,
+              };
+              // Clean up alternate keys
+              delete (normalized as Record<string, unknown>).name;
+              delete (normalized as Record<string, unknown>).description;
+              delete (normalized as Record<string, unknown>).desc;
+              delete (normalized as Record<string, unknown>).agent_name;
+
+              lastPartial = normalized;
+              setStreamingBlueprint(normalized);
               setStreamChunkCount((c) => c + 1);
-              if (process.env.NODE_ENV === "development") {
-                const fields = Object.keys(parsed).filter((k) => parsed[k] != null);
-                console.log(`[blueprint stream] chunk, fields: ${fields.join(", ")}`);
-              }
             } catch (e) {
               if (e instanceof Error && e.message !== "Stream error") throw e;
             }
