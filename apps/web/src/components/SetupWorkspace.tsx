@@ -129,31 +129,42 @@ export function SetupWorkspace({
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let accumulated = "";
+        let buffer = "";
+        let lastPartial: Partial<Blueprint> | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          accumulated += decoder.decode(value, { stream: true });
+          buffer += decoder.decode(value, { stream: true });
 
-          // Try parsing the accumulated text as JSON
-          try {
-            const partial = JSON.parse(accumulated);
-            setStreamingBlueprint(partial);
-          } catch {
-            // Not valid JSON yet — keep accumulating
+          // Parse complete NDJSON lines (each line is a full JSON snapshot)
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? ""; // keep incomplete last line in buffer
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed._error) throw new Error(parsed._error);
+              lastPartial = parsed;
+              setStreamingBlueprint(parsed);
+            } catch (e) {
+              if (e instanceof Error && e.message !== "Stream error") throw e;
+            }
           }
         }
 
-        // Final parse
-        let finalBlueprint: Blueprint | null = null;
-        try {
-          finalBlueprint = JSON.parse(accumulated) as Blueprint;
-          setStreamingBlueprint(finalBlueprint);
-        } catch {
-          throw new Error("Failed to parse blueprint response");
+        // Parse any remaining buffer
+        if (buffer.trim()) {
+          try {
+            const parsed = JSON.parse(buffer);
+            if (!parsed._error) lastPartial = parsed;
+          } catch { /* ignore */ }
         }
+
+        if (!lastPartial) throw new Error("No blueprint data received");
+        const finalBlueprint = lastPartial as Blueprint;
 
         // Apply completed blueprint to editable state
         const skills: Record<string, boolean> = {};

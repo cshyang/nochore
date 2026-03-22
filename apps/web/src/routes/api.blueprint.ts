@@ -145,7 +145,33 @@ Instructions:
           prompt,
         });
 
-        return result.toTextStreamResponse();
+        // Stream partial objects as newline-delimited JSON (NDJSON)
+        // Each line is a complete, parseable JSON snapshot of the blueprint so far
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const partial of result.partialOutputStream) {
+                const line = JSON.stringify(partial) + "\n";
+                controller.enqueue(encoder.encode(line));
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Stream error";
+              controller.enqueue(
+                encoder.encode(JSON.stringify({ _error: msg }) + "\n"),
+              );
+            } finally {
+              controller.close();
+            }
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "application/x-ndjson",
+            "Cache-Control": "no-cache",
+          },
+        });
       },
     },
   },
