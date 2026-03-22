@@ -1,4 +1,4 @@
-import { generateObject, jsonSchema } from "ai";
+import { generateText, Output, jsonSchema } from "ai";
 import type { LanguageModelV1 } from "ai";
 import type { SkillDefinition, SkillData } from "../types/skill";
 
@@ -29,9 +29,9 @@ export function createModel(modelOverride?: string): LanguageModelV1 {
       const zhipu = createOpenAICompatible({
         name: "zhipu",
         baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
-        apiKey: process.env.ZHIPU_API_KEY ?? process.env.LLM_API_KEY,
+        apiKey: process.env.ZAI_API_KEY,
       });
-      return zhipu(modelOverride ?? process.env.LLM_MODEL ?? "glm-4");
+      return zhipu(modelOverride ?? process.env.LLM_MODEL ?? "glm-4.7");
     }
 
     case "openai": {
@@ -111,14 +111,14 @@ export async function executeSkill(
 
     const model = createModel(options?.model);
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
       system: systemPrompt,
       prompt: JSON.stringify(data),
-      schema: jsonSchema(skill.outputSchema),
+      output: Output.object({ schema: jsonSchema(skill.outputSchema) }),
     });
 
-    return result.object;
+    return result.output;
   }
 
   throw new Error(

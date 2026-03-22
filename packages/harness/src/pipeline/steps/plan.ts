@@ -1,4 +1,4 @@
-import { generateObject, jsonSchema } from "ai";
+import { generateText, Output, jsonSchema } from "ai";
 import type { ActionProposal } from "../../types/action";
 import type { StepOutput, LlmUsage } from "../../types/run";
 import type { AssembledContext } from "../../context/assembler";
@@ -86,14 +86,14 @@ export async function planActions(params: {
   // Call AI SDK generateObject to produce proposals
   const model = createModel(params.model);
 
-  const result = await generateObject({
+  const result = await generateText({
     model,
     system: params.context.systemPrompt,
     prompt: JSON.stringify({ skillOutputs: successfulOutputs }),
-    schema: jsonSchema(PROPOSALS_SCHEMA),
+    output: Output.object({ schema: jsonSchema(PROPOSALS_SCHEMA) }),
   });
 
-  const raw = (result as any).object as {
+  const raw = result.output as {
     proposals: Array<Partial<ActionProposal>>;
   };
 
@@ -105,9 +105,7 @@ export async function planActions(params: {
   })) as ActionProposal[];
 
   // Build LLM usage if available
-  const usage = (result as any).usage as
-    | { promptTokens?: number; completionTokens?: number }
-    | undefined;
+  const usage = result.usage;
 
   let llmUsage: LlmUsage | undefined;
   if (usage) {

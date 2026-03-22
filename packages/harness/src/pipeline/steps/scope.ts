@@ -1,4 +1,4 @@
-import { generateObject, jsonSchema } from "ai";
+import { generateText, Output, jsonSchema } from "ai";
 import type { AgentConfig } from "../../types/agent-config";
 import type { TriggerEvent, StepOutput } from "../../types/run";
 import type { AssembledContext } from "../../context/assembler";
@@ -44,7 +44,7 @@ export async function resolveScope(params: {
   // Priority 3: LLM-based scope resolution
   const model = createModel(config.model);
 
-  const result = await generateObject({
+  const result = await generateText({
     model,
     system: context.systemPrompt,
     prompt: JSON.stringify({
@@ -52,17 +52,19 @@ export async function resolveScope(params: {
       triggerType: trigger.type,
       triggerMetadata: trigger.metadata,
     }),
-    schema: jsonSchema({
-      type: "object",
-      properties: {
-        selectedSkills: { type: "array", items: { type: "string" } },
-        reasoning: { type: "string" },
-      },
-      required: ["selectedSkills", "reasoning"],
+    output: Output.object({
+      schema: jsonSchema({
+        type: "object",
+        properties: {
+          selectedSkills: { type: "array", items: { type: "string" } },
+          reasoning: { type: "string" },
+        },
+        required: ["selectedSkills", "reasoning"],
+      }),
     }),
   });
 
-  const llmResult = result.object as {
+  const llmResult = result.output as {
     selectedSkills: string[];
     reasoning: string;
   };
@@ -79,8 +81,8 @@ export async function resolveScope(params: {
 
   const duration = performance.now() - start;
 
-  // Extract LLM usage if available
-  const usage = (result as any).usage;
+  // Extract LLM usage
+  const usage = result.usage;
   const llmUsage = usage
     ? {
         inputTokens: usage.promptTokens ?? 0,
