@@ -53,6 +53,14 @@ const SCHEDULES = [
   { value: "manual", label: "Manual" },
 ] as const;
 
+const THINKING_STEPS = [
+  { label: "Understanding your intent", delay: 0 },
+  { label: "Selecting relevant skills", delay: 2000 },
+  { label: "Identifying connections needed", delay: 4500 },
+  { label: "Drafting policy rules", delay: 7000 },
+  { label: "Building your blueprint", delay: 9500 },
+];
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -101,6 +109,10 @@ export function SetupWorkspace({
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Thinking progress
+  const [thinkingStep, setThinkingStep] = useState(0);
+  const thinkingTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -139,6 +151,13 @@ export function SetupWorkspace({
     async (userIntent: string, clarification?: string) => {
       setIsGenerating(true);
       setError(null);
+      setThinkingStep(0);
+
+      // Start thinking step progression
+      thinkingTimersRef.current.forEach(clearTimeout);
+      thinkingTimersRef.current = THINKING_STEPS.slice(1).map((step, i) =>
+        setTimeout(() => setThinkingStep(i + 1), step.delay),
+      );
 
       // Show loading bubble
       setMessages((prev) => [
@@ -193,6 +212,9 @@ export function SetupWorkspace({
         setError(msg);
       } finally {
         setIsGenerating(false);
+        setThinkingStep(0);
+        thinkingTimersRef.current.forEach(clearTimeout);
+        thinkingTimersRef.current = [];
       }
     },
     [availableSkills, applyBlueprint],
@@ -544,7 +566,11 @@ export function SetupWorkspace({
             }}
           >
             {messages.map((msg, i) => (
-              <ChatBubble key={i} message={msg} />
+              <ChatBubble
+                key={i}
+                message={msg}
+                thinkingLabel={"isLoading" in msg && msg.isLoading ? THINKING_STEPS[thinkingStep]?.label : undefined}
+              />
             ))}
             <div ref={messagesEndRef} />
           </div>
@@ -698,7 +724,7 @@ export function SetupWorkspace({
               </p>
             </div>
           ) : isGenerating && !blueprint ? (
-            // Loading state — before any blueprint exists
+            // Loading state — progressive steps
             <div
               style={{
                 flex: 1,
@@ -706,7 +732,7 @@ export function SetupWorkspace({
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 16,
+                gap: 32,
               }}
             >
               <span
@@ -718,9 +744,55 @@ export function SetupWorkspace({
               >
                 ✦
               </span>
-              <p style={{ color: COLORS.textSecondary, fontSize: 14, margin: 0 }}>
-                Understanding your intent...
-              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 240 }}>
+                {THINKING_STEPS.map((step, i) => {
+                  const isDone = i < thinkingStep;
+                  const isActive = i === thinkingStep;
+                  return (
+                    <div
+                      key={step.label}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        opacity: isDone || isActive ? 1 : 0.3,
+                        transition: "opacity 0.3s ease",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 99,
+                          background: isDone ? COLORS.accent : isActive ? COLORS.accentDim : "transparent",
+                          border: `1.5px solid ${isDone || isActive ? COLORS.accent : COLORS.border}`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          fontSize: 12,
+                          color: COLORS.white,
+                          transition: "all 0.3s ease",
+                        }}
+                      >
+                        {isDone ? "✓" : isActive ? (
+                          <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.accent, animation: "sw-pulse 1s ease-in-out infinite" }} />
+                        ) : null}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: isDone ? COLORS.textSecondary : isActive ? COLORS.text : COLORS.textDim,
+                          fontWeight: isActive ? 500 : 400,
+                          transition: "color 0.3s ease",
+                        }}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : blueprint ? (
             // Blueprint
@@ -1043,7 +1115,7 @@ export function SetupWorkspace({
 // Helper components
 // ---------------------------------------------------------------------------
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({ message, thinkingLabel }: { message: ChatMessage; thinkingLabel?: string }) {
   const isUser = message.role === "user";
   const isLoading = "isLoading" in message && message.isLoading;
 
@@ -1070,7 +1142,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             marginTop: 2,
           }}
         >
-          <span style={{ color: COLORS.accent, fontSize: 11 }}>✦</span>
+          <span style={{ color: COLORS.accent, fontSize: 12, animation: isLoading ? "sw-pulse 1.2s ease-in-out infinite" : "none" }}>✦</span>
         </div>
       )}
       <div
@@ -1086,14 +1158,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         }}
       >
         {isLoading ? (
-          <span
-            style={{
-              color: COLORS.textDim,
-              animation: "sw-pulse 1.2s ease-in-out infinite",
-              display: "inline-block",
-            }}
-          >
-            ✦
+          <span style={{ color: COLORS.textSecondary, fontSize: 13 }}>
+            {thinkingLabel || "Thinking"}
+            <span style={{ animation: "sw-pulse 1s ease-in-out infinite", display: "inline-block", marginLeft: 2 }}>...</span>
           </span>
         ) : (
           renderMarkdown(message.content)
