@@ -19,8 +19,7 @@ import type { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
-import { BlueprintSchema } from "~/routes/api.blueprint";
-import type { Blueprint } from "~/routes/api.blueprint";
+import type { ExpandedBlueprint } from "~/routes/api.blueprint";
 import { createAgent } from "~/server/agents";
 import { createProject } from "~/server/projects";
 
@@ -87,7 +86,7 @@ export function SetupWorkspace({
 
   // Blueprint state
   const [intent, setIntent] = useState("");
-  const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
+  const [blueprint, setBlueprint] = useState<ExpandedBlueprint | null>(null);
   const [awaitingClarification, setAwaitingClarification] = useState(false);
 
   // Blueprint adjustments (live-editable)
@@ -108,7 +107,7 @@ export function SetupWorkspace({
   // Streaming blueprint via fetch + ReadableStream
   // -------------------------------------------------------------------------
 
-  const [streamingBlueprint, setStreamingBlueprint] = useState<Partial<Blueprint> | null>(null);
+  const [streamingBlueprint, setStreamingBlueprint] = useState<Partial<ExpandedBlueprint> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamChunkCount, setStreamChunkCount] = useState(0);
   const [reasoningText, setReasoningText] = useState("");
@@ -134,7 +133,7 @@ export function SetupWorkspace({
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-        let lastPartial: Partial<Blueprint> | null = null;
+        let lastPartial: Partial<ExpandedBlueprint> | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -169,7 +168,7 @@ export function SetupWorkspace({
             // Blueprint partial — tool args match schema exactly, no normalization needed
             if (parsed._type === "blueprint") {
               const { _type, ...blueprint } = parsed;
-              lastPartial = blueprint as Partial<Blueprint>;
+              lastPartial = blueprint as Partial<ExpandedBlueprint>;
               setStreamingBlueprint(lastPartial);
               setStreamChunkCount((c) => c + 1);
             }
@@ -182,7 +181,7 @@ export function SetupWorkspace({
             const parsed = JSON.parse(buffer);
             if (parsed._type === "blueprint") {
               const { _type, ...blueprint } = parsed;
-              lastPartial = blueprint as Partial<Blueprint>;
+              lastPartial = blueprint as Partial<ExpandedBlueprint>;
             }
           } catch {
             console.warn("[blueprint stream] unparseable final buffer:", buffer.slice(0, 100));
@@ -190,7 +189,7 @@ export function SetupWorkspace({
         }
 
         if (!lastPartial) throw new Error("No blueprint data received. The model may not support tool calling.");
-        const finalBlueprint = lastPartial as Blueprint;
+        const finalBlueprint = lastPartial as ExpandedBlueprint;
 
         // Apply completed blueprint to editable state
         const skills: Record<string, boolean> = {};

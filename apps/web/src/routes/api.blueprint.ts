@@ -63,27 +63,96 @@ async function createModel() {
 // Blueprint schema — used as tool parameters (contract, not suggestion)
 // ---------------------------------------------------------------------------
 
+// Tool schema — flat, simple, easy for the model to fill
 export const BlueprintSchema = z.object({
   agentName: z.string().describe("A short, memorable name for the agent"),
   summary: z.string().describe("One-sentence description of what the agent does"),
-  skills: z.array(z.string()).describe("Array of skill IDs to enable from the available list"),
-  connections: z.array(
-    z.object({
-      provider: z.string().describe("Provider slug: googleads, slack, meta, ga4, shopify, stripe, github"),
-      reason: z.string().describe("Why this connection is needed"),
-    }),
-  ).describe("External service connections the agent needs"),
-  policies: z.array(
-    z.object({
-      action: z.string().describe("The action this policy governs"),
-      question: z.string().describe("Natural language question framed as 'When I [action]...' from the agent's perspective"),
-      defaultLevel: z.enum(["auto", "ask", "notify"]).describe("auto for low-risk, ask for high-impact, notify for informational"),
-    }),
-  ).describe("1-3 autonomy rules for the agent"),
+  skills: z.array(z.string()).describe("Skill IDs to enable, from the available list"),
+  connections: z.array(z.string()).describe("Provider slugs the agent needs: googleads, slack, meta, ga4, shopify, stripe, github"),
   schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
 });
 
 export type Blueprint = z.infer<typeof BlueprintSchema>;
+
+// Full blueprint with platform-generated policies + connection details
+// This is what the client works with after we expand the tool output
+export interface ExpandedBlueprint {
+  agentName: string;
+  summary: string;
+  skills: string[];
+  connections: Array<{ provider: string; reason: string }>;
+  policies: Array<{ action: string; question: string; defaultLevel: "auto" | "ask" | "notify" }>;
+  schedule: "hourly" | "6hours" | "daily" | "weekly" | "manual";
+}
+
+// Provider descriptions — used to generate connection reasons
+const PROVIDER_INFO: Record<string, { name: string; reason: string }> = {
+  googleads: { name: "Google Ads", reason: "Pull campaign data, search terms, and budget metrics" },
+  slack: { name: "Slack", reason: "Send alerts and reports to your team" },
+  meta: { name: "Meta Ads", reason: "Monitor Facebook/Instagram ad performance" },
+  ga4: { name: "Google Analytics", reason: "Track website traffic and conversions" },
+  shopify: { name: "Shopify", reason: "Monitor orders, inventory, and revenue" },
+  stripe: { name: "Stripe", reason: "Track payments and subscription metrics" },
+  github: { name: "GitHub", reason: "Monitor repository activity and deployments" },
+};
+
+// Default policies generated from skills + connections
+function generateDefaultPolicies(
+  skills: string[],
+  connections: string[],
+): ExpandedBlueprint["policies"] {
+  const policies: ExpandedBlueprint["policies"] = [];
+
+  if (skills.includes("search_terms")) {
+    policies.push({
+      action: "add-negatives",
+      question: "When I find wasteful search terms, should I add negative keywords?",
+      defaultLevel: "ask",
+    });
+  }
+
+  if (connections.includes("googleads")) {
+    policies.push({
+      action: "budget-changes",
+      question: "When I spot budget inefficiencies, should I adjust spend?",
+      defaultLevel: "ask",
+    });
+  }
+
+  if (connections.includes("slack")) {
+    policies.push({
+      action: "send-alerts",
+      question: "When I find something noteworthy, should I notify your team?",
+      defaultLevel: "auto",
+    });
+  }
+
+  // Always add a general monitoring policy if none generated
+  if (policies.length === 0) {
+    policies.push({
+      action: "report-findings",
+      question: "When I find issues, should I report them automatically?",
+      defaultLevel: "notify",
+    });
+  }
+
+  return policies;
+}
+
+// Expand flat blueprint → full blueprint with policies + connection details
+function expandBlueprint(raw: Blueprint): ExpandedBlueprint {
+  return {
+    agentName: raw.agentName,
+    summary: raw.summary,
+    skills: raw.skills,
+    connections: raw.connections.map((slug) => ({
+      provider: slug,
+      reason: PROVIDER_INFO[slug]?.reason ?? "Required for this agent",
+    })),
+    policies: generateDefaultPolicies(raw.skills, raw.connections),
+    schedule: raw.schedule,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // API route handler
@@ -119,26 +188,20 @@ export const Route = createFileRoute("/api/blueprint")({
           )
           .join("\n");
 
-        const prompt = `You are configuring an AI agent for a business user. Analyze their intent, then call the create_blueprint tool with a complete agent configuration.
+        const prompt = `Configure an AI agent for a business user. Analyze their intent, pick the right skills and connections, then call create_blueprint.
 
 User's intent: "${intent}"
-${clarification ? `\nUser's clarification: "${clarification}"` : ""}
+${clarification ? `\nClarification: "${clarification}"` : ""}
 
-Available skills (select by id):
-${skillsList || "No skills registered yet."}
+Available skills:
+${skillsList || "None available yet."}
 
-Available connections (select by provider slug):
-- googleads: Google Ads — campaign data, search terms, budgets, performance metrics
-- slack: Slack — notifications, alerts, team messaging
-- meta: Meta Ads — Facebook/Instagram ad campaigns and performance
-- ga4: Google Analytics 4 — website traffic, conversions, user behavior
-- shopify: Shopify — orders, products, inventory, revenue
-- stripe: Stripe — payments, subscriptions, revenue data
-- github: GitHub — repositories, issues, pull requests, deployments
+Available connections:
+googleads, slack, meta, ga4, shopify, stripe, github
 
-${existingConnections.length ? `Already connected: ${existingConnections.join(", ")}` : "No existing connections."}
+${existingConnections.length ? `Already connected: ${existingConnections.join(", ")}` : ""}
 
-Call create_blueprint with your configuration. Select ONLY skills and connections the agent actually needs.`;
+Give the agent a clear name and summary. Select ONLY skills and connections it actually needs.`;
 
         const providerName = process.env.LLM_PROVIDER ?? "anthropic";
 
@@ -187,9 +250,9 @@ Call create_blueprint with your configuration. Select ONLY skills and connection
                     // Not valid JSON yet
                   }
                 } else if (event.type === "tool-call") {
-                  // Complete tool call — send final blueprint
-                  const input = event.input as Record<string, unknown>;
-                  send({ _type: "blueprint", ...input });
+                  // Complete tool call — expand and send final blueprint
+                  const expanded = expandBlueprint(event.input as Blueprint);
+                  send({ _type: "blueprint", ...expanded });
                 }
               }
             } catch (err) {
