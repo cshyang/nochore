@@ -13,7 +13,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { X, PaperPlaneTilt, ArrowRight } from "@phosphor-icons/react";
 import { COLORS } from "~/lib/colors";
 import type { ProjectView } from "~/lib/types";
@@ -106,66 +105,109 @@ export function SetupWorkspace({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // -------------------------------------------------------------------------
-  // Streaming blueprint via useObject
+  // Streaming blueprint via fetch + ReadableStream
   // -------------------------------------------------------------------------
 
-  const {
-    object: streamingBlueprint,
-    submit: submitBlueprint,
-    isLoading: isGenerating,
-    error: streamError,
-  } = useObject({
-    api: "/api/blueprint",
-    schema: BlueprintSchema,
-    onFinish({ object: finalBlueprint }) {
-      if (!finalBlueprint) return;
+  const [streamingBlueprint, setStreamingBlueprint] = useState<Partial<Blueprint> | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-      // Apply the completed blueprint to editable state
-      const skills: Record<string, boolean> = {};
-      for (const s of availableSkills) {
-        skills[s.id] = finalBlueprint.skills?.includes(s.id) ?? false;
-      }
-      setSelectedSkills(skills);
+  const submitBlueprint = useCallback(
+    async (body: Record<string, unknown>) => {
+      setIsGenerating(true);
+      setStreamingBlueprint(null);
 
-      const levels: Record<number, "auto" | "ask" | "notify"> = {};
-      finalBlueprint.policies?.forEach((p, i) => {
-        levels[i] = p.defaultLevel;
-      });
-      setPolicyLevels(levels);
-      if (finalBlueprint.schedule) setSchedule(finalBlueprint.schedule);
+      try {
+        const res = await fetch("/api/blueprint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
 
-      setBlueprint(finalBlueprint as Blueprint);
+        if (!res.ok || !res.body) {
+          throw new Error(`Blueprint generation failed: ${res.status}`);
+        }
 
-      // Remove loading bubble and add completion message
-      setMessages((prev) => {
-        const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
-        if (finalBlueprint.clarifyingQuestion && !blueprint) {
-          setAwaitingClarification(true);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          accumulated += decoder.decode(value, { stream: true });
+
+          // Try parsing the accumulated text as JSON
+          try {
+            const partial = JSON.parse(accumulated);
+            setStreamingBlueprint(partial);
+          } catch {
+            // Not valid JSON yet — keep accumulating
+          }
+        }
+
+        // Final parse
+        let finalBlueprint: Blueprint | null = null;
+        try {
+          finalBlueprint = JSON.parse(accumulated) as Blueprint;
+          setStreamingBlueprint(finalBlueprint);
+        } catch {
+          throw new Error("Failed to parse blueprint response");
+        }
+
+        // Apply completed blueprint to editable state
+        const skills: Record<string, boolean> = {};
+        for (const s of availableSkills) {
+          skills[s.id] = finalBlueprint.skills?.includes(s.id) ?? false;
+        }
+        setSelectedSkills(skills);
+
+        const levels: Record<number, "auto" | "ask" | "notify"> = {};
+        finalBlueprint.policies?.forEach((p, i) => {
+          levels[i] = p.defaultLevel;
+        });
+        setPolicyLevels(levels);
+        if (finalBlueprint.schedule) setSchedule(finalBlueprint.schedule);
+
+        setBlueprint(finalBlueprint);
+
+        // Update chat
+        setMessages((prev) => {
+          const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
+          if (finalBlueprint!.clarifyingQuestion && !blueprint) {
+            setAwaitingClarification(true);
+            return [
+              ...withoutLoading,
+              { role: "ai" as const, content: finalBlueprint!.clarifyingQuestion! },
+            ];
+          }
+          const name = finalBlueprint!.agentName ?? "Your Agent";
           return [
             ...withoutLoading,
-            { role: "ai" as const, content: finalBlueprint.clarifyingQuestion },
+            {
+              role: "ai" as const,
+              content: `Here's your blueprint for **${name}**. Review it on the right, adjust anything you like, and launch when ready.`,
+            },
           ];
-        }
-        const name = finalBlueprint.agentName ?? "Your Agent";
-        return [
-          ...withoutLoading,
-          {
-            role: "ai" as const,
-            content: `Here's your blueprint for **${name}**. Review it on the right, adjust anything you like, and launch when ready.`,
-          },
-        ];
-      });
+        });
+      } catch (err) {
+        setMessages((prev) => {
+          const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
+          return [
+            ...withoutLoading,
+            {
+              role: "ai" as const,
+              content: err instanceof Error ? err.message : "Something went wrong. Try again.",
+            },
+          ];
+        });
+        setError(err instanceof Error ? err.message : "Generation failed");
+      } finally {
+        setIsGenerating(false);
+      }
     },
-    onError(err) {
-      setMessages((prev) => {
-        const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
-        return [
-          ...withoutLoading,
-          { role: "ai" as const, content: err.message || "Something went wrong. Try again." },
-        ];
-      });
-    },
-  });
+    [availableSkills, blueprint],
+  );
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
