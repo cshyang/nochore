@@ -63,8 +63,8 @@ async function createModel() {
 // Blueprint schema — used as tool parameters (contract, not suggestion)
 // ---------------------------------------------------------------------------
 
-// Tool schema — flat, simple, easy for the model to fill
-export const BlueprintSchema = z.object({
+// Tool input schema — flat, simple, what the model fills in
+const ToolInputSchema = z.object({
   agentName: z.string().describe("A short, memorable name for the agent"),
   summary: z.string().describe("One-sentence description of what the agent does"),
   skills: z.array(z.string()).describe("Skill IDs to enable, from the available list"),
@@ -72,11 +72,10 @@ export const BlueprintSchema = z.object({
   schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
 });
 
-export type Blueprint = z.infer<typeof BlueprintSchema>;
+type ToolInput = z.infer<typeof ToolInputSchema>;
 
-// Full blueprint with platform-generated policies + connection details
-// This is what the client works with after we expand the tool output
-export interface ExpandedBlueprint {
+// Blueprint — what the client works with (tool output + platform-generated policies)
+export interface Blueprint {
   agentName: string;
   summary: string;
   skills: string[];
@@ -100,8 +99,8 @@ const PROVIDER_INFO: Record<string, { name: string; reason: string }> = {
 function generateDefaultPolicies(
   skills: string[],
   connections: string[],
-): ExpandedBlueprint["policies"] {
-  const policies: ExpandedBlueprint["policies"] = [];
+): Blueprint["policies"] {
+  const policies: Blueprint["policies"] = [];
 
   if (skills.includes("search_terms")) {
     policies.push({
@@ -140,7 +139,7 @@ function generateDefaultPolicies(
 }
 
 // Expand flat blueprint → full blueprint with policies + connection details
-function expandBlueprint(raw: Blueprint): ExpandedBlueprint {
+function expandBlueprint(raw: ToolInput): Blueprint {
   return {
     agentName: raw.agentName,
     summary: raw.summary,
@@ -211,7 +210,7 @@ Give the agent a clear name and summary. Select ONLY skills and connections it a
           tools: {
             create_blueprint: tool({
               description: "Create an agent blueprint based on the user's intent",
-              inputSchema: BlueprintSchema,
+              inputSchema: ToolInputSchema,
             }),
           },
           toolChoice: { type: "tool", toolName: "create_blueprint" },
@@ -251,7 +250,7 @@ Give the agent a clear name and summary. Select ONLY skills and connections it a
                   }
                 } else if (event.type === "tool-call") {
                   // Complete tool call — expand and send final blueprint
-                  const expanded = expandBlueprint(event.input as Blueprint);
+                  const expanded = expandBlueprint(event.input as ToolInput);
                   send({ _type: "blueprint", ...expanded });
                 }
               }
