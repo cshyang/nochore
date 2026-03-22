@@ -1,6 +1,5 @@
 import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
-import type { Project } from "~/lib/types";
-import { MiniConfidence } from "~/components/MiniConfidence";
+import type { ProjectView, AgentView } from "~/lib/types";
 import { Button } from "~/components/Button";
 import {
   ArrowLeft,
@@ -8,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 
 interface ProjectSidebarProps {
-  project: Project;
+  project: ProjectView;
   activeAgentId: string | null;
   onSelectAgent: (id: string) => void;
   onGoHome: () => void;
@@ -25,7 +24,9 @@ export function ProjectSidebar({
   const attentionAgents = project.agents.filter(
     (a) => a.status === "attention",
   );
-  const runningAgents = project.agents.filter((a) => a.status === "running");
+  const activeAgents = project.agents.filter(
+    (a) => a.status === "running" || a.status === "idle",
+  );
 
   return (
     <div
@@ -87,7 +88,7 @@ export function ProjectSidebar({
               {project.name}
             </div>
             <div style={{ fontSize: 12, color: COLORS.textSecondary }}>
-              {project.agents.length} agents · {project.sharedTools.length} conn
+              {project.agents.length} agents · {project.connectionCount} conn
             </div>
           </div>
         </div>
@@ -100,7 +101,7 @@ export function ProjectSidebar({
           <div style={{ marginBottom: 8 }}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
                 letterSpacing: 0.8,
@@ -121,12 +122,12 @@ export function ProjectSidebar({
           </div>
         )}
 
-        {/* Running group */}
-        {runningAgents.length > 0 && (
+        {/* Running/idle group */}
+        {activeAgents.length > 0 && (
           <div>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
                 letterSpacing: 0.8,
@@ -136,7 +137,7 @@ export function ProjectSidebar({
             >
               Running
             </div>
-            {runningAgents.map((agent) => (
+            {activeAgents.map((agent) => (
               <AgentRow
                 key={agent.id}
                 agent={agent}
@@ -151,7 +152,7 @@ export function ProjectSidebar({
       {/* Bottom actions */}
       <div
         style={{
-          padding: "12px 14px",
+          padding: "12px 16px",
           borderTop: `1px solid ${COLORS.border}`,
         }}
       >
@@ -178,7 +179,7 @@ function AgentRow({
   isActive,
   onSelect,
 }: {
-  agent: { id: string; name: string; status: string; statusText: string; confidence: number };
+  agent: AgentView;
   isActive: boolean;
   onSelect: () => void;
 }) {
@@ -208,36 +209,40 @@ function AgentRow({
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          gap: 8,
+          minWidth: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: RADIUS.pill,
-              background: isAttention ? COLORS.yellow : agentColor.primary,
-              flexShrink: 0,
-              opacity: isAttention ? 1 : 0.7,
-            }}
-          />
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: isActive ? 600 : 400,
-              color: isActive ? COLORS.text : COLORS.textSecondary,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {agent.name}
-          </span>
-        </div>
-        <MiniConfidence value={agent.confidence} />
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: RADIUS.pill,
+            background: isAttention
+              ? COLORS.yellow
+              : agent.status === "error"
+                ? COLORS.red
+                : agent.status === "idle"
+                  ? COLORS.textDim
+                  : agentColor.primary,
+            flexShrink: 0,
+            opacity: isAttention || agent.status === "error" ? 1 : 0.7,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: isActive ? 600 : 400,
+            color: isActive ? COLORS.text : COLORS.textSecondary,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {agent.name}
+        </span>
       </div>
-      {isAttention && (
+      {isAttention && agent.pendingCount > 0 && (
         <div
           style={{
             fontSize: 12,
@@ -247,7 +252,7 @@ function AgentRow({
             lineHeight: 1.3,
           }}
         >
-          {agent.statusText}
+          {agent.pendingCount} action{agent.pendingCount === 1 ? "" : "s"} need{agent.pendingCount === 1 ? "s" : ""} approval
         </div>
       )}
     </div>

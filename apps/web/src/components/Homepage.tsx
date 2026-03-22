@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
-import type { Project } from "~/lib/types";
+import { COLORS, RADIUS } from "~/lib/colors";
+import type { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
-import { MiniConfidence } from "~/components/MiniConfidence";
 import {
   Sparkle,
   Plus,
@@ -19,7 +18,7 @@ export function Homepage({
   onSelectProject,
   onCreateProject,
 }: {
-  projects: Project[];
+  projects: ProjectView[];
   onSelectProject: (id: string) => void;
   onCreateProject?: (name: string) => Promise<void>;
 }) {
@@ -146,7 +145,6 @@ export function Homepage({
 
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {attentionItems.map((item) => {
-                const agentColor = getAgentColor(item.id);
                 return (
                   <div
                     key={item.id}
@@ -181,7 +179,9 @@ export function Homepage({
                         {item.name}
                       </div>
                       <div style={{ fontSize: 13, color: COLORS.textSecondary }}>
-                        {item.statusText}
+                        {item.pendingCount > 0
+                          ? `${item.pendingCount} action${item.pendingCount === 1 ? "" : "s"} need approval`
+                          : "Needs attention"}
                         <span style={{ color: COLORS.textDim }}> · {item.projectName}</span>
                       </div>
                     </div>
@@ -319,8 +319,7 @@ export function Homepage({
                     <>
                       <span
                         style={{
-                          fontSize: 11,
-                          color: COLORS.textDim,
+                          fontSize: 12,
                           padding: "2px 6px",
                           borderRadius: RADIUS.sharp,
                           background: newName.trim() ? COLORS.accentDim : "transparent",
@@ -350,13 +349,13 @@ export function Homepage({
             )}
 
             {projects.map((proj) => {
-              const projLessons = proj.agents.reduce(
-                (s, a) => s + a.lessons,
+              const totalLessons = proj.agents.reduce(
+                (s, a) => s + a.lessonCount,
                 0,
               );
-              const projConfidence = Math.round(
-                proj.agents.reduce((s, a) => s + a.confidence, 0) /
-                  proj.agents.length,
+              const totalRuns = proj.agents.reduce(
+                (s, a) => s + a.runCount,
+                0,
               );
 
               return (
@@ -412,7 +411,7 @@ export function Homepage({
                             marginTop: 2,
                           }}
                         >
-                          {proj.agents.length} agents · {projLessons} lessons · {projConfidence}% confidence
+                          {proj.agents.length} agents · {totalLessons} lessons · {totalRuns} runs
                         </div>
                       </div>
                     </div>
@@ -434,7 +433,14 @@ export function Homepage({
                     }}
                   >
                     {proj.agents.map((agent) => {
-                      const agentColor = getAgentColor(agent.id);
+                      const statusDotColor =
+                        agent.status === "attention"
+                          ? COLORS.yellow
+                          : agent.status === "error"
+                            ? COLORS.red
+                            : agent.status === "running"
+                              ? COLORS.green
+                              : COLORS.textDim;
                       return (
                         <div
                           key={agent.id}
@@ -450,12 +456,9 @@ export function Homepage({
                               width: 6,
                               height: 6,
                               borderRadius: RADIUS.pill,
-                              background:
-                                agent.status === "attention"
-                                  ? COLORS.yellow
-                                  : agentColor.primary,
+                              background: statusDotColor,
                               flexShrink: 0,
-                              opacity: agent.status === "running" ? 0.7 : 1,
+                              opacity: agent.status === "idle" ? 0.5 : 1,
                             }}
                           />
                           <span
@@ -469,7 +472,6 @@ export function Homepage({
                           >
                             {agent.name}
                           </span>
-                          <MiniConfidence value={agent.confidence} />
                         </div>
                       );
                     })}

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ProjectHome } from "~/components/ProjectHome";
-import { getProject } from "~/server/projects";
-import type { Project } from "~/lib/types";
+import { getProject, deleteProject } from "~/server/projects";
+import type { ProjectView } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/")({
   loader: async ({ params }) => {
@@ -14,11 +14,16 @@ export const Route = createFileRoute("/$projectId/")({
 function ProjectIndexPage() {
   const navigate = useNavigate();
   const { project: rawProject } = Route.useLoaderData();
-  const project = rawProject as Project | null;
+  const project = rawProject as ProjectView | null;
 
   if (!project) {
     return <div>Project not found.</div>;
   }
+
+  const handleDeleteProject = async () => {
+    await deleteProject({ data: { projectId: project.id } });
+    navigate({ to: "/" });
+  };
 
   return (
     <ProjectHome
@@ -35,6 +40,7 @@ function ProjectIndexPage() {
           params: { projectId: project.id },
         })
       }
+      onDeleteProject={handleDeleteProject}
     />
   );
 }

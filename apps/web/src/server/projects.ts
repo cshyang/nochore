@@ -3,11 +3,11 @@
  *
  * Provides list, get, and create operations for projects.
  * Scans data/projects/ directory for project databases and builds
- * the frontend Project type from harness DB data.
+ * the frontend ProjectView type from harness DB data.
  */
 
 import crypto from "node:crypto";
-import { readdirSync, existsSync, mkdirSync } from "node:fs";
+import { readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { eq, and, isNull, or, gt } from "drizzle-orm";
@@ -22,7 +22,8 @@ import {
 } from "../../../../packages/harness/src/db/schema";
 import { jsonSafe } from "./serializable";
 import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
-import type { Project, Agent } from "../lib/types";
+import { relativeTime } from "../lib/types";
+import type { AgentView, ProjectView } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Icon mapping — DB stores icon names, UI expects emoji
@@ -49,32 +50,32 @@ function resolveIcon(icon: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Relative time helper
+// Schedule extraction helper
 // ---------------------------------------------------------------------------
 
-function relativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diffMs = now - timestamp;
-  const diffMins = Math.floor(diffMs / 60_000);
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return `${Math.floor(diffDays / 30)}mo ago`;
+function extractSchedule(config: AgentConfig): string {
+  const trigger = config.triggers?.[0];
+  if (!trigger) return "manual";
+  const cron = (trigger.config as { cron?: string })?.cron;
+  if (!cron) return "manual";
+  // Map common cron patterns to labels
+  if (cron.includes("*/1 ")) return "hourly";
+  if (cron.includes("*/6 ") || cron === "0 */6 * * *") return "6hours";
+  if (cron === "0 9 * * *" || cron.match(/^0 \d+ \* \* \*$/)) return "daily";
+  if (cron.includes("0 9 * * 1")) return "weekly";
+  return "daily"; // default
 }
 
 // ---------------------------------------------------------------------------
-// Build frontend Agent from DB data
+// Build AgentView from DB data
 // ---------------------------------------------------------------------------
 
 type DrizzleDb = ReturnType<typeof getProjectDeps>["db"];
 
-function buildAgent(
-  agentRow: { id: string; config: string },
+export function buildAgentView(
+  agentRow: { id: string; config: string; createdAt: number },
   db: DrizzleDb,
-): Agent {
+): AgentView {
   const config = JSON.parse(agentRow.config) as AgentConfig;
 
   // Count pending actions (status = 'pending')
@@ -102,7 +103,7 @@ function buildAgent(
     )
     .all().length;
 
-  // Get latest run (sort in JS since drizzle's orderBy needs desc import)
+  // Get runs (count + latest)
   const allRuns = db
     .select()
     .from(runs)
@@ -110,56 +111,68 @@ function buildAgent(
     .all();
   const latestRun = allRuns.sort((a, b) => b.startedAt - a.startedAt)[0];
 
-  const lastRunText = latestRun
-    ? relativeTime(latestRun.startedAt)
-    : "Never";
+  // Compute status
+  let status: AgentView["status"] = "idle";
+  if (pendingCount > 0) {
+    status = "attention";
+  } else if (allRuns.length > 0) {
+    status = "running";
+  }
 
   return {
     id: agentRow.id,
     name: config.name,
-    status: pendingCount > 0 ? "attention" : "running",
-    statusText:
-      pendingCount > 0
-        ? `${pendingCount} action${pendingCount === 1 ? "" : "s"} need${pendingCount === 1 ? "s" : ""} approval`
-        : "All clear",
-    lastRun: lastRunText,
-    skills: config.skills.length,
-    lessons: lessonCount,
-    confidence: 75,
-    domain: config.description?.toLowerCase().includes("ad")
-      ? "ads"
-      : config.skills[0] ?? undefined,
+    description: config.description,
+    intent: config.intent,
+    skills: config.skills,
+    schedule: extractSchedule(config),
+    policyRules: config.policyRules,
+    globalApprovalRequired: config.globalApprovalRequired,
+    scopeStrategy: config.scopeStrategy,
+    status,
+    lastRunAt: latestRun?.startedAt ?? null,
+    lastRunRelative: latestRun ? relativeTime(latestRun.startedAt) : null,
+    nextRunAt: null, // TODO: compute from schedule + lastRunAt
+    pendingCount,
+    lessonCount,
+    runCount: allRuns.length,
+    createdAt: agentRow.createdAt,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Build frontend Project from DB data
+// Build ProjectView from DB data
 // ---------------------------------------------------------------------------
 
-function buildProject(
+function buildProjectView(
   projectRow: {
     id: string;
     name: string;
     icon: string | null;
     color: string | null;
+    createdAt: number;
   },
   db: DrizzleDb,
-): Project {
+): ProjectView {
   const agentRows = db
     .select()
     .from(agents)
     .where(eq(agents.projectId, projectRow.id))
     .all();
 
-  const builtAgents = agentRows.map((row) => buildAgent(row, db));
+  const builtAgents = agentRows.map((row) => buildAgentView(row, db));
 
-  // Get shared tools from connections
-  const connectionRows = db
+  // Count active connections
+  const connectionCount = db
     .select()
     .from(connections)
-    .where(eq(connections.projectId, projectRow.id))
-    .all();
-  const sharedTools = connectionRows.map((c) => c.provider);
+    .where(
+      and(
+        eq(connections.projectId, projectRow.id),
+        eq(connections.status, "active"),
+      ),
+    )
+    .all().length;
 
   const attentionCount = builtAgents.filter(
     (a) => a.status === "attention",
@@ -170,9 +183,10 @@ function buildProject(
     name: projectRow.name,
     icon: resolveIcon(projectRow.icon),
     color: projectRow.color ?? "#6C5CE7",
-    sharedTools,
     agents: builtAgents,
+    connectionCount,
     attentionCount,
+    createdAt: projectRow.createdAt,
   };
 }
 
@@ -189,7 +203,7 @@ export const listProjects = createServerFn({ method: "GET" }).handler(
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
 
-    const result: Project[] = [];
+    const result: ProjectView[] = [];
 
     for (const dir of dirs) {
       const dbPath = join(projectsDir, dir, "nochore.db");
@@ -199,7 +213,7 @@ export const listProjects = createServerFn({ method: "GET" }).handler(
         const { db } = getProjectDeps(dir);
         const projectRow = db.select().from(projects).get();
         if (!projectRow) continue;
-        result.push(buildProject(projectRow, db));
+        result.push(buildProjectView(projectRow, db));
       } catch {
         // Skip projects with corrupted DBs
         continue;
@@ -224,7 +238,7 @@ export const getProject = createServerFn({ method: "GET" })
       const { db } = getProjectDeps(projectId);
       const projectRow = db.select().from(projects).get();
       if (!projectRow) return jsonSafe(null);
-      return jsonSafe(buildProject(projectRow, db));
+      return jsonSafe(buildProjectView(projectRow, db));
     } catch {
       return jsonSafe(null);
     }
@@ -346,25 +360,45 @@ export const createProject = createServerFn({ method: "POST" })
 
     // Now open via drizzle and insert project record
     const { db } = getProjectDeps(projectId);
+    const now = Date.now();
     db.insert(projects)
       .values({
         id: projectId,
         name: data.name,
         icon: data.icon ?? "briefcase",
         color: data.color ?? "#6C5CE7",
-        createdAt: Date.now(),
+        createdAt: now,
       })
       .run();
 
-    const project: Project = {
+    const project: ProjectView = {
       id: projectId,
       name: data.name,
       icon: resolveIcon(data.icon ?? "briefcase"),
       color: data.color ?? "#6C5CE7",
-      sharedTools: [],
       agents: [],
+      connectionCount: 0,
       attentionCount: 0,
+      createdAt: now,
     };
 
     return jsonSafe(project);
+  });
+
+// ---------------------------------------------------------------------------
+// deleteProject — remove a project and all its data
+// ---------------------------------------------------------------------------
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .inputValidator((input: { projectId: string }) => input)
+  .handler(async ({ data: { projectId } }) => {
+    // Remove the entire project directory (DB + agent workspaces)
+    const projectDir = join("data/projects", projectId);
+    try {
+      rmSync(projectDir, { recursive: true, force: true });
+    } catch {
+      // Directory may not exist
+    }
+
+    return jsonSafe({ deleted: true });
   });

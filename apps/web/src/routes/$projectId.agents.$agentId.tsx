@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { AgentDetail } from "~/components/AgentDetail";
-import { getAgent } from "~/server/agents";
+import { AgentWorkspace } from "~/components/AgentWorkspace";
+import { getAgent, deleteAgent } from "~/server/agents";
 import { getProject } from "~/server/projects";
 import { getRunHistory } from "~/server/runs";
 import { getPendingActions, approveAction, rejectAction } from "~/server/approvals";
-import type { Project, Agent } from "~/lib/types";
+import type { ProjectView, AgentView } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
@@ -31,17 +31,10 @@ function AgentDetailPage() {
   const navigate = useNavigate();
   const loaderData = Route.useLoaderData();
 
-  const project = loaderData.project as Project | null;
-  const agentRecord = loaderData.agent as any;
+  const project = loaderData.project as ProjectView | null;
+  const agent = loaderData.agent as AgentView | null;
 
-  if (!project) {
-    return <div>Project not found.</div>;
-  }
-
-  // Find the agent in the project's agents list (built from DB in getProject)
-  const agent = project.agents.find((a) => a.id === agentId);
-
-  if (!agent) {
+  if (!project || !agent) {
     return <div>Agent not found.</div>;
   }
 
@@ -49,7 +42,7 @@ function AgentDetailPage() {
     try {
       await approveAction({ data: { actionId, projectId } });
     } catch {
-      // Approval failed — UI already shows optimistic state
+      // Approval failed
     }
   };
 
@@ -57,17 +50,23 @@ function AgentDetailPage() {
     try {
       await rejectAction({ data: { actionId, projectId, reason: "Rejected by user" } });
     } catch {
-      // Rejection failed — UI already shows optimistic state
+      // Rejection failed
     }
   };
 
+  const handleDeleteAgent = async () => {
+    await deleteAgent({ data: { agentId, projectId } });
+    navigate({ to: "/$projectId", params: { projectId } });
+  };
+
   return (
-    <AgentDetail
+    <AgentWorkspace
       agent={agent}
       project={project}
       onBack={() =>
         navigate({ to: "/$projectId", params: { projectId } })
       }
+      onDeleteAgent={handleDeleteAgent}
       runs={loaderData.runs as any[]}
       pendingActions={loaderData.pending as any[]}
       onApprove={handleApprove}

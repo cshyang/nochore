@@ -6,7 +6,7 @@ import {
 import { COLORS } from "~/lib/colors";
 import { ProjectSidebar } from "~/components/ProjectSidebar";
 import { getProject } from "~/server/projects";
-import type { Project } from "~/lib/types";
+import type { ProjectView } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId")({
   loader: async ({ params }) => {
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/$projectId")({
 function ProjectLayout() {
   const navigate = useNavigate();
   const { project: rawProject } = Route.useLoaderData();
-  const project = rawProject as Project | null;
+  const project = rawProject as ProjectView | null;
 
   if (!project) {
     return (

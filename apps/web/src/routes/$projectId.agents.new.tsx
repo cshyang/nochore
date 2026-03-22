@@ -1,8 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { SetupFlow } from "~/components/SetupFlow";
+import { createFileRoute } from "@tanstack/react-router";
+import { SetupWorkspace } from "~/components/SetupWorkspace";
 import { getProject } from "~/server/projects";
 import { listAvailableSkills } from "~/server/skills";
-import type { Project } from "~/lib/types";
+import type { ProjectView } from "~/lib/types";
 
 export const Route = createFileRoute("/$projectId/agents/new")({
   loader: async ({ params }) => {
@@ -16,24 +16,19 @@ export const Route = createFileRoute("/$projectId/agents/new")({
 });
 
 function NewAgentPage() {
-  const navigate = useNavigate();
   const { project: rawProject, skills: rawSkills } = Route.useLoaderData();
-  const project = rawProject as Project | null;
+  const project = rawProject as ProjectView | null;
   const skills = (rawSkills ?? []) as Array<{
     id: string;
     name: string;
     description: string;
   }>;
-  const projectId = project?.id ?? "";
 
   return (
-    <SetupFlow
-      projectId={projectId}
+    <SetupWorkspace
+      projectId={project?.id}
       project={project}
       availableSkills={skills}
-      onComplete={() =>
-        navigate({ to: "/$projectId", params: { projectId } })
-      }
     />
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { COLORS } from "~/lib/colors";
-import { Project } from "~/lib/types";
+import { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
@@ -40,7 +40,7 @@ interface Connection {
 }
 
 interface ProjectConnectionsProps {
-  project: Project;
+  project: ProjectView;
 }
 
 export function ProjectConnections({ project }: ProjectConnectionsProps) {
