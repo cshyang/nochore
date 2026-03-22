@@ -13,14 +13,15 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { X, PaperPlaneTilt, ArrowRight } from "@phosphor-icons/react";
 import { COLORS } from "~/lib/colors";
 import type { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
-import { generateBlueprint } from "~/server/blueprint";
-import type { Blueprint } from "~/server/blueprint";
+import { BlueprintSchema } from "~/routes/api.blueprint";
+import type { Blueprint } from "~/routes/api.blueprint";
 import { createAgent } from "~/server/agents";
 import { createProject } from "~/server/projects";
 
@@ -53,13 +54,6 @@ const SCHEDULES = [
   { value: "manual", label: "Manual" },
 ] as const;
 
-const THINKING_STEPS = [
-  { label: "Understanding your intent", delay: 0 },
-  { label: "Selecting relevant skills", delay: 2000 },
-  { label: "Identifying connections needed", delay: 4500 },
-  { label: "Drafting policy rules", delay: 7000 },
-  { label: "Building your blueprint", delay: 9500 },
-];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,7 +85,6 @@ export function SetupWorkspace({
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
 
   // Blueprint state
   const [intent, setIntent] = useState("");
@@ -109,12 +102,70 @@ export function SetupWorkspace({
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Thinking progress
-  const [thinkingStep, setThinkingStep] = useState(0);
-  const thinkingTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // -------------------------------------------------------------------------
+  // Streaming blueprint via useObject
+  // -------------------------------------------------------------------------
+
+  const {
+    object: streamingBlueprint,
+    submit: submitBlueprint,
+    isLoading: isGenerating,
+    error: streamError,
+  } = useObject({
+    api: "/api/blueprint",
+    schema: BlueprintSchema,
+    onFinish({ object: finalBlueprint }) {
+      if (!finalBlueprint) return;
+
+      // Apply the completed blueprint to editable state
+      const skills: Record<string, boolean> = {};
+      for (const s of availableSkills) {
+        skills[s.id] = finalBlueprint.skills?.includes(s.id) ?? false;
+      }
+      setSelectedSkills(skills);
+
+      const levels: Record<number, "auto" | "ask" | "notify"> = {};
+      finalBlueprint.policies?.forEach((p, i) => {
+        levels[i] = p.defaultLevel;
+      });
+      setPolicyLevels(levels);
+      if (finalBlueprint.schedule) setSchedule(finalBlueprint.schedule);
+
+      setBlueprint(finalBlueprint as Blueprint);
+
+      // Remove loading bubble and add completion message
+      setMessages((prev) => {
+        const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
+        if (finalBlueprint.clarifyingQuestion && !blueprint) {
+          setAwaitingClarification(true);
+          return [
+            ...withoutLoading,
+            { role: "ai" as const, content: finalBlueprint.clarifyingQuestion },
+          ];
+        }
+        const name = finalBlueprint.agentName ?? "Your Agent";
+        return [
+          ...withoutLoading,
+          {
+            role: "ai" as const,
+            content: `Here's your blueprint for **${name}**. Review it on the right, adjust anything you like, and launch when ready.`,
+          },
+        ];
+      });
+    },
+    onError(err) {
+      setMessages((prev) => {
+        const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
+        return [
+          ...withoutLoading,
+          { role: "ai" as const, content: err.message || "Something went wrong. Try again." },
+        ];
+      });
+    },
+  });
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
@@ -122,102 +173,31 @@ export function SetupWorkspace({
   }, [messages]);
 
   // -------------------------------------------------------------------------
-  // Blueprint generation
+  // Trigger blueprint generation
   // -------------------------------------------------------------------------
 
-  const applyBlueprint = useCallback(
-    (result: Blueprint) => {
-      setBlueprint(result);
-
-      // Init skill selections
-      const skills: Record<string, boolean> = {};
-      for (const s of availableSkills) {
-        skills[s.id] = result.skills.includes(s.id);
-      }
-      setSelectedSkills(skills);
-
-      // Init policy levels
-      const levels: Record<number, "auto" | "ask" | "notify"> = {};
-      result.policies.forEach((p, i) => {
-        levels[i] = p.defaultLevel;
-      });
-      setPolicyLevels(levels);
-      setSchedule(result.schedule);
-    },
-    [availableSkills],
-  );
-
   const runGenerate = useCallback(
-    async (userIntent: string, clarification?: string) => {
-      setIsGenerating(true);
+    (userIntent: string, clarification?: string) => {
       setError(null);
-      setThinkingStep(0);
 
-      // Start thinking step progression
-      thinkingTimersRef.current.forEach(clearTimeout);
-      thinkingTimersRef.current = THINKING_STEPS.slice(1).map((step, i) =>
-        setTimeout(() => setThinkingStep(i + 1), step.delay),
-      );
-
-      // Show loading bubble
+      // Show loading bubble in chat
       setMessages((prev) => [
         ...prev,
         { role: "ai", content: "", isLoading: true },
       ]);
 
-      try {
-        const result = (await generateBlueprint({
-          data: {
-            intent: userIntent,
-            clarification,
-            availableSkills: availableSkills.map((s) => ({
-              id: s.id,
-              name: s.name,
-              description: s.description,
-            })),
-          },
-        })) as Blueprint;
-
-        // Remove loading bubble
-        setMessages((prev) => prev.filter((m) => !("isLoading" in m && m.isLoading)));
-
-        if (result.clarifyingQuestion && !clarification) {
-          // LLM wants more info — show question in chat
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: result.clarifyingQuestion! },
-          ]);
-          setAwaitingClarification(true);
-          applyBlueprint(result); // Partial blueprint already shown on right
-        } else {
-          // Full blueprint ready
-          const agentName = result.agentName ?? "Your Agent";
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content: `Here's your blueprint for **${agentName}**. Review it on the right, adjust anything you like, and launch when ready.`,
-            },
-          ]);
-          setAwaitingClarification(false);
-          applyBlueprint(result);
-        }
-      } catch (err) {
-        setMessages((prev) => prev.filter((m) => !("isLoading" in m && m.isLoading)));
-        const msg = err instanceof Error ? err.message : "Something went wrong. Try again.";
-        setMessages((prev) => [
-          ...prev,
-          { role: "ai", content: msg },
-        ]);
-        setError(msg);
-      } finally {
-        setIsGenerating(false);
-        setThinkingStep(0);
-        thinkingTimersRef.current.forEach(clearTimeout);
-        thinkingTimersRef.current = [];
-      }
+      // Submit to streaming endpoint
+      submitBlueprint({
+        intent: userIntent,
+        clarification,
+        availableSkills: availableSkills.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+        })),
+      });
     },
-    [availableSkills, applyBlueprint],
+    [availableSkills, submitBlueprint],
   );
 
   // -------------------------------------------------------------------------
@@ -312,11 +292,11 @@ export function SetupWorkspace({
       if (!intent) {
         // First message — this is the intent
         setIntent(value);
-        await runGenerate(value);
+        runGenerate(value);
       } else if (awaitingClarification) {
         // Answering the LLM's clarifying question
         setAwaitingClarification(false);
-        await runGenerate(intent, value);
+        runGenerate(intent, value);
       } else {
         // Refining an existing blueprint
         await handleRefinement(value);
@@ -565,13 +545,24 @@ export function SetupWorkspace({
               gap: 12,
             }}
           >
-            {messages.map((msg, i) => (
-              <ChatBubble
-                key={i}
-                message={msg}
-                thinkingLabel={"isLoading" in msg && msg.isLoading ? THINKING_STEPS[thinkingStep]?.label : undefined}
-              />
-            ))}
+            {messages.map((msg, i) => {
+              // Derive thinking label from what's arrived in the streaming blueprint
+              let thinkingLabel: string | undefined;
+              if ("isLoading" in msg && msg.isLoading && isGenerating) {
+                if (!streamingBlueprint?.agentName) thinkingLabel = "Understanding your intent";
+                else if (!streamingBlueprint?.skills?.length) thinkingLabel = "Selecting skills";
+                else if (!streamingBlueprint?.connections?.length) thinkingLabel = "Identifying connections";
+                else if (!streamingBlueprint?.policies?.length) thinkingLabel = "Drafting policies";
+                else thinkingLabel = "Finalizing blueprint";
+              }
+              return (
+                <ChatBubble
+                  key={i}
+                  message={msg}
+                  thinkingLabel={thinkingLabel}
+                />
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
 
@@ -697,104 +688,72 @@ export function SetupWorkspace({
             overflow: "hidden",
           }}
         >
-          {!blueprint && !isGenerating ? (
-            // Empty state
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 12,
-              }}
-            >
-              <span style={{ color: COLORS.accent, fontSize: 28, opacity: 0.4 }}>✦</span>
-              <p
-                style={{
-                  color: COLORS.textDim,
-                  fontSize: 14,
-                  margin: 0,
-                  textAlign: "center",
-                  maxWidth: 280,
-                  lineHeight: 1.6,
-                }}
-              >
-                Your agent will appear here as we talk.
-              </p>
-            </div>
-          ) : isGenerating && !blueprint ? (
-            // Loading state — progressive steps
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 32,
-              }}
-            >
-              <span
-                style={{
-                  color: COLORS.accent,
-                  fontSize: 36,
-                  animation: "sw-pulse 1.4s ease-in-out infinite",
-                }}
-              >
-                ✦
-              </span>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 240 }}>
-                {THINKING_STEPS.map((step, i) => {
-                  const isDone = i < thinkingStep;
-                  const isActive = i === thinkingStep;
-                  return (
-                    <div
-                      key={step.label}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        opacity: isDone || isActive ? 1 : 0.3,
-                        transition: "opacity 0.3s ease",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 99,
-                          background: isDone ? COLORS.accent : isActive ? COLORS.accentDim : "transparent",
-                          border: `1.5px solid ${isDone || isActive ? COLORS.accent : COLORS.border}`,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          fontSize: 12,
-                          color: COLORS.white,
-                          transition: "all 0.3s ease",
-                        }}
-                      >
-                        {isDone ? "✓" : isActive ? (
-                          <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.accent, animation: "sw-pulse 1s ease-in-out infinite" }} />
-                        ) : null}
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          color: isDone ? COLORS.textSecondary : isActive ? COLORS.text : COLORS.textDim,
-                          fontWeight: isActive ? 500 : 400,
-                          transition: "color 0.3s ease",
-                        }}
-                      >
-                        {step.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : blueprint ? (
+          {(() => {
+            // Determine what to show: streaming partial, finalized blueprint, or empty
+            const displayBlueprint = blueprint ?? (isGenerating ? streamingBlueprint : null);
+            const hasAnyContent = displayBlueprint?.agentName || displayBlueprint?.summary;
+
+            if (!hasAnyContent && !isGenerating) {
+              // Empty state
+              return (
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ color: COLORS.accent, fontSize: 28, opacity: 0.4 }}>✦</span>
+                  <p
+                    style={{
+                      color: COLORS.textDim,
+                      fontSize: 14,
+                      margin: 0,
+                      textAlign: "center",
+                      maxWidth: 280,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Your agent will appear here as we talk.
+                  </p>
+                </div>
+              );
+            }
+
+            if (isGenerating && !hasAnyContent) {
+              // Waiting for first data — show pulsing indicator
+              return (
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 16,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: COLORS.accent,
+                      fontSize: 36,
+                      animation: "sw-pulse 1.4s ease-in-out infinite",
+                    }}
+                  >
+                    ✦
+                  </span>
+                  <p style={{ color: COLORS.textSecondary, fontSize: 14, margin: 0 }}>
+                    Understanding your intent...
+                  </p>
+                </div>
+              );
+            }
+
+            // Show blueprint (streaming partial or finalized)
+            return (
             // Blueprint
             <div
               style={{
@@ -815,7 +774,7 @@ export function SetupWorkspace({
                     lineHeight: 1.2,
                   }}
                 >
-                  {blueprint.agentName}
+                  {displayBlueprint?.agentName ?? "..."}
                 </h1>
                 <p
                   style={{
@@ -825,7 +784,7 @@ export function SetupWorkspace({
                     lineHeight: 1.6,
                   }}
                 >
-                  {blueprint.summary}
+                  {displayBlueprint?.summary ?? ""}
                 </p>
               </div>
 
@@ -835,7 +794,7 @@ export function SetupWorkspace({
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {availableSkills.map((skill) => {
                       const isSelected = selectedSkills[skill.id] ?? false;
-                      const isRecommended = blueprint.skills.includes(skill.id);
+                      const isRecommended = displayBlueprint?.skills?.includes(skill.id) ?? false;
                       return (
                         <div
                           key={skill.id}
@@ -884,51 +843,58 @@ export function SetupWorkspace({
               )}
 
               {/* Connections block */}
-              {blueprint.connections.length > 0 && (
+              {(displayBlueprint?.connections?.length ?? 0) > 0 && (
                 <BlueprintSection title="Connections">
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {blueprint.connections.map((conn) => (
-                      <div
-                        key={conn.provider}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "10px 0",
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 500,
-                              color: COLORS.text,
-                            }}
-                          >
-                            {PROVIDER_NAMES[conn.provider] ?? conn.provider}
+                    {(displayBlueprint?.connections ?? []).map((conn, ci) => {
+                      if (!conn?.provider) return null;
+                      return (
+                        <div
+                          key={conn.provider ?? ci}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 500,
+                                color: COLORS.text,
+                              }}
+                            >
+                              {PROVIDER_NAMES[conn.provider] ?? conn.provider}
+                            </div>
+                            {conn.reason && (
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: COLORS.textDim,
+                                  marginTop: 2,
+                                }}
+                              >
+                                {conn.reason}
+                              </div>
+                            )}
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: COLORS.textDim,
-                              marginTop: 2,
-                            }}
-                          >
-                            {conn.reason}
-                          </div>
+                          <Badge color="gray">After launch</Badge>
                         </div>
-                        <Badge color="gray">After launch</Badge>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </BlueprintSection>
               )}
 
               {/* Policies block */}
-              {blueprint.policies.length > 0 && (
+              {(displayBlueprint?.policies?.length ?? 0) > 0 && (
                 <BlueprintSection title="Policies">
                   <div style={{ display: "flex", flexDirection: "column" }}>
-                    {blueprint.policies.map((policy, i) => (
+                    {(displayBlueprint?.policies ?? []).map((policy, i) => {
+                      if (!policy?.question) return null;
+                      return (
                       <div key={i}>
                         {i > 0 && (
                           <div
@@ -983,7 +949,8 @@ export function SetupWorkspace({
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Global approval toggle */}
                     <div
@@ -1041,7 +1008,8 @@ export function SetupWorkspace({
                 </div>
               </BlueprintSection>
             </div>
-          ) : null}
+          );
+          })()}
 
           {/* Launch button — pinned to bottom of right panel */}
           {blueprint && (
