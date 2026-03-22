@@ -1,17 +1,18 @@
 /**
  * Streaming blueprint generation endpoint.
  *
- * Uses Vercel AI SDK's streamText + Output.object() to stream partial
- * blueprint objects as they're generated. The client consumes this via
- * the useObject hook from @ai-sdk/react.
+ * Uses AI SDK tool calling — the model reasons about the intent,
+ * then calls create_blueprint with schema-conforming arguments.
+ * Tool call arguments are enforced by the model's function-calling
+ * machinery, so field names are exact. No client normalization needed.
  *
  * POST /api/blueprint
  * Body: { intent, clarification?, availableSkills, existingConnections? }
- * Returns: SSE stream of partial Blueprint objects
+ * Returns: NDJSON stream of reasoning + blueprint partials
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, Output } from "ai";
+import { streamText, tool } from "ai";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -59,14 +60,13 @@ async function createModel() {
 }
 
 // ---------------------------------------------------------------------------
-// Blueprint schema
+// Blueprint schema — used as tool parameters (contract, not suggestion)
 // ---------------------------------------------------------------------------
 
 export const BlueprintSchema = z.object({
-  projectName: z.string().optional().describe("Project or client name extracted from the intent"),
-  summary: z.string().describe("One-sentence description of what the agent does"),
   agentName: z.string().describe("A short, memorable name for the agent"),
-  skills: z.array(z.string()).describe("Array of skill IDs to enable"),
+  summary: z.string().describe("One-sentence description of what the agent does"),
+  skills: z.array(z.string()).describe("Array of skill IDs to enable from the available list"),
   connections: z.array(
     z.object({
       provider: z.string().describe("Provider slug: googleads, slack, meta, ga4, shopify, stripe, github"),
@@ -76,12 +76,11 @@ export const BlueprintSchema = z.object({
   policies: z.array(
     z.object({
       action: z.string().describe("The action this policy governs"),
-      question: z.string().describe("Natural language question framed as 'When I [action]...'"),
-      defaultLevel: z.enum(["auto", "ask", "notify"]).describe("Default autonomy level"),
+      question: z.string().describe("Natural language question framed as 'When I [action]...' from the agent's perspective"),
+      defaultLevel: z.enum(["auto", "ask", "notify"]).describe("auto for low-risk, ask for high-impact, notify for informational"),
     }),
   ).describe("1-3 autonomy rules for the agent"),
   schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
-  clarifyingQuestion: z.string().optional().describe("Only include if genuinely needed to understand the intent"),
 });
 
 export type Blueprint = z.infer<typeof BlueprintSchema>;
@@ -120,7 +119,7 @@ export const Route = createFileRoute("/api/blueprint")({
           )
           .join("\n");
 
-        const prompt = `You are configuring an AI agent for a business user. Based on their intent, generate a complete agent configuration.
+        const prompt = `You are configuring an AI agent for a business user. Analyze their intent, then call the create_blueprint tool with a complete agent configuration.
 
 User's intent: "${intent}"
 ${clarification ? `\nUser's clarification: "${clarification}"` : ""}
@@ -139,19 +138,20 @@ Available connections (select by provider slug):
 
 ${existingConnections.length ? `Already connected: ${existingConnections.join(", ")}` : "No existing connections."}
 
-Instructions:
-- Select relevant skills from the available list by their id. If no skills match, return an empty array.
-- For connections, suggest ONLY providers the agent actually needs based on the intent. Don't add connections just because they exist.
-- For policies, generate 1-3 rules about autonomy. Frame each question as "When I [action]..." from the agent's perspective. Set defaultLevel to "auto" for low-risk actions, "ask" for high-impact changes, "notify" for informational actions.
-- Choose a schedule that matches the urgency of the use case.
-- Do NOT include clarifyingQuestion unless you genuinely cannot determine the agent's purpose.`;
+Call create_blueprint with your configuration. Select ONLY skills and connections the agent actually needs.`;
 
         const providerName = process.env.LLM_PROVIDER ?? "anthropic";
 
         const result = streamText({
           model,
-          output: Output.object({ schema: BlueprintSchema }),
           prompt,
+          tools: {
+            create_blueprint: tool({
+              description: "Create an agent blueprint based on the user's intent",
+              inputSchema: BlueprintSchema,
+            }),
+          },
+          toolChoice: { type: "tool", toolName: "create_blueprint" },
           providerOptions: {
             [providerName]: {
               reasoningEffort: "high",
@@ -159,11 +159,7 @@ Instructions:
           },
         });
 
-        // Stream NDJSON lines: partial blueprint objects + reasoning events
-        // Line types:
-        //   { _type: "reasoning", text: "..." }   — model thinking (if supported)
-        //   { _type: "blueprint", ...partialObj }  — progressive blueprint snapshot
-        //   { _error: "..." }                      — error
+        // Stream NDJSON: reasoning events + tool argument partials
         const encoder = new TextEncoder();
 
         const stream = new ReadableStream({
@@ -172,39 +168,29 @@ Instructions:
               controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
             };
 
-            let accumulatedText = "";
-            let lastPartialJson = "";
-            let chunkCount = 0;
+            let toolArgs = "";
 
             try {
               for await (const event of result.fullStream) {
                 if (event.type === "reasoning-delta") {
                   send({ _type: "reasoning", text: event.text });
-                } else if (event.type === "text-delta") {
-                  accumulatedText += event.text;
+                } else if (event.type === "tool-input-start") {
+                  toolArgs = "";
+                } else if (event.type === "tool-input-delta") {
+                  toolArgs += event.delta;
 
-                  // Try parsing accumulated text as JSON for partial blueprint
+                  // Try parsing partial tool arguments as blueprint
                   try {
-                    const partial = JSON.parse(accumulatedText);
-                    const json = JSON.stringify(partial);
-                    if (json !== lastPartialJson) {
-                      lastPartialJson = json;
-                      chunkCount++;
-                      send({ _type: "blueprint", ...partial });
-                    }
+                    const partial = JSON.parse(toolArgs);
+                    send({ _type: "blueprint", ...partial });
                   } catch {
-                    // Not valid JSON yet — keep accumulating
+                    // Not valid JSON yet
                   }
+                } else if (event.type === "tool-call") {
+                  // Complete tool call — send final blueprint
+                  const input = event.input as Record<string, unknown>;
+                  send({ _type: "blueprint", ...input });
                 }
-              }
-
-              // Final parse for complete object
-              try {
-                const final = JSON.parse(accumulatedText);
-                send({ _type: "blueprint", ...final });
-                console.log(`[blueprint api] stream complete: ${chunkCount} partials, keys: ${Object.keys(final).join(", ")}`);
-              } catch {
-                console.warn(`[blueprint api] final parse failed, sent ${chunkCount} partials. Raw text (first 200): ${accumulatedText.slice(0, 200)}`);
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Stream error";

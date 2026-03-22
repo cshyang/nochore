@@ -6,7 +6,7 @@
  *
  * Flow:
  *   1. User types intent → generateBlueprint
- *   2. If clarifyingQuestion → show in chat, wait for answer → generateBlueprint again
+ *   2. Blueprint renders right panel — user adjusts via toggles OR chat
  *   3. Blueprint renders right panel — user adjusts via toggles OR chat
  *   4. "Launch agent →" creates project + agent, navigates to agent detail
  */
@@ -160,55 +160,19 @@ export function SetupWorkspace({
               throw new Error(parsed._error as string);
             }
 
-            // Handle reasoning events — model thinking out loud
+            // Reasoning events — model thinking
             if (parsed._type === "reasoning") {
               setReasoningText((prev) => prev + (parsed.text ?? ""));
               continue;
             }
 
-            // Handle blueprint partial snapshots
-            const { _type, ...rawData } = parsed;
-
-            // Some models (Zhipu GLM) wrap output in an "answer" key
-            const blueprintData = rawData.answer && typeof rawData.answer === "object"
-              ? (rawData.answer as Record<string, unknown>)
-              : rawData;
-
-            // Normalize — models without structuredOutputs produce varied shapes
-            const bd = blueprintData as Record<string, unknown>;
-
-            // Normalize connections: string[] → {provider, reason}[]
-            let connections = bd.connections as unknown;
-            if (Array.isArray(connections) && connections.length > 0 && typeof connections[0] === "string") {
-              connections = (connections as string[]).map((p) => ({ provider: p, reason: "" }));
+            // Blueprint partial — tool args match schema exactly, no normalization needed
+            if (parsed._type === "blueprint") {
+              const { _type, ...blueprint } = parsed;
+              lastPartial = blueprint as Partial<Blueprint>;
+              setStreamingBlueprint(lastPartial);
+              setStreamChunkCount((c) => c + 1);
             }
-
-            // Normalize policies: {rule} → {question}
-            let policies = bd.policies as unknown;
-            if (Array.isArray(policies)) {
-              policies = (policies as Record<string, unknown>[]).map((p) => ({
-                ...p,
-                question: p.question ?? p.rule ?? p.description ?? "",
-                action: p.action ?? "",
-              }));
-            }
-
-            const normalized: Partial<Blueprint> = {
-              ...blueprintData,
-              agentName: (bd.agentName ?? bd.name ?? bd.agent_name ?? bd.agentname) as string | undefined,
-              summary: (bd.summary ?? bd.description ?? bd.desc) as string | undefined,
-              connections: connections as Blueprint["connections"] | undefined,
-              policies: policies as Blueprint["policies"] | undefined,
-            };
-            // Clean up alternate keys
-            for (const key of ["name", "description", "desc", "agent_name", "agentname", "_type", "answer", "rule"]) {
-              delete (normalized as Record<string, unknown>)[key];
-            }
-
-            lastPartial = normalized;
-            setStreamingBlueprint(normalized);
-            setStreamChunkCount((c) => c + 1);
-            console.log("[blueprint stream] partial:", Object.keys(normalized).filter((k) => normalized[k as keyof typeof normalized] != null).join(", "));
           }
         }
 
@@ -216,37 +180,16 @@ export function SetupWorkspace({
         if (buffer.trim()) {
           try {
             const parsed = JSON.parse(buffer);
-            if (!parsed._error && parsed._type !== "reasoning") {
-              const { _type, ...rawData } = parsed;
-              const data = rawData.answer && typeof rawData.answer === "object"
-                ? (rawData.answer as Record<string, unknown>)
-                : rawData;
-              lastPartial = {
-                ...data,
-                agentName: data.agentName ?? data.name ?? data.agent_name,
-                summary: data.summary ?? data.description ?? data.desc,
-              } as Partial<Blueprint>;
+            if (parsed._type === "blueprint") {
+              const { _type, ...blueprint } = parsed;
+              lastPartial = blueprint as Partial<Blueprint>;
             }
           } catch {
             console.warn("[blueprint stream] unparseable final buffer:", buffer.slice(0, 100));
           }
         }
 
-        if (!lastPartial) throw new Error("No blueprint data received from the model. Check the server logs.");
-        // Fill defaults for missing fields
-        if (!lastPartial.agentName) {
-          // Derive a name from the intent
-          const words = intent.split(" ").slice(0, 3).join(" ");
-          lastPartial.agentName = words ? `${words} Agent` : "Your Agent";
-        }
-        if (!lastPartial.summary) {
-          lastPartial.summary = intent;
-        }
-        if (!lastPartial.skills) lastPartial.skills = [];
-        if (!lastPartial.connections) lastPartial.connections = [];
-        if (!lastPartial.policies) lastPartial.policies = [];
-        if (!lastPartial.schedule) lastPartial.schedule = "daily";
-
+        if (!lastPartial) throw new Error("No blueprint data received. The model may not support tool calling.");
         const finalBlueprint = lastPartial as Blueprint;
 
         // Apply completed blueprint to editable state
@@ -268,14 +211,7 @@ export function SetupWorkspace({
         // Update chat
         setMessages((prev) => {
           const withoutLoading = prev.filter((m) => !("isLoading" in m && m.isLoading));
-          if (finalBlueprint!.clarifyingQuestion && !blueprint) {
-            setAwaitingClarification(true);
-            return [
-              ...withoutLoading,
-              { role: "ai" as const, content: finalBlueprint!.clarifyingQuestion! },
-            ];
-          }
-          const name = finalBlueprint!.agentName ?? "Your Agent";
+          const name = finalBlueprint.agentName ?? "Your Agent";
           return [
             ...withoutLoading,
             {
@@ -454,7 +390,7 @@ export function SetupWorkspace({
       let finalProjectId = projectId;
 
       if (!finalProjectId) {
-        const projectName = blueprint.projectName || "My Project";
+        const projectName = project?.name || "My Project";
         const proj = (await createProject({
           data: { name: projectName },
         })) as { id: string };
