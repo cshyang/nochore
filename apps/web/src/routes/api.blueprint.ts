@@ -81,12 +81,6 @@ export const BlueprintSchema = z.object({
     }),
   ).describe("1-3 autonomy rules for the agent"),
   schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
-  reasoning: z.object({
-    skills: z.string().describe("Why you chose these skills — what user problem they solve"),
-    connections: z.string().describe("Why these connections are needed and how the agent will use them"),
-    policies: z.string().describe("Why you set these autonomy levels — what's safe to automate vs. what needs human judgment"),
-    schedule: z.string().describe("Why this frequency makes sense for the user's use case"),
-  }).describe("Explain your reasoning for each configuration choice"),
   clarifyingQuestion: z.string().optional().describe("Only include if genuinely needed to understand the intent"),
 });
 
@@ -126,7 +120,7 @@ export const Route = createFileRoute("/api/blueprint")({
           )
           .join("\n");
 
-        const prompt = `You are configuring an AI agent for a business user. Based on their intent, generate a complete agent configuration. Think carefully about what the user actually needs, then explain your reasoning for each choice.
+        const prompt = `You are configuring an AI agent for a business user. Based on their intent, generate a complete agent configuration.
 
 User's intent: "${intent}"
 ${clarification ? `\nUser's clarification: "${clarification}"` : ""}
@@ -150,7 +144,6 @@ Instructions:
 - For connections, suggest ONLY providers the agent actually needs based on the intent. Don't add connections just because they exist.
 - For policies, generate 1-3 rules about autonomy. Frame each question as "When I [action]..." from the agent's perspective. Set defaultLevel to "auto" for low-risk actions, "ask" for high-impact changes, "notify" for informational actions.
 - Choose a schedule that matches the urgency of the use case.
-- In the reasoning object, explain WHY you made each choice — help the user understand your thinking so they can adjust confidently.
 - Do NOT include clarifyingQuestion unless you genuinely cannot determine the agent's purpose.`;
 
         const providerName = process.env.LLM_PROVIDER ?? "anthropic";
@@ -181,6 +174,7 @@ Instructions:
 
             let accumulatedText = "";
             let lastPartialJson = "";
+            let chunkCount = 0;
 
             try {
               for await (const event of result.fullStream) {
@@ -195,6 +189,7 @@ Instructions:
                     const json = JSON.stringify(partial);
                     if (json !== lastPartialJson) {
                       lastPartialJson = json;
+                      chunkCount++;
                       send({ _type: "blueprint", ...partial });
                     }
                   } catch {
@@ -207,8 +202,9 @@ Instructions:
               try {
                 const final = JSON.parse(accumulatedText);
                 send({ _type: "blueprint", ...final });
+                console.log(`[blueprint api] stream complete: ${chunkCount} partials, keys: ${Object.keys(final).join(", ")}`);
               } catch {
-                // Already sent last valid partial
+                console.warn(`[blueprint api] final parse failed, sent ${chunkCount} partials. Raw text (first 200): ${accumulatedText.slice(0, 200)}`);
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Stream error";

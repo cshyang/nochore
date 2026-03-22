@@ -148,40 +148,44 @@ export function SetupWorkspace({
 
           for (const line of lines) {
             if (!line.trim()) continue;
+            let parsed: Record<string, unknown>;
             try {
-              const parsed = JSON.parse(line);
-              if (parsed._error) throw new Error(parsed._error);
-
-              // Handle reasoning events — model thinking out loud
-              if (parsed._type === "reasoning") {
-                setReasoningText((prev) => prev + (parsed.text ?? ""));
-                continue;
-              }
-
-              // Handle blueprint partial snapshots
-              // Strip the _type field before processing
-              const { _type, ...blueprintData } = parsed;
-
-              // Normalize field names — some models (e.g., Zhipu GLM) output
-              // natural names instead of schema names when structuredOutputs
-              // is not supported
-              const normalized: Partial<Blueprint> = {
-                ...blueprintData,
-                agentName: blueprintData.agentName ?? blueprintData.name ?? blueprintData.agent_name,
-                summary: blueprintData.summary ?? blueprintData.description ?? blueprintData.desc,
-              };
-              delete (normalized as Record<string, unknown>).name;
-              delete (normalized as Record<string, unknown>).description;
-              delete (normalized as Record<string, unknown>).desc;
-              delete (normalized as Record<string, unknown>).agent_name;
-              delete (normalized as Record<string, unknown>)._type;
-
-              lastPartial = normalized;
-              setStreamingBlueprint(normalized);
-              setStreamChunkCount((c) => c + 1);
-            } catch (e) {
-              if (e instanceof Error && e.message !== "Stream error") throw e;
+              parsed = JSON.parse(line);
+            } catch {
+              console.warn("[blueprint stream] unparseable line:", line.slice(0, 100));
+              continue;
             }
+
+            if (parsed._error) {
+              throw new Error(parsed._error as string);
+            }
+
+            // Handle reasoning events — model thinking out loud
+            if (parsed._type === "reasoning") {
+              setReasoningText((prev) => prev + (parsed.text ?? ""));
+              continue;
+            }
+
+            // Handle blueprint partial snapshots
+            const { _type, ...blueprintData } = parsed;
+
+            // Normalize field names — some models output natural names
+            // instead of schema names when structuredOutputs is not supported
+            const normalized: Partial<Blueprint> = {
+              ...blueprintData,
+              agentName: (blueprintData.agentName ?? blueprintData.name ?? blueprintData.agent_name) as string | undefined,
+              summary: (blueprintData.summary ?? blueprintData.description ?? blueprintData.desc) as string | undefined,
+            };
+            delete (normalized as Record<string, unknown>).name;
+            delete (normalized as Record<string, unknown>).description;
+            delete (normalized as Record<string, unknown>).desc;
+            delete (normalized as Record<string, unknown>).agent_name;
+            delete (normalized as Record<string, unknown>)._type;
+
+            lastPartial = normalized;
+            setStreamingBlueprint(normalized);
+            setStreamChunkCount((c) => c + 1);
+            console.log("[blueprint stream] partial:", Object.keys(normalized).filter((k) => normalized[k as keyof typeof normalized] != null).join(", "));
           }
         }
 
@@ -189,11 +193,24 @@ export function SetupWorkspace({
         if (buffer.trim()) {
           try {
             const parsed = JSON.parse(buffer);
-            if (!parsed._error) lastPartial = parsed;
-          } catch { /* ignore */ }
+            if (!parsed._error && parsed._type !== "reasoning") {
+              const { _type, ...data } = parsed;
+              lastPartial = {
+                ...data,
+                agentName: data.agentName ?? data.name ?? data.agent_name,
+                summary: data.summary ?? data.description ?? data.desc,
+              };
+            }
+          } catch {
+            console.warn("[blueprint stream] unparseable final buffer:", buffer.slice(0, 100));
+          }
         }
 
-        if (!lastPartial) throw new Error("No blueprint data received");
+        if (!lastPartial) throw new Error("No blueprint data received from the model. Check the server logs.");
+        if (!lastPartial.agentName && !lastPartial.skills) {
+          console.error("[blueprint stream] final partial missing key fields:", lastPartial);
+          throw new Error("Blueprint generation returned incomplete data. The model may not support structured output.");
+        }
         const finalBlueprint = lastPartial as Blueprint;
 
         // Apply completed blueprint to editable state
@@ -223,15 +240,11 @@ export function SetupWorkspace({
             ];
           }
           const name = finalBlueprint!.agentName ?? "Your Agent";
-          const r = finalBlueprint!.reasoning;
-          const reasoningSummary = r
-            ? `\n\n**Why this setup:**\n- **Skills:** ${r.skills}\n- **Connections:** ${r.connections}\n- **Policies:** ${r.policies}\n- **Schedule:** ${r.schedule}`
-            : "";
           return [
             ...withoutLoading,
             {
               role: "ai" as const,
-              content: `Here's your blueprint for **${name}**.${reasoningSummary}\n\nReview it on the right, adjust anything you like, and launch when ready.`,
+              content: `Here's your blueprint for **${name}**. Review it on the right, adjust anything you like, and launch when ready.`,
             },
           ];
         });
