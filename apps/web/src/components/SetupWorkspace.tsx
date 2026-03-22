@@ -385,6 +385,7 @@ export function SetupWorkspace({
         style={{
           position: "fixed",
           inset: 0,
+          zIndex: 50,
           background: COLORS.bg,
           display: "flex",
           flexDirection: "column",
@@ -417,6 +418,7 @@ export function SetupWorkspace({
       style={{
         position: "fixed",
         inset: 0,
+        zIndex: 50,
         background: COLORS.bg,
         display: "flex",
         flexDirection: "column",
