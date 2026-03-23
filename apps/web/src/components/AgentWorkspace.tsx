@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
+import { COLORS, RADIUS } from "~/lib/colors";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
+import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
 import { Card } from "~/components/Card";
 import {
   ArrowLeft,
-  Gear,
   ChatCircle,
   Check,
   X,
@@ -134,17 +134,6 @@ function humanizeAction(action: string): string {
   return action.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
-function formatNextRun(nextRunAt: number | null): string {
-  if (!nextRunAt) return "";
-  const diffMs = nextRunAt - Date.now();
-  if (diffMs <= 0) return "overdue";
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  const remMin = diffMin % 60;
-  return remMin > 0 ? `${diffHr}h ${remMin}m` : `${diffHr}h`;
-}
-
 function transformToInsights(
   runs: SerializedRun[],
   pendingActions: SerializedPendingAction[],
@@ -205,26 +194,6 @@ function transformToInsights(
   }
 
   return insights;
-}
-
-// ---------------------------------------------------------------------------
-// Status bar helpers
-// ---------------------------------------------------------------------------
-
-function getStatusDot(status: AgentView["status"]): {
-  color: string;
-  label: string;
-} {
-  switch (status) {
-    case "running":
-      return { color: COLORS.green, label: "Running" };
-    case "attention":
-      return { color: COLORS.yellow, label: "Needs input" };
-    case "error":
-      return { color: COLORS.red, label: "Error" };
-    default:
-      return { color: COLORS.textDim, label: "Idle" };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +509,7 @@ function ActivityFeed({
       >
         <span style={{ fontSize: 24, opacity: 0.4 }}>✦</span>
         <span style={{ fontSize: 14, fontFamily: '"General Sans", sans-serif' }}>
-          No activity yet — your agent will check in soon.
+          No activity yet. Turn on the schedule to start your agent's first run.
         </span>
       </div>
     );
@@ -1003,16 +972,14 @@ function ChatDrawer({
 }
 
 // ---------------------------------------------------------------------------
-// SettingsPanel
+// OverviewPanel
 // ---------------------------------------------------------------------------
 
-function SettingsPanel({
+function OverviewPanel({
   agent,
-  onBack,
   onDeleteAgent,
 }: {
   agent: AgentView;
-  onBack: () => void;
   onDeleteAgent?: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1027,42 +994,24 @@ function SettingsPanel({
 
   return (
     <div>
-      {/* Back to feed */}
-      <button
-        onClick={onBack}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: COLORS.textSecondary,
-          fontSize: 13,
-          fontFamily: "inherit",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "0 0 20px 0",
-          transition: "color 0.15s ease",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.text)}
-        onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textSecondary)}
-      >
-        <ArrowLeft size={14} weight="light" />
-        Back to feed
-      </button>
-
       {/* Identity */}
       <SectionHeading>Identity</SectionHeading>
       <SettingsCard>
         <SettingsRow
           icon="✦"
-          title={agent.name}
-          description={agent.description || agent.intent}
-        />
-        <SettingsRow
-          icon="◎"
-          title="Intent"
-          description={agent.intent}
-        />
+          title="Instructions"
+          defaultExpanded={true}
+        >
+          <p style={{
+            color: COLORS.textSecondary,
+            fontSize: 13,
+            margin: 0,
+            lineHeight: 1.7,
+            whiteSpace: "pre-wrap",
+          }}>
+            {agent.description || agent.intent || "No instructions set."}
+          </p>
+        </SettingsRow>
         <SettingsRow
           icon="◷"
           title="Schedule"
@@ -1076,8 +1025,18 @@ function SettingsPanel({
         <>
           <SectionHeading>Skills</SectionHeading>
           <SettingsCard>
-            {agent.skills.map((skill) => (
-              <SkillRow key={skill} skillId={skill} />
+            {agent.skills.map((skill, i) => (
+              <SettingsRow
+                key={skill}
+                icon="◈"
+                title={skill
+                  .split(/[-_]/)
+                  .map((w) => w[0].toUpperCase() + w.slice(1))
+                  .join(" ")}
+                description={skill}
+                value={<Badge color="green">Active</Badge>}
+                isLast={i === agent.skills.length - 1}
+              />
             ))}
           </SettingsCard>
         </>
@@ -1210,159 +1169,6 @@ function SettingsPanel({
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: 12,
-        fontWeight: 600,
-        color: COLORS.textDim,
-        textTransform: "uppercase",
-        letterSpacing: 0.8,
-        marginTop: 32,
-        marginBottom: 8,
-        fontFamily: '"Satoshi", sans-serif',
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SettingsCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: COLORS.surface,
-        borderRadius: RADIUS.modal,
-        border: `1px solid ${COLORS.border}`,
-        overflow: "hidden",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SettingsRow({
-  icon,
-  title,
-  description,
-  value,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-  value?: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "14px 16px",
-        borderBottom: `1px solid ${COLORS.border}`,
-      }}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = COLORS.surfaceHover)
-      }
-      onMouseLeave={(e) =>
-        (e.currentTarget.style.background = "transparent")
-      }
-    >
-      <span
-        style={{
-          fontSize: 15,
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: COLORS.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          color: COLORS.textDim,
-        }}
-      >
-        {icon}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>
-          {title}
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: COLORS.textDim,
-            marginTop: 2,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {description}
-        </div>
-      </div>
-      {value && (
-        <span style={{ fontSize: 13, color: COLORS.textSecondary, flexShrink: 0 }}>
-          {value}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function SkillRow({ skillId }: { skillId: string }) {
-  const label = skillId
-    .split(/[-_]/)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ");
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "12px 16px",
-        borderBottom: `1px solid ${COLORS.border}`,
-      }}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = COLORS.surfaceHover)
-      }
-      onMouseLeave={(e) =>
-        (e.currentTarget.style.background = "transparent")
-      }
-    >
-      <span
-        style={{
-          fontSize: 15,
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: COLORS.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          color: COLORS.textDim,
-        }}
-      >
-        ◈
-      </span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 13, color: COLORS.textDim, marginTop: 2 }}>
-          {skillId}
-        </div>
-      </div>
-      <Badge color="green">Active</Badge>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // AgentWorkspace — main export
@@ -1379,19 +1185,7 @@ export function AgentWorkspace({
   onReject,
 }: AgentWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  const agentColor = getAgentColor(agent.id);
-  const statusDot = getStatusDot(agent.status);
-  const statusBadgeColor =
-    agent.status === "attention"
-      ? "yellow"
-      : agent.status === "error"
-        ? "red"
-        : "green";
-
-  const lastRunText = agent.lastRunRelative ?? "Never";
-  const nextRunText = agent.nextRunAt ? `Next in ${formatNextRun(agent.nextRunAt)}` : null;
+  const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
 
   return (
     <div style={{ position: "relative" }}>
@@ -1401,11 +1195,9 @@ export function AgentWorkspace({
       <div
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           gap: 16,
-          marginBottom: 4,
-          paddingBottom: 20,
-          borderBottom: `1px solid ${COLORS.border}`,
+          marginBottom: 0,
         }}
       >
         {/* Back */}
@@ -1422,7 +1214,6 @@ export function AgentWorkspace({
             alignItems: "center",
             justifyContent: "center",
             transition: "all 0.15s ease",
-            marginTop: 2,
             flexShrink: 0,
           }}
           onMouseEnter={(e) => {
@@ -1437,159 +1228,66 @@ export function AgentWorkspace({
           <ArrowLeft size={18} weight="light" />
         </button>
 
-        {/* Color bar + name block */}
-        <div
+        {/* Agent name */}
+        <h1
           style={{
-            display: "flex",
-            alignItems: "stretch",
-            gap: 14,
+            fontSize: 20,
+            fontWeight: 700,
+            color: COLORS.text,
+            margin: 0,
+            fontFamily: '"Satoshi", sans-serif',
+            lineHeight: 1.2,
             flex: 1,
             minWidth: 0,
           }}
         >
-          <div
+          {agent.name}
+        </h1>
+
+        {/* Chat icon */}
+        <IconButton
+          active={chatOpen}
+          onClick={() => setChatOpen(true)}
+          label="Chat"
+        >
+          <ChatCircle size={18} weight="light" />
+        </IconButton>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Tab bar                                                              */}
+      {/* ------------------------------------------------------------------ */}
+      <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 24, marginTop: 16 }}>
+        {(["overview", "activity"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
             style={{
-              width: 4,
-              borderRadius: RADIUS.sharp,
-              background: agentColor.primary,
-              flexShrink: 0,
-              alignSelf: "stretch",
+              background: "none",
+              border: "none",
+              borderBottom: `2px solid ${activeTab === tab ? COLORS.accent : "transparent"}`,
+              color: activeTab === tab ? COLORS.text : COLORS.textSecondary,
+              fontSize: 14,
+              fontWeight: activeTab === tab ? 600 : 400,
+              padding: "10px 16px",
+              cursor: "pointer",
+              fontFamily: '"Satoshi", sans-serif',
+              transition: "all 0.15s ease",
             }}
-          />
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 4,
-              }}
-            >
-              <h1
-                style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  color: COLORS.text,
-                  margin: 0,
-                  fontFamily: '"Satoshi", sans-serif',
-                  lineHeight: 1.2,
-                }}
-              >
-                {agent.name}
-              </h1>
-              <Badge color={statusBadgeColor}>
-                {agent.status === "attention"
-                  ? "Needs input"
-                  : agent.status === "error"
-                    ? "Error"
-                    : agent.status === "idle"
-                      ? "Idle"
-                      : "Running"}
-              </Badge>
-            </div>
-
-            {agent.description && (
-              <p
-                style={{
-                  fontSize: 13,
-                  color: COLORS.textSecondary,
-                  margin: 0,
-                  fontFamily: '"General Sans", sans-serif',
-                  lineHeight: 1.4,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {agent.description}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Icon buttons */}
-        <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 2 }}>
-          <IconButton
-            active={settingsOpen}
-            onClick={() => {
-              setSettingsOpen((v) => !v);
-              setChatOpen(false);
-            }}
-            label="Settings"
+            onMouseEnter={(e) => { if (activeTab !== tab) e.currentTarget.style.color = COLORS.text; }}
+            onMouseLeave={(e) => { if (activeTab !== tab) e.currentTarget.style.color = COLORS.textSecondary; }}
           >
-            <Gear size={18} weight="light" />
-          </IconButton>
-          <IconButton
-            active={chatOpen}
-            onClick={() => {
-              setChatOpen(true);
-              setSettingsOpen(false);
-            }}
-            label="Chat"
-          >
-            <ChatCircle size={18} weight="light" />
-          </IconButton>
-        </div>
+            {tab === "overview" ? "Overview" : "Activity"}
+          </button>
+        ))}
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Status bar                                                           */}
+      {/* Main content — overview or activity                                  */}
       {/* ------------------------------------------------------------------ */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 24,
-          fontSize: 13,
-          color: COLORS.textSecondary,
-          fontFamily: '"General Sans", sans-serif',
-        }}
-      >
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: RADIUS.pill,
-            background: statusDot.color,
-            flexShrink: 0,
-            display: "inline-block",
-          }}
-        />
-        <span style={{ color: statusDot.color, fontWeight: 500 }}>
-          {statusDot.label}
-        </span>
-        {agent.lastRunRelative && (
-          <>
-            <span style={{ color: COLORS.textDim }}>·</span>
-            <span>Last run {lastRunText}</span>
-          </>
-        )}
-        {nextRunText && (
-          <>
-            <span style={{ color: COLORS.textDim }}>·</span>
-            <span>{nextRunText}</span>
-          </>
-        )}
-        {agent.pendingCount > 0 && (
-          <>
-            <span style={{ color: COLORS.textDim }}>·</span>
-            <span style={{ color: COLORS.yellow }}>
-              {agent.pendingCount} pending{" "}
-              {agent.pendingCount === 1 ? "action" : "actions"}
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Main content — feed or settings                                      */}
-      {/* ------------------------------------------------------------------ */}
-      {settingsOpen ? (
-        <SettingsPanel
+      {activeTab === "overview" ? (
+        <OverviewPanel
           agent={agent}
-          onBack={() => setSettingsOpen(false)}
           onDeleteAgent={onDeleteAgent}
         />
       ) : (

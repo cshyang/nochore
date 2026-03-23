@@ -2,6 +2,9 @@
 // AgentView — computed from DB (agents + runs + lessons + pending_actions)
 // ---------------------------------------------------------------------------
 
+// TODO: simplify — schedule on/off replaces draft/live lifecycle
+export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
+
 export interface AgentView {
   id: string;
   name: string;
@@ -12,7 +15,8 @@ export interface AgentView {
   policyRules: string[];
   globalApprovalRequired: boolean;
   scopeStrategy: "static" | "llm";
-  status: "running" | "attention" | "idle" | "error";
+  lifecycleStatus: LifecycleStatus; // draft → live → paused → archived
+  status: "running" | "attention" | "idle" | "error"; // computed operational status
   lastRunAt: number | null;
   lastRunRelative: string | null; // "2h ago", "Never"
   nextRunAt: number | null;
