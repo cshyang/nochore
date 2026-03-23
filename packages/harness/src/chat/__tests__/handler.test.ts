@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
-import { generateText } from "ai";
-
 import { createTestDb } from "../../db/client";
 import { SqliteMemoryStore } from "../../memory/store";
 import { ChatSessionStore } from "../../repositories/chat-session";
@@ -20,15 +18,28 @@ import type { ContextAssembler, AssembledContext } from "../../context/assembler
 // Mock the AI SDK — we do NOT want real LLM calls in tests
 // ---------------------------------------------------------------------------
 
+// vi.hoisted runs before vi.mock hoisting, so these are available in the factory
+const { mockGenerate, MockToolLoopAgent } = vi.hoisted(() => {
+  const mockGenerate = vi.fn().mockResolvedValue({
+    text: "I analyzed your campaigns and found 3 issues.",
+    steps: [],
+    toolCalls: [],
+  });
+
+  // Mock ToolLoopAgent as a class so `new ToolLoopAgent(...)` works
+  const MockToolLoopAgent = vi.fn(function (this: any, config: any) {
+    this._config = config;
+    this.generate = mockGenerate;
+  }) as any;
+
+  return { mockGenerate, MockToolLoopAgent };
+});
+
 vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    generateText: vi.fn().mockResolvedValue({
-      text: "I analyzed your campaigns and found 3 issues.",
-      steps: [],
-      toolCalls: [],
-    }),
+    ToolLoopAgent: MockToolLoopAgent,
   };
 });
 
@@ -104,8 +115,9 @@ function buildDeps(overrides?: Partial<ChatDependencies>): ChatDependencies {
 describe("handleChat", () => {
   beforeEach(async () => {
     tmpDir = await createTmpWorkspace();
-    vi.mocked(generateText).mockReset();
-    vi.mocked(generateText).mockResolvedValue({
+    MockToolLoopAgent.mockClear();
+    mockGenerate.mockReset();
+    mockGenerate.mockResolvedValue({
       text: "I analyzed your campaigns and found 3 issues.",
       steps: [],
       toolCalls: [],
@@ -120,7 +132,7 @@ describe("handleChat", () => {
   // 1. Basic flow
   // -------------------------------------------------------------------------
 
-  it("returns response text from generateText", async () => {
+  it("returns response text from agent.generate()", async () => {
     const deps = buildDeps();
     const config = makeConfig();
 
@@ -141,7 +153,7 @@ describe("handleChat", () => {
   // 2. Context assembly
   // -------------------------------------------------------------------------
 
-  it("passes system prompt from contextAssembler.forChat() to generateText", async () => {
+  it("passes system prompt as instructions to ToolLoopAgent", async () => {
     const contextAssembler = makeContextAssembler();
     const deps = buildDeps({ contextAssembler });
     const config = makeConfig();
@@ -156,16 +168,16 @@ describe("handleChat", () => {
     // contextAssembler.forChat should have been called with agentId
     expect(contextAssembler.forChat).toHaveBeenCalledWith(AGENT_ID);
 
-    // generateText should receive the system prompt
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
-    expect(call.system).toBe("You are a helpful ads agent.");
+    // ToolLoopAgent constructor should receive the system prompt as instructions
+    const constructorArgs = MockToolLoopAgent.mock.calls[0]![0] as any;
+    expect(constructorArgs.instructions).toBe("You are a helpful ads agent.");
   });
 
   // -------------------------------------------------------------------------
   // 3. History loading
   // -------------------------------------------------------------------------
 
-  it("loads chat history and includes it in messages to generateText", async () => {
+  it("loads chat history and includes it in messages to agent.generate()", async () => {
     const db = createTestDb();
     const chatSessionStore = new ChatSessionStore(db);
     const deps = buildDeps({
@@ -197,8 +209,8 @@ describe("handleChat", () => {
       deps,
     });
 
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
-    const messages = call.messages;
+    const generateArgs = mockGenerate.mock.calls[0]![0] as any;
+    const messages = generateArgs.messages;
 
     // Should have: history user + history assistant + current user
     expect(messages).toHaveLength(3);
@@ -253,7 +265,7 @@ describe("handleChat", () => {
   // 5. Tools registered
   // -------------------------------------------------------------------------
 
-  it("passes all 8 tool factories to generateText", async () => {
+  it("passes all 8 tool factories to ToolLoopAgent", async () => {
     const deps = buildDeps();
     const config = makeConfig();
 
@@ -264,8 +276,8 @@ describe("handleChat", () => {
       deps,
     });
 
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
-    const toolNames = Object.keys(call.tools);
+    const constructorArgs = MockToolLoopAgent.mock.calls[0]![0] as any;
+    const toolNames = Object.keys(constructorArgs.tools);
 
     expect(toolNames).toContain("read_workspace");
     expect(toolNames).toContain("write_scratchpad");
@@ -293,9 +305,9 @@ describe("handleChat", () => {
       deps,
     });
 
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
+    const constructorArgs = MockToolLoopAgent.mock.calls[0]![0] as any;
     // The model should be created via createAnthropic() with the config model
-    expect(call.model).toBeDefined();
+    expect(constructorArgs.model).toBeDefined();
   });
 
   // -------------------------------------------------------------------------
@@ -303,14 +315,14 @@ describe("handleChat", () => {
   // -------------------------------------------------------------------------
 
   it("extracts tool calls from result steps", async () => {
-    vi.mocked(generateText).mockResolvedValue({
+    mockGenerate.mockResolvedValue({
       text: "I found wasteful keywords.",
       steps: [
         {
           toolCalls: [
             {
               toolName: "query_memory",
-              args: { type: "lessons" },
+              input: { type: "lessons" },
             },
           ],
           toolResults: [
@@ -347,7 +359,7 @@ describe("handleChat", () => {
   // 8. History filters out tool-role messages
   // -------------------------------------------------------------------------
 
-  it("skips tool-role messages when building history for generateText", async () => {
+  it("skips tool-role messages when building history for agent.generate()", async () => {
     const db = createTestDb();
     const chatSessionStore = new ChatSessionStore(db);
     const deps = buildDeps({
@@ -386,8 +398,8 @@ describe("handleChat", () => {
       deps,
     });
 
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
-    const messages = call.messages;
+    const generateArgs = mockGenerate.mock.calls[0]![0] as any;
+    const messages = generateArgs.messages;
 
     // Should have: history user + history assistant + current user (tool skipped)
     expect(messages).toHaveLength(3);
@@ -395,10 +407,10 @@ describe("handleChat", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 9. maxSteps is set to 5
+  // 9. stopWhen is configured with stepCountIs(5)
   // -------------------------------------------------------------------------
 
-  it("sets maxSteps to 5 in generateText call", async () => {
+  it("configures ToolLoopAgent with stopWhen: stepCountIs(5)", async () => {
     const deps = buildDeps();
     const config = makeConfig();
 
@@ -409,7 +421,7 @@ describe("handleChat", () => {
       deps,
     });
 
-    const call = vi.mocked(generateText).mock.calls[0]![0] as any;
-    expect(call.maxSteps).toBe(5);
+    const constructorArgs = MockToolLoopAgent.mock.calls[0]![0] as any;
+    expect(constructorArgs.stopWhen).toBeDefined();
   });
 });

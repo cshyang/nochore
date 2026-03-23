@@ -12,7 +12,7 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, tool, stepCountIs } from "ai";
+import { ToolLoopAgent, tool, stepCountIs } from "ai";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -241,10 +241,8 @@ The summary field becomes the agent's system prompt — it must be specific and 
 
         const providerName = process.env.LLM_PROVIDER ?? "anthropic";
 
-        const result = streamText({
+        const blueprintAgent = new ToolLoopAgent({
           model,
-          prompt,
-          stopWhen: stepCountIs(5),
           tools: {
             create_blueprint: tool({
               description: "Create an agent blueprint with a detailed summary that becomes the agent's system prompt. Call when you understand the intent well enough to write actionable instructions.",
@@ -271,12 +269,15 @@ The summary field becomes the agent's system prompt — it must be specific and 
               },
             }),
           },
+          stopWhen: stepCountIs(5),
           providerOptions: {
             [providerName]: {
               reasoningEffort: "high",
             },
           },
         });
+
+        const result = await blueprintAgent.stream({ prompt });
 
         // Stream NDJSON: reasoning, tool-status, blueprint, text events
         const encoder = new TextEncoder();

@@ -1,5 +1,5 @@
-import { generateText } from "ai";
-import type { CoreMessage } from "ai";
+import { ToolLoopAgent, stepCountIs } from "ai";
+import type { ModelMessage } from "ai";
 import { createModel } from "../skills/executor";
 
 import type { MemoryStore } from "../types/memory";
@@ -59,9 +59,9 @@ export async function handleChat(params: {
   // Step 2: Load chat history
   const history = await deps.chatSessionStore.loadHistory(agentId, 50);
 
-  // Step 3: Convert history to AI SDK CoreMessage format
+  // Step 3: Convert history to AI SDK ModelMessage format
   // Skip "tool" role messages — AI SDK handles tool results internally
-  const historyMessages: CoreMessage[] = history
+  const historyMessages: ModelMessage[] = history
     .filter((m) => m.role !== "tool")
     .map((m) => ({
       role: m.role as "user" | "assistant",
@@ -105,16 +105,19 @@ export async function handleChat(params: {
     }),
   };
 
-  // Step 6: Call AI SDK generateText
-  const result = await generateText({
+  // Step 6: Call AI SDK ToolLoopAgent
+  const agent = new ToolLoopAgent({
     model: createModel(config.model),
-    system: context.systemPrompt,
+    instructions: context.systemPrompt,
+    tools,
+    stopWhen: stepCountIs(5),
+  });
+
+  const result = await agent.generate({
     messages: [
       ...historyMessages,
       { role: "user" as const, content: message },
     ],
-    tools,
-    maxSteps: 5,
   });
 
   // Step 7: Save assistant response
@@ -135,7 +138,7 @@ export async function handleChat(params: {
         const tr = step.toolResults[i];
         toolCalls.push({
           toolName: tc.toolName,
-          args: tc.args,
+          args: tc.input,
           result: tr?.result,
         });
       }
