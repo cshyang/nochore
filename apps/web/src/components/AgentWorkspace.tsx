@@ -1406,6 +1406,8 @@ function OverviewPanel({
                                   ) : (
                                     <button
                                       onClick={async () => {
+                                        // Open popup FIRST (synchronous, from user gesture) to avoid popup blocker
+                                        const popup = window.open("about:blank", `connect-${provider}`, "width=600,height=700,left=200,top=100");
                                         setConnectingProviders((prev) => new Set(prev).add(provider));
                                         try {
                                           const { initiateConnection } = await import("~/server/connections");
@@ -1417,8 +1419,9 @@ function OverviewPanel({
                                             },
                                           });
                                           const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
-                                          if (redirectUrl) {
-                                            const popup = window.open(redirectUrl, `connect-${provider}`, "width=600,height=700,left=200,top=100");
+                                          if (redirectUrl && popup) {
+                                            // Navigate the already-open popup to the OAuth URL
+                                            popup.location.href = redirectUrl;
 
                                             const pollInterval = setInterval(async () => {
                                               try {
@@ -1448,6 +1451,7 @@ function OverviewPanel({
                                           }
                                         } catch (err) {
                                           console.error("Failed to initiate connection:", err);
+                                          try { popup?.close(); } catch {}
                                           setConnectingProviders((prev) => {
                                             const next = new Set(prev);
                                             next.delete(provider);
