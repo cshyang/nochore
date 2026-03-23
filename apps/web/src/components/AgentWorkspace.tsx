@@ -577,8 +577,14 @@ function ChatDrawer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Load chat history on mount — only when in chat mode and no messages yet.
+  // Skip if messages exist (e.g. from a blueprint session that just completed).
   useEffect(() => {
     if (mode === "blueprint") {
+      setLoading(false);
+      return;
+    }
+    if (messages.length > 0) {
       setLoading(false);
       return;
     }
@@ -602,7 +608,8 @@ function ChatDrawer({
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [agentId, projectId, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId, projectId]);
 
   useEffect(() => {
     if (scrollRef.current) {
