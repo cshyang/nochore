@@ -21,6 +21,7 @@ export const Route = createFileRoute("/$projectId/callback/composio")({
   validateSearch: (search: Record<string, unknown>) => ({
     provider: (search.provider as string) || "googleads",
     returnTo: (search.returnTo as string) || "",
+    popup: (search.popup as string) === "true",
   }),
   component: ComposioCallbackPage,
 });
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/$projectId/callback/composio")({
 function ComposioCallbackPage() {
   const navigate = useNavigate();
   const { projectId } = Route.useParams();
-  const { provider, returnTo } = useSearch({ from: Route.id });
+  const { provider, returnTo, popup } = useSearch({ from: Route.id });
 
   const [status, setStatus] = useState<"verifying" | "success" | "error">(
     "verifying",
@@ -50,9 +51,12 @@ function ComposioCallbackPage() {
 
           if (result.connected) {
             if (!cancelled) setStatus("success");
-            // Redirect after a brief success display
             setTimeout(() => {
               if (!cancelled) {
+                if (popup) {
+                  window.close();
+                  return;
+                }
                 if (returnTo) {
                   navigate({ to: returnTo });
                 } else {
@@ -62,7 +66,7 @@ function ComposioCallbackPage() {
                   });
                 }
               }
-            }, 1500);
+            }, 1000);
             return;
           }
         } catch {
@@ -86,6 +90,10 @@ function ComposioCallbackPage() {
             setStatus("success");
             setTimeout(() => {
               if (!cancelled) {
+                if (popup) {
+                  window.close();
+                  return;
+                }
                 if (returnTo) {
                   navigate({ to: returnTo });
                 } else {
@@ -95,7 +103,7 @@ function ComposioCallbackPage() {
                   });
                 }
               }
-            }, 1500);
+            }, 1000);
             return;
           }
         } catch {
@@ -111,7 +119,7 @@ function ComposioCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, provider, returnTo, navigate]);
+  }, [projectId, provider, returnTo, popup, navigate]);
 
   const providerLabel =
     provider === "googleads"
@@ -167,7 +175,7 @@ function ComposioCallbackPage() {
 
         {status === "success" && (
           <>
-            <div style={{ fontSize: 32, marginBottom: 16 }}>✅</div>
+            <div style={{ fontSize: 32, marginBottom: 16 }}>✓</div>
             <h2
               style={{
                 color: COLORS.text,
@@ -185,7 +193,7 @@ function ComposioCallbackPage() {
                 margin: 0,
               }}
             >
-              Redirecting you back...
+              {popup ? "You can close this window." : "Redirecting you back..."}
             </p>
           </>
         )}
@@ -213,17 +221,21 @@ function ComposioCallbackPage() {
               {errorMsg}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  navigate({
-                    to: "/$projectId/agents/new",
-                    params: { projectId },
-                  })
-                }
-              >
-                Back to setup
-              </Button>
+              {popup ? (
+                <Button onClick={() => window.close()}>Close</Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    navigate({
+                      to: "/$projectId",
+                      params: { projectId },
+                    })
+                  }
+                >
+                  Back to project
+                </Button>
+              )}
               <Button onClick={() => window.location.reload()}>
                 Try again
               </Button>
