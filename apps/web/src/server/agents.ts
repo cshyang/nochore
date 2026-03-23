@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { tasks } from "@trigger.dev/sdk/v3";
+import { tasks, runs } from "@trigger.dev/sdk/v3";
 import { getProjectDeps } from "./deps";
 import { buildAgentView } from "./projects";
 import {
@@ -302,14 +302,16 @@ export const launchAgent = createServerFn({ method: "POST" })
       .where(eq(agents.id, agentId))
       .run();
 
-    // Trigger first run via trigger.dev
+    // Trigger first run via trigger.dev and wait for completion
     const handle = await tasks.trigger<typeof agentRunTask>("agent-run", {
       agentId,
       projectId,
       trigger: { type: "manual", metadata: { source: "launch" } },
     });
 
-    return jsonSafe({ launched: true, runHandle: handle.id });
+    const completed = await runs.poll(handle, { pollIntervalMs: 1000 });
+
+    return jsonSafe({ launched: true, runId: handle.id, ok: completed.isSuccess });
   });
 
 // ---------------------------------------------------------------------------
@@ -327,7 +329,15 @@ export const triggerManualRun = createServerFn({ method: "POST" })
       trigger: { type: "manual", metadata: { source: "run_now" } },
     });
 
-    return jsonSafe({ triggered: true, runHandle: handle.id });
+    // Wait for the pipeline to complete before returning
+    const completed = await runs.poll(handle, { pollIntervalMs: 1000 });
+
+    return jsonSafe({
+      triggered: true,
+      runId: handle.id,
+      status: completed.status,
+      ok: completed.isSuccess,
+    });
   });
 
 // ---------------------------------------------------------------------------

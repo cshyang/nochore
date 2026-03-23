@@ -1920,6 +1920,7 @@ export function AgentWorkspace({
           <button
             onClick={async () => {
               setRunningNow(true);
+              setActiveTab("activity");
               try {
                 await onRunNow();
               } finally {

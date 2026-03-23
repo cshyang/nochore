@@ -69,6 +69,7 @@ function AgentDetailPage() {
 
   const handleRunNow = async () => {
     await triggerManualRun({ data: { agentId, projectId } });
+    await router.invalidate();
   };
 
   return (
