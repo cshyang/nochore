@@ -1167,6 +1167,24 @@ const PROVIDER_NAMES: Record<string, string> = {
   github: "GitHub",
 };
 
+// Data type → provider mapping (which provider supplies which data)
+const DATA_TYPE_PROVIDERS: Record<string, string> = {
+  search_terms: "googleads",
+  ad_metrics: "googleads",
+  budget_data: "googleads",
+  impression_share: "googleads",
+  quality_scores: "googleads",
+};
+
+function getRequiredProviders(consumes: string[]): string[] {
+  const providers = new Set<string>();
+  for (const dt of consumes) {
+    const provider = DATA_TYPE_PROVIDERS[dt];
+    if (provider) providers.add(provider);
+  }
+  return [...providers];
+}
+
 function OverviewPanel({
   agent,
   projectId,
@@ -1335,35 +1353,106 @@ function OverviewPanel({
                   }
                 >
                   {isActive && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Require approval</span>
-                      <button
-                        onClick={() => {
-                          setSkillApprovals((prev) => ({ ...prev, [skill.id]: !needsApproval }));
-                        }}
-                        style={{
-                          width: 36,
-                          height: 20,
-                          borderRadius: 10,
-                          border: "none",
-                          background: needsApproval ? COLORS.accent : COLORS.border,
-                          cursor: "pointer",
-                          position: "relative",
-                          transition: "background 0.15s ease",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <span style={{
-                          position: "absolute",
-                          top: 2,
-                          left: needsApproval ? 18 : 2,
-                          width: 16,
-                          height: 16,
-                          borderRadius: 8,
-                          background: COLORS.white,
-                          transition: "left 0.15s ease",
-                        }} />
-                      </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {/* Required connections for this skill */}
+                      {(() => {
+                        const requiredProviders = getRequiredProviders((skill as { consumes?: string[] }).consumes ?? []);
+                        if (requiredProviders.length === 0) return null;
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {requiredProviders.map((provider) => {
+                              const isConnected = projectConnections?.some(
+                                (pc) => pc.provider === provider && pc.status === "active"
+                              ) ?? false;
+                              return (
+                                <div
+                                  key={provider}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "6px 10px",
+                                    borderRadius: 6,
+                                    background: isConnected ? COLORS.greenDim : COLORS.yellowDim,
+                                    border: `1px solid ${isConnected ? "transparent" : COLORS.yellow}`,
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ fontSize: 12, color: isConnected ? COLORS.green : COLORS.yellow }}>
+                                      {isConnected ? "●" : "⚠"}
+                                    </span>
+                                    <span style={{ fontSize: 12, color: COLORS.textSecondary }}>
+                                      {PROVIDER_NAMES[provider] ?? provider}
+                                    </span>
+                                  </div>
+                                  {isConnected ? (
+                                    <span style={{ fontSize: 11, color: COLORS.green, fontWeight: 500 }}>Connected</span>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const { initiateConnection } = await import("~/server/connections");
+                                          const result = await initiateConnection({
+                                            data: { projectId, provider, callbackUrl: window.location.href },
+                                          });
+                                          const url = (result as { redirectUrl: string }).redirectUrl;
+                                          if (url) window.open(url, "_blank");
+                                        } catch (err) {
+                                          console.error("Failed to initiate connection:", err);
+                                        }
+                                      }}
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        color: COLORS.yellow,
+                                        background: "none",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        fontFamily: "inherit",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      Connect →
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Require approval toggle */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Require approval</span>
+                        <button
+                          onClick={() => {
+                            setSkillApprovals((prev) => ({ ...prev, [skill.id]: !needsApproval }));
+                          }}
+                          style={{
+                            width: 36,
+                            height: 20,
+                            borderRadius: 10,
+                            border: "none",
+                            background: needsApproval ? COLORS.accent : COLORS.border,
+                            cursor: "pointer",
+                            position: "relative",
+                            transition: "background 0.15s ease",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span style={{
+                            position: "absolute",
+                            top: 2,
+                            left: needsApproval ? 18 : 2,
+                            width: 16,
+                            height: 16,
+                            borderRadius: 8,
+                            background: COLORS.white,
+                            transition: "left 0.15s ease",
+                          }} />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </SettingsRow>
@@ -1434,82 +1523,37 @@ function OverviewPanel({
         </div>
       </SettingsCard>
 
-      {/* Connections */}
-      <SectionHeading>Connections</SectionHeading>
-      <SettingsCard>
-        {(agent.connections?.length ?? 0) > 0 ? (
-          agent.connections.map((conn, i) => {
-            const isConnected = projectConnections.some(
-              (pc) => pc.provider === conn.provider && pc.status === "active"
-            );
-            return (
-              <SettingsRow
-                key={conn.provider}
-                icon={isConnected ? "○" : "\u26A0"}
-                title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
-                description={conn.reason}
-                isLast={i === agent.connections.length - 1}
-                trailing={
-                  isConnected ? (
+      {/* Connections — status summary (auth happens in Skills) */}
+      {(agent.connections?.length ?? 0) > 0 && (
+        <>
+          <SectionHeading>Connections</SectionHeading>
+          <SettingsCard>
+            {agent.connections.map((conn, i) => {
+              const isConnected = projectConnections?.some(
+                (pc) => pc.provider === conn.provider && pc.status === "active"
+              ) ?? false;
+              return (
+                <SettingsRow
+                  key={conn.provider}
+                  icon={isConnected ? "●" : "⚠"}
+                  title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
+                  description={conn.reason}
+                  isLast={i === agent.connections.length - 1}
+                  trailing={
                     <span style={{
                       fontSize: 11,
                       fontWeight: 500,
-                      color: COLORS.green,
-                      padding: "3px 10px",
-                      borderRadius: 99,
-                      background: COLORS.greenDim,
+                      color: isConnected ? COLORS.green : COLORS.yellow,
                     }}>
-                      Connected
+                      {isConnected ? "Connected" : "Not connected"}
                     </span>
-                  ) : (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const { initiateConnection } = await import("~/server/connections");
-                          const result = await initiateConnection({
-                            data: {
-                              projectId,
-                              provider: conn.provider,
-                              callbackUrl: window.location.href,
-                            },
-                          });
-                          const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
-                          if (redirectUrl) {
-                            window.open(redirectUrl, "_blank");
-                          }
-                        } catch (err) {
-                          console.error("Failed to initiate connection:", err);
-                        }
-                      }}
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: COLORS.yellow,
-                        padding: "3px 10px",
-                        borderRadius: 99,
-                        background: COLORS.yellowDim,
-                        border: `1px solid ${COLORS.yellow}`,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      Connect
-                    </button>
-                  )
-                }
-              />
-            );
-          })
-        ) : (
-          <SettingsRow
-            icon="○"
-            title="No connections needed"
-            description="This agent works with its instructions alone"
-            isLast={true}
-          />
-        )}
-      </SettingsCard>
+                  }
+                />
+              );
+            })}
+          </SettingsCard>
+        </>
+      )}
 
       {/* Notifications */}
       <SectionHeading>Notifications</SectionHeading>
