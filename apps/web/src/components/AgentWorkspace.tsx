@@ -1408,6 +1408,16 @@ function OverviewPanel({
                                       onClick={async () => {
                                         // Open popup FIRST (synchronous, from user gesture) to avoid popup blocker
                                         const popup = window.open("about:blank", `connect-${provider}`, "width=600,height=700,left=200,top=100");
+                                        // Write a loading page immediately so the popup isn't empty
+                                        if (popup) {
+                                          popup.document.write(`
+                                            <html><body style="font-family:system-ui;background:#100F14;color:#E8E9ED;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+                                              <div style="text-align:center">
+                                                <div style="font-size:32px;margin-bottom:16px;color:#6C5CE7">✦</div>
+                                                <p style="color:#8B8D98;font-size:14px;margin:0">Connecting to ${PROVIDER_NAMES[provider] ?? provider}...</p>
+                                              </div>
+                                            </body></html>`);
+                                        }
                                         setConnectingProviders((prev) => new Set(prev).add(provider));
                                         try {
                                           const { initiateConnection } = await import("~/server/connections");
@@ -1451,7 +1461,15 @@ function OverviewPanel({
                                           }
                                         } catch (err) {
                                           console.error("Failed to initiate connection:", err);
-                                          try { popup?.close(); } catch {}
+                                          // Show error in the popup instead of closing it
+                                          if (popup && !popup.closed) {
+                                            popup.document.body.innerHTML = `
+                                              <div style="font-family:system-ui;padding:40px;text-align:center;background:#100F14;color:#E8E9ED;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                                                <p style="color:#E07070;margin:0 0 12px">Connection failed</p>
+                                                <p style="color:#8B8D98;font-size:13px;margin:0 0 20px">${err instanceof Error ? err.message : String(err)}</p>
+                                                <button onclick="window.close()" style="background:#6C5CE7;color:white;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
+                                              </div>`;
+                                          }
                                           setConnectingProviders((prev) => {
                                             const next = new Set(prev);
                                             next.delete(provider);
