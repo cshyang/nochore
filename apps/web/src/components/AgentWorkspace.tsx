@@ -1585,7 +1585,7 @@ function OverviewPanel({
         </div>
       </SettingsCard>
 
-      {/* Connections — status summary (auth happens in Skills) */}
+      {/* Connections — clickable to connect */}
       {(agent.connections?.length ?? 0) > 0 && (
         <>
           <SectionHeading>Connections</SectionHeading>
@@ -1594,6 +1594,7 @@ function OverviewPanel({
               const isConnected = allConnections.some(
                 (pc) => pc.provider === conn.provider && pc.status === "active"
               );
+              const isConnecting = connectingProviders.has(conn.provider);
               return (
                 <SettingsRow
                   key={conn.provider}
@@ -1601,13 +1602,49 @@ function OverviewPanel({
                   title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
                   description={conn.reason}
                   isLast={i === agent.connections.length - 1}
+                  onClick={!isConnected && !isConnecting ? async () => {
+                    setConnectingProviders((prev) => new Set(prev).add(conn.provider));
+                    try {
+                      const { initiateConnection } = await import("~/server/connections");
+                      const result = await initiateConnection({
+                        data: {
+                          projectId,
+                          provider: conn.provider,
+                          callbackUrl: `${window.location.origin}/${projectId}/callback/composio?provider=${conn.provider}&popup=true`,
+                        },
+                      });
+                      const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
+                      if (redirectUrl) {
+                        const popup = window.open(redirectUrl, `connect-${conn.provider}`, "width=600,height=700,left=200,top=100");
+                        const pollInterval = setInterval(async () => {
+                          try {
+                            const { checkConnection } = await import("~/server/connections");
+                            const status = await checkConnection({ data: { projectId, provider: conn.provider } });
+                            if ((status as { connected: boolean }).connected) {
+                              clearInterval(pollInterval);
+                              setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
+                              setLocalConnections((prev) => [...prev, { id: conn.provider, provider: conn.provider, status: "active" }]);
+                              try { popup?.close(); } catch {}
+                            }
+                          } catch {}
+                        }, 2000);
+                        setTimeout(() => {
+                          clearInterval(pollInterval);
+                          setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
+                        }, 60000);
+                      }
+                    } catch (err) {
+                      console.error("Failed to initiate connection:", err);
+                      setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
+                    }
+                  } : undefined}
                   trailing={
                     <span style={{
                       fontSize: 11,
                       fontWeight: 500,
-                      color: isConnected ? COLORS.green : COLORS.yellow,
+                      color: isConnected ? COLORS.green : isConnecting ? COLORS.accent : COLORS.yellow,
                     }}>
-                      {isConnected ? "Connected" : "Not connected"}
+                      {isConnected ? "Connected" : isConnecting ? "Connecting..." : "Not connected"}
                     </span>
                   }
                 />

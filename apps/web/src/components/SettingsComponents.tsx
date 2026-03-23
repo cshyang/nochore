@@ -64,6 +64,7 @@ export function SettingsRow({
   children,
   defaultExpanded,
   isLast,
+  onClick,
 }: {
   icon: string;
   title: string;
@@ -73,9 +74,11 @@ export function SettingsRow({
   children?: React.ReactNode;
   defaultExpanded?: boolean;
   isLast?: boolean;
+  onClick?: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const isExpandable = !!children;
+  const isClickable = isExpandable || !!onClick;
 
   return (
     <div
@@ -85,17 +88,20 @@ export function SettingsRow({
     >
       {/* Header row — always visible */}
       <div
-        onClick={() => isExpandable && setExpanded(!expanded)}
+        onClick={() => {
+          if (onClick) onClick();
+          else if (isExpandable) setExpanded(!expanded);
+        }}
         style={{
           display: "flex",
           alignItems: "center",
           gap: 14,
           padding: "14px 16px",
-          cursor: isExpandable ? "pointer" : "default",
+          cursor: isClickable ? "pointer" : "default",
           transition: "background 0.15s ease",
         }}
         onMouseEnter={(e) => {
-          if (isExpandable) e.currentTarget.style.background = COLORS.surfaceHover;
+          if (isClickable) e.currentTarget.style.background = COLORS.surfaceHover;
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = "transparent";
