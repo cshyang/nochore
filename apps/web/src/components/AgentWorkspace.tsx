@@ -20,6 +20,7 @@ import {
   DotsThree,
   Play,
 } from "@phosphor-icons/react";
+import Markdown from "react-markdown";
 import { sendChat, getChatHistory } from "~/server/chat";
 import type { AgentView, ProjectView } from "~/lib/types";
 
@@ -962,54 +963,32 @@ function ChatDrawer({
               history, and policies.
             </div>
           ) : (
-            messages.map((msg) => (
-              <div
-                key={msg.id}
-                style={{
-                  display: "flex",
-                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "82%",
-                    padding: "10px 14px",
-                    borderRadius: RADIUS.modal,
-                    background:
-                      msg.role === "user" ? COLORS.surfaceHover : COLORS.bg,
-                    border: `1px solid ${COLORS.border}`,
-                    color: COLORS.text,
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    fontFamily: '"General Sans", sans-serif',
-                  }}
-                >
-                  {msg.role === "assistant" && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 5,
-                        marginBottom: 6,
-                      }}
-                    >
-                      <Sparkle size={12} weight="light" color={COLORS.textDim} />
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: COLORS.textSecondary,
-                          fontFamily: '"Satoshi", sans-serif',
-                        }}
-                      >
-                        Agent
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+            messages.map((msg) =>
+              msg.role === "user" ? (
+                <div key={msg.id} style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      maxWidth: "85%",
+                      padding: "10px 14px",
+                      borderRadius: 18,
+                      borderBottomRightRadius: 4,
+                      background: COLORS.surfaceHover,
+                      color: COLORS.text,
+                      fontSize: 14,
+                      lineHeight: 1.5,
+                      fontFamily: '"General Sans", sans-serif',
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {msg.content}
+                  </div>
                 </div>
-              </div>
-            ))
+              ) : (
+                <div key={msg.id} className="aw-md" style={{ width: "100%" }}>
+                  <Markdown>{msg.content}</Markdown>
+                </div>
+              ),
+            )
           )}
 
           {sending && mode === "blueprint" && reasoningText && (
@@ -1859,6 +1838,26 @@ export function AgentWorkspace({
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
         }
+        /* Markdown styles for assistant messages */
+        .aw-md { color: ${COLORS.text}; font-size: 14px; line-height: 1.65; font-family: "General Sans", sans-serif; }
+        .aw-md p { margin: 0 0 8px 0; }
+        .aw-md p:last-child { margin-bottom: 0; }
+        .aw-md strong { color: ${COLORS.text}; font-weight: 600; }
+        .aw-md em { color: ${COLORS.textSecondary}; }
+        .aw-md h1, .aw-md h2, .aw-md h3 { color: ${COLORS.text}; font-family: "Satoshi", sans-serif; margin: 16px 0 8px 0; font-weight: 600; }
+        .aw-md h1 { font-size: 16px; }
+        .aw-md h2 { font-size: 15px; }
+        .aw-md h3 { font-size: 14px; }
+        .aw-md ul, .aw-md ol { margin: 4px 0 8px 0; padding-left: 20px; }
+        .aw-md li { margin-bottom: 4px; }
+        .aw-md li::marker { color: ${COLORS.textDim}; }
+        .aw-md code { background: rgba(255,255,255,0.06); color: ${COLORS.accentLight}; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: "JetBrains Mono", "Fira Code", monospace; }
+        .aw-md pre { background: rgba(0,0,0,0.3); border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 12px 14px; margin: 8px 0; overflow-x: auto; }
+        .aw-md pre code { background: none; padding: 0; color: ${COLORS.textSecondary}; font-size: 13px; }
+        .aw-md blockquote { border-left: 3px solid ${COLORS.accent}; margin: 8px 0; padding: 4px 12px; color: ${COLORS.textSecondary}; }
+        .aw-md a { color: ${COLORS.accent}; text-decoration: none; }
+        .aw-md a:hover { text-decoration: underline; }
+        .aw-md hr { border: none; border-top: 1px solid ${COLORS.border}; margin: 12px 0; }
       `}</style>
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}

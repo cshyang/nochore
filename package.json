@@ -1,9 +1,14 @@
 {
   "name": "nochore",
   "private": true,
-  "workspaces": ["apps/*", "packages/*", "services/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
   "dependencies": {
-    "@trigger.dev/sdk": "^4.4.3"
+    "@trigger.dev/sdk": "^4.4.3",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@trigger.dev/build": "^4.4.3"
