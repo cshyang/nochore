@@ -24,6 +24,39 @@ import { jsonSafe } from "./serializable";
 import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
 
 // ---------------------------------------------------------------------------
+// createBlankAgent — create an untitled agent and return its id
+// ---------------------------------------------------------------------------
+
+export const createBlankAgent = createServerFn({ method: "POST" })
+  .inputValidator((input: { projectId: string }) => input)
+  .handler(async ({ data: { projectId } }) => {
+    const agentId = crypto.randomUUID().slice(0, 12);
+    const { db } = getProjectDeps(projectId);
+    const now = Date.now();
+    const config = {
+      name: "Untitled Agent",
+      description: "",
+      intent: "",
+      skills: [],
+      triggers: [],
+      policyRules: [],
+      globalApprovalRequired: false,
+      scopeStrategy: "llm",
+    };
+    db.insert(agents)
+      .values({
+        id: agentId,
+        projectId,
+        config: JSON.stringify(config),
+        status: "live",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    return jsonSafe({ id: agentId });
+  });
+
+// ---------------------------------------------------------------------------
 // listAgents — all agents for a project, as AgentView[]
 // ---------------------------------------------------------------------------
 
@@ -118,6 +151,7 @@ export const createAgent = createServerFn({ method: "POST" })
         id: agentId,
         projectId: data.projectId,
         config: JSON.stringify(config),
+        status: "live",
         createdAt: now,
         updatedAt: now,
       })
@@ -128,6 +162,200 @@ export const createAgent = createServerFn({ method: "POST" })
 
     return jsonSafe({ id: agentId });
   });
+
+// ---------------------------------------------------------------------------
+// createDraftAgent — create an agent in draft status (from blueprint)
+// ---------------------------------------------------------------------------
+
+export const createDraftAgent = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      projectId: string;
+      name: string;
+      description: string;
+      intent: string;
+      skills: string[];
+      scopeStrategy: "static" | "llm";
+      policyRules: string[];
+      globalApprovalRequired: boolean;
+      schedule?: string;
+    }) => input,
+  )
+  .handler(async ({ data }) => {
+    const agentId = crypto.randomUUID().slice(0, 8);
+    const workspacePath = `data/projects/${data.projectId}/agents/${agentId}`;
+
+    const cronMap: Record<string, string> = {
+      hourly: "0 * * * *",
+      "6hours": "0 */6 * * *",
+      daily: "0 9 * * *",
+      weekly: "0 9 * * 1",
+      manual: "",
+    };
+    const cronExpr = cronMap[data.schedule ?? "daily"] ?? "0 9 * * *";
+
+    const config: AgentConfig = {
+      id: agentId,
+      projectId: data.projectId,
+      name: data.name,
+      description: data.description,
+      intent: data.intent,
+      workspacePath,
+      skills: data.skills,
+      skillKnowledge: {},
+      triggers: cronExpr
+        ? [{ type: "cron", config: { cron: cronExpr } }]
+        : [{ type: "manual", config: {} }],
+      policyRules: data.policyRules,
+      policyOverrides: [],
+      globalApprovalRequired: data.globalApprovalRequired,
+      operationalConstraints: [],
+      connectionIds: [],
+      memoryEnabled: true,
+      lessonDistillationInterval: 5,
+      scopeStrategy: data.scopeStrategy,
+    };
+
+    const { db } = getProjectDeps(data.projectId);
+    const now = Date.now();
+    db.insert(agents)
+      .values({
+        id: agentId,
+        projectId: data.projectId,
+        config: JSON.stringify(config),
+        status: "draft",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    // Initialize workspace (even for drafts — needed for workspace files)
+    await initializeWorkspace(workspacePath, data.name, data.intent);
+
+    return jsonSafe({ id: agentId });
+  });
+
+// ---------------------------------------------------------------------------
+// updateDraftAgent — save blueprint edits to an existing draft
+// ---------------------------------------------------------------------------
+
+export const updateDraftAgent = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      agentId: string;
+      projectId: string;
+      name?: string;
+      description?: string;
+      skills?: string[];
+      policyRules?: string[];
+      globalApprovalRequired?: boolean;
+      schedule?: string;
+    }) => input,
+  )
+  .handler(async ({ data }) => {
+    const { db } = getProjectDeps(data.projectId);
+    const row = db.select().from(agents).where(eq(agents.id, data.agentId)).get();
+    if (!row) throw new Error("Agent not found");
+
+    const config = JSON.parse(row.config) as AgentConfig;
+
+    // Apply partial updates
+    if (data.name !== undefined) config.name = data.name;
+    if (data.description !== undefined) config.description = data.description;
+    if (data.skills !== undefined) config.skills = data.skills;
+    if (data.policyRules !== undefined) config.policyRules = data.policyRules;
+    if (data.globalApprovalRequired !== undefined) config.globalApprovalRequired = data.globalApprovalRequired;
+    if (data.schedule !== undefined) {
+      const cronMap: Record<string, string> = {
+        hourly: "0 * * * *", "6hours": "0 */6 * * *",
+        daily: "0 9 * * *", weekly: "0 9 * * 1", manual: "",
+      };
+      const cronExpr = cronMap[data.schedule] ?? "0 9 * * *";
+      config.triggers = cronExpr
+        ? [{ type: "cron", config: { cron: cronExpr } }]
+        : [{ type: "manual", config: {} }];
+    }
+
+    db.update(agents)
+      .set({ config: JSON.stringify(config), updatedAt: Date.now() })
+      .where(eq(agents.id, data.agentId))
+      .run();
+
+    return jsonSafe({ updated: true });
+  });
+
+// ---------------------------------------------------------------------------
+// launchAgent — transition draft → live
+// ---------------------------------------------------------------------------
+
+export const launchAgent = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { agentId: string; projectId: string }) => input,
+  )
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const { db } = getProjectDeps(projectId);
+
+    db.update(agents)
+      .set({ status: "live", updatedAt: Date.now() })
+      .where(eq(agents.id, agentId))
+      .run();
+
+    // TODO: trigger first run via trigger.dev
+
+    return jsonSafe({ launched: true });
+  });
+
+// ---------------------------------------------------------------------------
+// updateAgentConfig — save blueprint results to an existing agent
+// ---------------------------------------------------------------------------
+
+export const updateAgentConfig = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      agentId: string;
+      projectId: string;
+      name?: string;
+      description?: string;
+      skills?: string[];
+      policyRules?: string[];
+      globalApprovalRequired?: boolean;
+      schedule?: string;
+    }) => input,
+  )
+  .handler(async ({ data }) => {
+    const { db } = getProjectDeps(data.projectId);
+    const row = db.select().from(agents).where(eq(agents.id, data.agentId)).get();
+    if (!row) throw new Error("Agent not found");
+
+    const config = JSON.parse(row.config) as AgentConfig;
+    if (data.name !== undefined) config.name = data.name;
+    if (data.description !== undefined) config.description = data.description;
+    if (data.skills !== undefined) config.skills = data.skills;
+    if (data.policyRules !== undefined) config.policyRules = data.policyRules;
+    if (data.globalApprovalRequired !== undefined) config.globalApprovalRequired = data.globalApprovalRequired;
+    if (data.schedule !== undefined) {
+      config.triggers = data.schedule === "manual"
+        ? [{ type: "manual", config: {} }]
+        : [{ type: "cron", config: { cron: scheduleToCron(data.schedule) } }];
+    }
+
+    db.update(agents)
+      .set({ config: JSON.stringify(config), updatedAt: Date.now() })
+      .where(eq(agents.id, data.agentId))
+      .run();
+
+    return jsonSafe({ updated: true });
+  });
+
+function scheduleToCron(schedule: string): string {
+  switch (schedule) {
+    case "hourly": return "0 */1 * * *";
+    case "6hours": return "0 */6 * * *";
+    case "daily": return "0 9 * * *";
+    case "weekly": return "0 9 * * 1";
+    default: return "0 9 * * *";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // deleteAgent — remove an agent and all related data

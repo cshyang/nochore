@@ -28,6 +28,7 @@ import type { AgentView, ProjectView } from "~/lib/types";
 export interface AgentWorkspaceProps {
   agent: AgentView;
   project: ProjectView;
+  availableSkills?: Array<{ id: string; name: string; description: string }>;
   onBack: () => void;
   onDeleteAgent?: () => void;
   runs?: SerializedRun[];
@@ -533,21 +534,33 @@ function ActivityFeed({
 // ChatDrawer
 // ---------------------------------------------------------------------------
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS_CHAT = [
   "Explain last run",
   "What should I review?",
   "Run analysis now",
+];
+
+const QUICK_ACTIONS_BLUEPRINT = [
+  "Monitor Google Ads for budget waste",
+  "Research articles and publish to blog",
+  "Track competitor pricing changes",
 ];
 
 function ChatDrawer({
   agentId,
   projectId,
   agentName,
+  mode = "chat",
+  availableSkills = [],
+  onBlueprintComplete,
   onClose,
 }: {
   agentId: string;
   projectId: string;
   agentName: string;
+  mode?: "chat" | "blueprint";
+  availableSkills?: Array<{ id: string; name: string; description: string }>;
+  onBlueprintComplete?: () => void;
   onClose: () => void;
 }) {
   const [input, setInput] = useState("");
@@ -558,6 +571,10 @@ function ChatDrawer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    if (mode === "blueprint") {
+      setLoading(false);
+      return;
+    }
     getChatHistory({ data: { agentId, projectId, limit: 50 } })
       .then((history) => {
         setMessages(
@@ -578,7 +595,7 @@ function ChatDrawer({
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [agentId, projectId]);
+  }, [agentId, projectId, mode]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -592,9 +609,116 @@ function ChatDrawer({
     return () => clearTimeout(t);
   }, []);
 
+  const handleBlueprintSend = async (text: string) => {
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setSending(true);
+
+    try {
+      const res = await fetch("/api/blueprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intent: text,
+          availableSkills: availableSkills.map((s) => ({
+            id: s.id, name: s.name, description: s.description,
+          })),
+        }),
+      });
+
+      if (!res.ok || !res.body) throw new Error("Blueprint generation failed");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let lastBlueprint: Record<string, unknown> | null = null;
+      let textAccumulator = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed._type === "text") {
+              textAccumulator += parsed.text ?? "";
+            } else if (parsed._type === "blueprint") {
+              const { _type, ...bp } = parsed;
+              lastBlueprint = bp;
+            }
+          } catch { /* skip unparseable */ }
+        }
+      }
+
+      if (lastBlueprint) {
+        const { updateAgentConfig } = await import("~/server/agents");
+        await updateAgentConfig({
+          data: {
+            agentId,
+            projectId,
+            name: (lastBlueprint.agentName as string) || "Untitled Agent",
+            description: (lastBlueprint.summary as string) || "",
+            skills: (lastBlueprint.skills as string[]) || [],
+            schedule: (lastBlueprint.trigger as { schedule?: string })?.schedule || "manual",
+          },
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant" as const,
+            content: `I've set up **${lastBlueprint!.agentName}**. The overview shows your agent's configuration — adjust anything you'd like.`,
+            createdAt: new Date(),
+          },
+        ]);
+
+        onBlueprintComplete?.();
+      } else if (textAccumulator.trim()) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant" as const,
+            content: textAccumulator.trim(),
+            createdAt: new Date(),
+          },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant" as const,
+          content: "Something went wrong generating the blueprint. Please try again.",
+          createdAt: new Date(),
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleSend = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || sending) return;
+
+    if (mode === "blueprint") {
+      return handleBlueprintSend(content);
+    }
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -684,7 +808,7 @@ function ChatDrawer({
                 fontFamily: '"Satoshi", sans-serif',
               }}
             >
-              Chat with {agentName}
+              {mode === "blueprint" ? "Set up your agent" : `Chat with ${agentName}`}
             </div>
             <div
               style={{
@@ -694,7 +818,7 @@ function ChatDrawer({
                 fontFamily: '"General Sans", sans-serif',
               }}
             >
-              Ask anything about your campaigns
+              {mode === "blueprint" ? "Describe what you want — I'll configure it" : "Ask anything about your campaigns"}
             </div>
           </div>
           <button
@@ -736,7 +860,7 @@ function ChatDrawer({
               flexShrink: 0,
             }}
           >
-            {QUICK_ACTIONS.map((qa) => (
+            {(mode === "blueprint" ? QUICK_ACTIONS_BLUEPRINT : QUICK_ACTIONS_CHAT).map((qa) => (
               <button
                 key={qa}
                 onClick={() => handleSend(qa)}
@@ -921,7 +1045,7 @@ function ChatDrawer({
                   handleSend();
                 }
               }}
-              placeholder="Ask your agent anything..."
+              placeholder={mode === "blueprint" ? "What should this agent do?" : "Ask your agent anything..."}
               rows={1}
               style={{
                 flex: 1,
@@ -1177,6 +1301,7 @@ function OverviewPanel({
 export function AgentWorkspace({
   agent,
   project,
+  availableSkills = [],
   onBack,
   onDeleteAgent,
   runs = [],
@@ -1186,6 +1311,14 @@ export function AgentWorkspace({
 }: AgentWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
+
+  const isNewAgent = !agent.description && !agent.intent;
+
+  useEffect(() => {
+    if (isNewAgent) {
+      setChatOpen(true);
+    }
+  }, [isNewAgent]);
 
   return (
     <div style={{ position: "relative" }}>
@@ -1307,6 +1440,11 @@ export function AgentWorkspace({
           agentId={agent.id}
           projectId={project.id}
           agentName={agent.name}
+          mode={isNewAgent ? "blueprint" : "chat"}
+          availableSkills={availableSkills}
+          onBlueprintComplete={() => {
+            window.location.reload();
+          }}
           onClose={() => setChatOpen(false)}
         />
       )}

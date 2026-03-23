@@ -1,34 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { SetupWorkspace } from "~/components/SetupWorkspace";
-import { getProject } from "~/server/projects";
-import { listAvailableSkills } from "~/server/skills";
-import type { ProjectView } from "~/lib/types";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createBlankAgent } from "~/server/agents";
 
 export const Route = createFileRoute("/$projectId/agents/new")({
   loader: async ({ params }) => {
-    const [project, skills] = await Promise.all([
-      getProject({ data: { projectId: params.projectId } }),
-      listAvailableSkills(),
-    ]);
-    return { project, skills };
+    const result = await createBlankAgent({ data: { projectId: params.projectId } });
+    const agentId = (result as { id: string }).id;
+    throw redirect({
+      to: "/$projectId/agents/$agentId",
+      params: { projectId: params.projectId, agentId },
+    });
   },
-  component: NewAgentPage,
 });
-
-function NewAgentPage() {
-  const { project: rawProject, skills: rawSkills } = Route.useLoaderData();
-  const project = rawProject as ProjectView | null;
-  const skills = (rawSkills ?? []) as Array<{
-    id: string;
-    name: string;
-    description: string;
-  }>;
-
-  return (
-    <SetupWorkspace
-      projectId={project?.id}
-      project={project}
-      availableSkills={skills}
-    />
-  );
-}
