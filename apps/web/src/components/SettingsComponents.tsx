@@ -65,6 +65,7 @@ export function SettingsRow({
   defaultExpanded,
   isLast,
   onClick,
+  iconColor,
 }: {
   icon: string;
   title: string;
@@ -75,6 +76,7 @@ export function SettingsRow({
   defaultExpanded?: boolean;
   isLast?: boolean;
   onClick?: () => void;
+  iconColor?: string;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const isExpandable = !!children;
@@ -119,7 +121,7 @@ export function SettingsRow({
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            color: COLORS.textDim,
+            color: iconColor ?? COLORS.textDim,
           }}
         >
           {icon}

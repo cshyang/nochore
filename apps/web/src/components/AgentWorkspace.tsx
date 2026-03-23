@@ -1599,6 +1599,7 @@ function OverviewPanel({
                 <SettingsRow
                   key={conn.provider}
                   icon={isConnected ? "●" : "⚠"}
+                  iconColor={isConnected ? COLORS.green : COLORS.yellow}
                   title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
                   description={conn.reason}
                   isLast={i === agent.connections.length - 1}
