@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { task, wait } from "@trigger.dev/sdk/v3";
 import { runPipeline } from "../../../../packages/harness/src/pipeline/runner";
 import { SqliteMemoryStore } from "../../../../packages/harness/src/memory/store";
@@ -27,7 +28,10 @@ export const agentRunTask = task({
     const { agentId, projectId, trigger } = payload;
 
     // Build dependencies from project context
-    const db = createDb(`data/projects/${projectId}/nochore.db`);
+    // Resolve absolute path — trigger.dev worker runs in a sandboxed temp dir
+    const projectRoot = process.env.PROJECT_ROOT ?? process.cwd();
+    const dbPath = resolve(projectRoot, `data/projects/${projectId}/nochore.db`);
+    const db = createDb(dbPath);
     const memoryStore = new SqliteMemoryStore(db);
     const runRepository = new RunRepository(db);
     const approvalRepository = new ApprovalRepository(db);
@@ -47,7 +51,8 @@ export const agentRunTask = task({
     // TODO: register additional built-in skills as they're ported
 
     // Build workspace + context assembler
-    const workspaceStore = new WorkspaceStore(config.workspacePath);
+    const workspacePath = resolve(projectRoot, config.workspacePath);
+    const workspaceStore = new WorkspaceStore(workspacePath);
     const contextAssembler = new ContextAssembler(workspaceStore, memoryStore);
 
     // Connection manager — TODO: replace with real Composio implementation
