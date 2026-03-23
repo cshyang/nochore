@@ -1293,19 +1293,27 @@ function OverviewPanel({
                         onUpdateConfig?.({ skills: [...next] });
                       }}
                       style={{
-                        background: isActive ? COLORS.accentDim : "transparent",
-                        border: `1px solid ${isActive ? COLORS.accent : COLORS.border}`,
-                        borderRadius: 99,
-                        padding: "4px 12px",
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: isActive ? COLORS.accentLight : COLORS.textDim,
+                        width: 36,
+                        height: 20,
+                        borderRadius: 10,
+                        border: "none",
+                        background: isActive ? COLORS.accent : COLORS.border,
                         cursor: "pointer",
-                        fontFamily: "inherit",
-                        transition: "all 0.15s ease",
+                        position: "relative",
+                        transition: "background 0.15s ease",
+                        flexShrink: 0,
                       }}
                     >
-                      {isActive ? "Active" : "Off"}
+                      <span style={{
+                        position: "absolute",
+                        top: 2,
+                        left: isActive ? 18 : 2,
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        background: COLORS.white,
+                        transition: "left 0.15s ease",
+                      }} />
                     </button>
                   }
                 >
