@@ -29,7 +29,9 @@ export const Route = createFileRoute("/$projectId/callback/composio")({
 function ComposioCallbackPage() {
   const navigate = useNavigate();
   const { projectId } = Route.useParams();
-  const { provider, returnTo, popup } = useSearch({ from: Route.id });
+  const { provider, returnTo, popup: popupParam } = useSearch({ from: Route.id });
+  // Detect popup mode: either from query param OR by checking if this window was opened as a popup
+  const isPopup = popupParam || (typeof window !== "undefined" && window.opener !== null);
 
   const [status, setStatus] = useState<"verifying" | "success" | "error">(
     "verifying",
@@ -53,7 +55,7 @@ function ComposioCallbackPage() {
             if (!cancelled) setStatus("success");
             setTimeout(() => {
               if (!cancelled) {
-                if (popup) {
+                if (isPopup) {
                   window.close();
                   return;
                 }
@@ -61,7 +63,7 @@ function ComposioCallbackPage() {
                   navigate({ to: returnTo });
                 } else {
                   navigate({
-                    to: "/$projectId/agents/new",
+                    to: "/$projectId",
                     params: { projectId },
                   });
                 }
@@ -90,7 +92,7 @@ function ComposioCallbackPage() {
             setStatus("success");
             setTimeout(() => {
               if (!cancelled) {
-                if (popup) {
+                if (isPopup) {
                   window.close();
                   return;
                 }
@@ -98,7 +100,7 @@ function ComposioCallbackPage() {
                   navigate({ to: returnTo });
                 } else {
                   navigate({
-                    to: "/$projectId/agents/new",
+                    to: "/$projectId",
                     params: { projectId },
                   });
                 }
@@ -119,7 +121,7 @@ function ComposioCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, provider, returnTo, popup, navigate]);
+  }, [projectId, provider, returnTo, isPopup, navigate]);
 
   const providerLabel =
     provider === "googleads"
@@ -193,7 +195,7 @@ function ComposioCallbackPage() {
                 margin: 0,
               }}
             >
-              {popup ? "You can close this window." : "Redirecting you back..."}
+              {isPopup ? "You can close this window." : "Redirecting you back..."}
             </p>
           </>
         )}
@@ -221,7 +223,7 @@ function ComposioCallbackPage() {
               {errorMsg}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              {popup ? (
+              {isPopup ? (
                 <Button onClick={() => window.close()}>Close</Button>
               ) : (
                 <Button
