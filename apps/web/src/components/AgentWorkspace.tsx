@@ -560,13 +560,15 @@ function ChatDrawer({
   agentName: string;
   mode?: "chat" | "blueprint";
   availableSkills?: Array<{ id: string; name: string; description: string }>;
-  onBlueprintComplete?: () => void;
+  onBlueprintComplete?: (data?: { name: string; description: string; skills?: string[]; schedule?: string }) => void;
   onClose: () => void;
 }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [reasoningText, setReasoningText] = useState("");
+  const [toolStatus, setToolStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -619,6 +621,8 @@ function ChatDrawer({
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setSending(true);
+    setReasoningText("");
+    setToolStatus("");
 
     try {
       const res = await fetch("/api/blueprint", {
@@ -652,7 +656,11 @@ function ChatDrawer({
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
-            if (parsed._type === "text") {
+            if (parsed._type === "reasoning") {
+              setReasoningText((prev) => prev + (parsed.text ?? ""));
+            } else if (parsed._type === "tool-status") {
+              setToolStatus(parsed.text as string);
+            } else if (parsed._type === "text") {
               textAccumulator += parsed.text ?? "";
             } else if (parsed._type === "blueprint") {
               const { _type, ...bp } = parsed;
@@ -685,7 +693,12 @@ function ChatDrawer({
           },
         ]);
 
-        onBlueprintComplete?.();
+        onBlueprintComplete?.({
+          name: (lastBlueprint!.agentName as string) || "Untitled Agent",
+          description: (lastBlueprint!.summary as string) || "",
+          skills: (lastBlueprint!.skills as string[]) || [],
+          schedule: (lastBlueprint!.trigger as { schedule?: string })?.schedule || "manual",
+        });
       } else if (textAccumulator.trim()) {
         setMessages((prev) => [
           ...prev,
@@ -709,6 +722,8 @@ function ChatDrawer({
       ]);
     } finally {
       setSending(false);
+      setReasoningText("");
+      setToolStatus("");
     }
   };
 
@@ -990,7 +1005,38 @@ function ChatDrawer({
             ))
           )}
 
-          {sending && (
+          {sending && mode === "blueprint" && reasoningText && (
+            <div style={{
+              padding: "4px 14px",
+              fontSize: 12,
+              fontStyle: "italic",
+              color: COLORS.textDim,
+              lineHeight: 1.5,
+              maxHeight: 48,
+              overflow: "hidden",
+              maskImage: "linear-gradient(to bottom, black 60%, transparent)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent)",
+              opacity: 0.7,
+            }}>
+              {reasoningText.trim().split("\n").slice(-2).join(" ")}
+            </div>
+          )}
+
+          {sending && mode === "blueprint" && toolStatus && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 14px",
+              fontSize: 12,
+              color: COLORS.textDim,
+            }}>
+              <span style={{ color: COLORS.accent, fontSize: 12 }}>&#10022;</span>
+              {toolStatus}
+            </div>
+          )}
+
+          {sending && !(mode === "blueprint" && (reasoningText || toolStatus)) && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div
                 style={{
@@ -1102,11 +1148,15 @@ function ChatDrawer({
 function OverviewPanel({
   agent,
   onDeleteAgent,
+  onUpdateConfig,
 }: {
   agent: AgentView;
   onDeleteAgent?: () => void;
+  onUpdateConfig?: (updates: Record<string, unknown>) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [instructions, setInstructions] = useState(agent.description || agent.intent || "");
+  const [saving, setSaving] = useState(false);
 
   const scheduleLabels: Record<string, string> = {
     hourly: "Every hour",
@@ -1115,6 +1165,16 @@ function OverviewPanel({
     weekly: "Weekly on Monday",
     manual: "Manual only",
   };
+
+  const [currentSchedule, setCurrentSchedule] = useState(agent.schedule);
+
+  useEffect(() => {
+    setInstructions(agent.description || agent.intent || "");
+  }, [agent.description, agent.intent]);
+
+  useEffect(() => {
+    setCurrentSchedule(agent.schedule);
+  }, [agent.schedule]);
 
   return (
     <div>
@@ -1126,22 +1186,60 @@ function OverviewPanel({
           title="Instructions"
           defaultExpanded={true}
         >
-          <p style={{
-            color: COLORS.textSecondary,
-            fontSize: 13,
-            margin: 0,
-            lineHeight: 1.7,
-            whiteSpace: "pre-wrap",
-          }}>
-            {agent.description || agent.intent || "No instructions set."}
-          </p>
+          <textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            onBlur={async () => {
+              if (instructions !== (agent.description || agent.intent || "") && onUpdateConfig) {
+                setSaving(true);
+                await onUpdateConfig({ description: instructions });
+                setSaving(false);
+              }
+            }}
+            placeholder="Describe what this agent should do..."
+            rows={6}
+            style={{
+              width: "100%",
+              background: COLORS.bg,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 6,
+              color: COLORS.text,
+              fontSize: 13,
+              lineHeight: 1.7,
+              padding: "10px 12px",
+              outline: "none",
+              fontFamily: "inherit",
+              resize: "vertical",
+            }}
+          />
+          {saving && <span style={{ fontSize: 11, color: COLORS.textDim, marginTop: 4 }}>Saving...</span>}
         </SettingsRow>
-        <SettingsRow
-          icon="◷"
-          title="Schedule"
-          description="How often the agent runs"
-          value={scheduleLabels[agent.schedule] ?? agent.schedule}
-        />
+        <SettingsRow icon="◷" title="Schedule" value={scheduleLabels[currentSchedule] ?? currentSchedule}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {Object.entries(scheduleLabels).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={async () => {
+                  setCurrentSchedule(value);
+                  onUpdateConfig?.({ schedule: value });
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 99,
+                  border: `1px solid ${currentSchedule === value ? COLORS.accent : COLORS.border}`,
+                  background: currentSchedule === value ? COLORS.accentDim : "transparent",
+                  color: currentSchedule === value ? COLORS.accentLight : COLORS.textSecondary,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
       </SettingsCard>
 
       {/* Skills */}
@@ -1311,8 +1409,11 @@ export function AgentWorkspace({
 }: AgentWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
+  const [blueprintDone, setBlueprintDone] = useState(false);
+  const [localOverrides, setLocalOverrides] = useState<Partial<AgentView> | null>(null);
 
-  const isNewAgent = !agent.description && !agent.intent;
+  const isNewAgent = !agent.description && !agent.intent && !blueprintDone;
+  const displayAgent = localOverrides ? { ...agent, ...localOverrides } : agent;
 
   useEffect(() => {
     if (isNewAgent) {
@@ -1374,7 +1475,7 @@ export function AgentWorkspace({
             minWidth: 0,
           }}
         >
-          {agent.name}
+          {displayAgent.name}
         </h1>
 
         {/* Chat icon */}
@@ -1420,8 +1521,18 @@ export function AgentWorkspace({
       {/* ------------------------------------------------------------------ */}
       {activeTab === "overview" ? (
         <OverviewPanel
-          agent={agent}
+          agent={displayAgent}
           onDeleteAgent={onDeleteAgent}
+          onUpdateConfig={async (updates) => {
+            const { updateAgentConfig } = await import("~/server/agents");
+            await updateAgentConfig({
+              data: {
+                agentId: agent.id,
+                projectId: project.id,
+                ...updates,
+              },
+            });
+          }}
         />
       ) : (
         <ActivityFeed
@@ -1439,11 +1550,19 @@ export function AgentWorkspace({
         <ChatDrawer
           agentId={agent.id}
           projectId={project.id}
-          agentName={agent.name}
+          agentName={displayAgent.name}
           mode={isNewAgent ? "blueprint" : "chat"}
           availableSkills={availableSkills}
-          onBlueprintComplete={() => {
-            window.location.reload();
+          onBlueprintComplete={(data) => {
+            setBlueprintDone(true);
+            if (data) {
+              setLocalOverrides({
+                name: data.name,
+                description: data.description,
+                skills: data.skills ?? [],
+                schedule: data.schedule ?? "manual",
+              });
+            }
           }}
           onClose={() => setChatOpen(false)}
         />
