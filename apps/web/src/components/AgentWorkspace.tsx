@@ -1172,7 +1172,12 @@ function OverviewPanel({
   const [notifyOnComplete, setNotifyOnComplete] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set(agent.skills));
-  const [globalApproval, setGlobalApproval] = useState(agent.globalApprovalRequired);
+  const [skillApprovals, setSkillApprovals] = useState<Record<string, boolean>>({});
+  const [approvalMode, setApprovalMode] = useState<"per-skill" | "all" | "never">(
+    agent.globalApprovalRequired ? "all" : "per-skill"
+  );
+  const [approvalConditions, setApprovalConditions] = useState<string[]>([]);
+  const [channelInApp, setChannelInApp] = useState(true);
   const [rules, setRules] = useState<string[]>(agent.policyRules);
 
   const scheduleLabels: Record<string, string> = {
@@ -1196,10 +1201,6 @@ function OverviewPanel({
   useEffect(() => {
     setActiveSkills(new Set(agent.skills));
   }, [agent.skills]);
-
-  useEffect(() => {
-    setGlobalApproval(agent.globalApprovalRequired);
-  }, [agent.globalApprovalRequired]);
 
   useEffect(() => {
     setRules(agent.policyRules);
@@ -1278,6 +1279,7 @@ function OverviewPanel({
           <SettingsCard>
             {availableSkills.map((skill, i) => {
               const isActive = activeSkills.has(skill.id);
+              const needsApproval = skillApprovals[skill.id] ?? false;
               return (
                 <SettingsRow
                   key={skill.id}
@@ -1287,7 +1289,8 @@ function OverviewPanel({
                   isLast={i === availableSkills.length - 1}
                   trailing={
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         const next = new Set(activeSkills);
                         if (isActive) next.delete(skill.id);
                         else next.add(skill.id);
@@ -1310,7 +1313,40 @@ function OverviewPanel({
                       {isActive ? "Active" : "Off"}
                     </button>
                   }
-                />
+                >
+                  {isActive && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Require approval</span>
+                      <button
+                        onClick={() => {
+                          setSkillApprovals((prev) => ({ ...prev, [skill.id]: !needsApproval }));
+                        }}
+                        style={{
+                          width: 36,
+                          height: 20,
+                          borderRadius: 10,
+                          border: "none",
+                          background: needsApproval ? COLORS.accent : COLORS.border,
+                          cursor: "pointer",
+                          position: "relative",
+                          transition: "background 0.15s ease",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{
+                          position: "absolute",
+                          top: 2,
+                          left: needsApproval ? 18 : 2,
+                          width: 16,
+                          height: 16,
+                          borderRadius: 8,
+                          background: COLORS.white,
+                          transition: "left 0.15s ease",
+                        }} />
+                      </button>
+                    </div>
+                  )}
+                </SettingsRow>
               );
             })}
           </SettingsCard>
@@ -1320,42 +1356,6 @@ function OverviewPanel({
       {/* Policy */}
       <SectionHeading>Policy</SectionHeading>
       <SettingsCard>
-        <SettingsRow
-          icon="⊘"
-          title="Global approval"
-          description="Require approval for all actions"
-          trailing={
-            <button
-              onClick={() => {
-                const next = !globalApproval;
-                setGlobalApproval(next);
-                onUpdateConfig?.({ globalApprovalRequired: next });
-              }}
-              style={{
-                width: 36,
-                height: 20,
-                borderRadius: 10,
-                border: "none",
-                background: globalApproval ? COLORS.accent : COLORS.border,
-                cursor: "pointer",
-                position: "relative",
-                transition: "background 0.15s ease",
-                flexShrink: 0,
-              }}
-            >
-              <span style={{
-                position: "absolute",
-                top: 2,
-                left: globalApproval ? 18 : 2,
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                background: COLORS.white,
-                transition: "left 0.15s ease",
-              }} />
-            </button>
-          }
-        />
         {rules.map((rule, i) => (
           <SettingsRow
             key={i}
@@ -1429,54 +1429,178 @@ function OverviewPanel({
       {/* Notifications */}
       <SectionHeading>Notifications</SectionHeading>
       <SettingsCard>
+        {/* Global approval override */}
         <SettingsRow
-          icon="◎"
-          title="Approval requests"
-          description="Get notified when actions need approval"
-          trailing={
-            <span style={{
-              fontSize: 12,
-              color: globalApproval ? COLORS.accentLight : COLORS.textDim,
-              fontWeight: 500,
-            }}>
-              {globalApproval ? "Always" : rules.some((r) => r.includes("ask")) ? "Some rules" : "Off"}
-            </span>
-          }
-          isLast={false}
-        />
+          icon="⊘"
+          title="Require approval"
+          description="When should actions need your approval"
+          value={approvalMode === "all" ? "All actions" : approvalMode === "never" ? "Never" : "Per skill"}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {(["per-skill", "all", "never"] as const).map((mode) => {
+              const labels = {
+                "per-skill": "Per skill — respect each skill's setting",
+                "all": "All actions — always ask before acting",
+                "never": "Never — auto-approve everything",
+              };
+              return (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    setApprovalMode(mode);
+                    onUpdateConfig?.({ globalApprovalRequired: mode === "all" });
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    border: `1px solid ${approvalMode === mode ? COLORS.accent : COLORS.border}`,
+                    background: approvalMode === mode ? COLORS.accentDim : "transparent",
+                    color: approvalMode === mode ? COLORS.text : COLORS.textSecondary,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s ease",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                >
+                  <span style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    border: `2px solid ${approvalMode === mode ? COLORS.accent : COLORS.border}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    {approvalMode === mode && (
+                      <span style={{ width: 6, height: 6, borderRadius: 3, background: COLORS.accent }} />
+                    )}
+                  </span>
+                  {labels[mode]}
+                </button>
+              );
+            })}
+          </div>
+          {/* Custom conditions */}
+          {approvalMode === "per-skill" && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Additional conditions
+              </div>
+              {approvalConditions.map((condition, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: COLORS.textSecondary, flex: 1 }}>{condition}</span>
+                  <button
+                    onClick={() => setApprovalConditions((prev) => prev.filter((_, j) => j !== i))}
+                    style={{
+                      background: "none", border: "none", color: COLORS.textDim,
+                      cursor: "pointer", padding: 2, fontSize: 14, lineHeight: 1,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
+                  >×</button>
+                </div>
+              ))}
+              <input
+                placeholder="e.g. budget changes over $500..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
+                    const value = (e.target as HTMLInputElement).value.trim();
+                    setApprovalConditions((prev) => [...prev, value]);
+                    (e.target as HTMLInputElement).value = "";
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  background: "none",
+                  border: "none",
+                  borderBottom: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                  fontSize: 12,
+                  padding: "6px 0",
+                  outline: "none",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+          )}
+        </SettingsRow>
+
         <SettingsRow
           icon="◎"
           title="Run complete"
           description="Notify when a run finishes"
           trailing={
             <button
-              onClick={() => {
-                setNotifyOnComplete((v) => !v);
-              }}
+              onClick={() => setNotifyOnComplete((v) => !v)}
               style={{
-                width: 36,
-                height: 20,
-                borderRadius: 10,
-                border: "none",
+                width: 36, height: 20, borderRadius: 10, border: "none",
                 background: notifyOnComplete ? COLORS.accent : COLORS.border,
-                cursor: "pointer",
-                position: "relative",
-                transition: "background 0.15s ease",
-                flexShrink: 0,
+                cursor: "pointer", position: "relative",
+                transition: "background 0.15s ease", flexShrink: 0,
               }}
             >
               <span style={{
-                position: "absolute",
-                top: 2,
+                position: "absolute", top: 2,
                 left: notifyOnComplete ? 18 : 2,
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                background: COLORS.white,
-                transition: "left 0.15s ease",
+                width: 16, height: 16, borderRadius: 8,
+                background: COLORS.white, transition: "left 0.15s ease",
               }} />
             </button>
           }
+        />
+
+        <SettingsRow
+          icon="◎"
+          title="Daily digest"
+          description="Summary of agent activity"
+          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
+          isLast={true}
+        />
+      </SettingsCard>
+
+      {/* Channels */}
+      <SectionHeading>Channels</SectionHeading>
+      <SettingsCard>
+        <SettingsRow
+          icon="◎"
+          title="In-app"
+          description="Notifications in Nochore"
+          trailing={
+            <button
+              onClick={() => setChannelInApp((v) => !v)}
+              style={{
+                width: 36, height: 20, borderRadius: 10, border: "none",
+                background: channelInApp ? COLORS.accent : COLORS.border,
+                cursor: "pointer", position: "relative",
+                transition: "background 0.15s ease", flexShrink: 0,
+              }}
+            >
+              <span style={{
+                position: "absolute", top: 2,
+                left: channelInApp ? 18 : 2,
+                width: 16, height: 16, borderRadius: 8,
+                background: COLORS.white, transition: "left 0.15s ease",
+              }} />
+            </button>
+          }
+        />
+        <SettingsRow
+          icon="◎"
+          title="Email"
+          description="Email notifications"
+          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
+        />
+        <SettingsRow
+          icon="◎"
+          title="Slack"
+          description="Slack notifications"
+          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
           isLast={true}
         />
       </SettingsCard>
