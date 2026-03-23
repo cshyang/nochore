@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
 import { getAgent, deleteAgent, triggerManualRun } from "~/server/agents";
 import { getProject } from "~/server/projects";
@@ -33,6 +33,7 @@ function AgentDetailPage() {
     from: "/$projectId/agents/$agentId",
   });
   const navigate = useNavigate();
+  const router = useRouter();
   const loaderData = Route.useLoaderData();
 
   const project = loaderData.project as ProjectView | null;
@@ -62,6 +63,7 @@ function AgentDetailPage() {
 
   const handleDeleteAgent = async () => {
     await deleteAgent({ data: { agentId, projectId } });
+    await router.invalidate();
     navigate({ to: "/$projectId", params: { projectId } });
   };
 
