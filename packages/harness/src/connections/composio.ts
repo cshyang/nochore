@@ -39,13 +39,9 @@ export const DEFAULT_DATA_TYPE_MAPPINGS: Record<string, ComposioToolMapping> = {
 // createComposioClient — factory for the Composio SDK instance
 // ---------------------------------------------------------------------------
 
-export function createComposioClient(apiKey?: string): Composio {
-  // Dynamic imports would be cleaner, but Composio + VercelProvider are
-  // synchronous constructors so we import at the top of the call.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Composio: ComposioClass } = require("@composio/core");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { VercelProvider } = require("@composio/vercel");
+export async function createComposioClient(apiKey?: string): Promise<Composio> {
+  const { Composio: ComposioClass } = await import("@composio/core");
+  const { VercelProvider } = await import("@composio/vercel");
 
   return new ComposioClass({
     apiKey: apiKey ?? process.env.COMPOSIO_API_KEY,

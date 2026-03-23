@@ -35,7 +35,7 @@ export const initiateConnection = createServerFn({ method: "POST" })
     }) => input,
   )
   .handler(async ({ data }) => {
-    const composio = createComposioClient();
+    const composio = await createComposioClient();
     const userId = composioUserId(data.projectId);
 
     // Create a session and authorize the toolkit
@@ -128,7 +128,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
 
     // Check with Composio if the connection is now active
     try {
-      const composio = createComposioClient();
+      const composio = await createComposioClient();
       const account = await composio.connectedAccounts.get(
         pending.composioEntityId,
       );
@@ -182,7 +182,7 @@ export const activateConnection = createServerFn({ method: "POST" })
     // Verify with Composio that the connection is actually active
     if (pending.composioEntityId) {
       try {
-        const composio = createComposioClient();
+        const composio = await createComposioClient();
         const account = await composio.connectedAccounts.get(
           pending.composioEntityId,
         );
