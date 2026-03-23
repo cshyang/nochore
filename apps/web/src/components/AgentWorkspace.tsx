@@ -1145,11 +1145,6 @@ function ChatDrawer({
         .aw-scroll::-webkit-scrollbar-thumb:hover { background: #352F3D; }
         .aw-scroll { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
 
-        textarea::-webkit-scrollbar { width: 5px; }
-        textarea::-webkit-scrollbar-track { background: transparent; }
-        textarea::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
-        textarea::-webkit-scrollbar-thumb:hover { background: #352F3D; }
-        textarea { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
       `}</style>
     </>
   );
@@ -1641,6 +1636,13 @@ export function AgentWorkspace({
 
   return (
     <div style={{ position: "relative" }}>
+      <style>{`
+        textarea::-webkit-scrollbar { width: 5px; }
+        textarea::-webkit-scrollbar-track { background: transparent; }
+        textarea::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
+        textarea::-webkit-scrollbar-thumb:hover { background: #352F3D; }
+        textarea { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
+      `}</style>
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}
       {/* ------------------------------------------------------------------ */}
