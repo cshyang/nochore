@@ -12,6 +12,11 @@ import { searchTermsSkill } from "../../../../packages/harness/src/skills/built-
 import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
 import type { TriggerEvent } from "../../../../packages/harness/src/types/run";
 import type { ConnectionManager } from "../../../../packages/harness/src/connections/types";
+import {
+  createComposioClient,
+  ComposioConnectionManager,
+  DEFAULT_DATA_TYPE_MAPPINGS,
+} from "../../../../packages/harness/src/connections/composio";
 
 // ---------------------------------------------------------------------------
 // Agent Run Task — wraps runPipeline in trigger.dev durable execution
@@ -61,8 +66,8 @@ export const agentRunTask = task({
     const workspaceStore = new WorkspaceStore(workspacePath);
     const contextAssembler = new ContextAssembler(workspaceStore, memoryStore);
 
-    // Connection manager — TODO: replace with real Composio implementation
-    const connectionManager = buildConnectionManager(config);
+    // Connection manager — real Composio if API key available, stub otherwise
+    const connectionManager = await buildConnectionManager(projectId);
 
     // Run the pipeline
     const result = await runPipeline({
@@ -114,25 +119,21 @@ export const waitForApprovalTask = task({
 });
 
 // ---------------------------------------------------------------------------
-// Stub connection manager until Composio integration (Phase 4)
+// Connection manager — Composio-backed if API key available, stub otherwise
 // ---------------------------------------------------------------------------
 
-function buildConnectionManager(_config: AgentConfig): ConnectionManager {
-  // Stub — returns empty data so the pipeline runs end-to-end.
-  // Skills that don't need external data (deterministic, LLM-only) work fine.
-  // Replace with Composio-backed ConnectionManager in Phase 4.
-  return {
-    async fetch(_dataTypeId: string) {
-      return null;
-    },
-    async execute(_action, _toolCategory, _args) {
-      return { status: "skipped" as const, message: "No connection configured" };
-    },
-    availableDataTypes() {
-      return [];
-    },
-    async getHealth() {
-      return [];
-    },
-  };
+async function buildConnectionManager(projectId: string): Promise<ConnectionManager> {
+  if (!process.env.COMPOSIO_API_KEY) {
+    // No API key — return stub so pipeline still runs (skills work without data)
+    return {
+      async fetch() { return null; },
+      async execute() { return { status: "skipped" as const, message: "No Composio API key" }; },
+      availableDataTypes() { return []; },
+      async getHealth() { return []; },
+    };
+  }
+
+  const composio = await createComposioClient();
+  const userId = `nochore-${projectId}`;
+  return new ComposioConnectionManager(composio, userId, DEFAULT_DATA_TYPE_MAPPINGS);
 }
