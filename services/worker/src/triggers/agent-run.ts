@@ -29,8 +29,10 @@ export const agentRunTask = task({
 
     // Build dependencies from project context
     // Resolve absolute path — trigger.dev worker runs in a sandboxed temp dir
+    // Web server cwd is apps/web/, so data/ lives under apps/web/data/
     const projectRoot = process.env.PROJECT_ROOT ?? process.cwd();
-    const dbPath = resolve(projectRoot, `data/projects/${projectId}/nochore.db`);
+    const dataRoot = resolve(projectRoot, "apps/web");
+    const dbPath = resolve(dataRoot, `data/projects/${projectId}/nochore.db`);
     const db = createDb(dbPath);
     const memoryStore = new SqliteMemoryStore(db);
     const runRepository = new RunRepository(db);
@@ -43,7 +45,10 @@ export const agentRunTask = task({
     if (!agentRow) {
       throw new Error(`Agent ${agentId} not found`);
     }
-    const config: AgentConfig = JSON.parse(agentRow.config);
+    const config: AgentConfig =
+      typeof agentRow.config === "string"
+        ? JSON.parse(agentRow.config)
+        : agentRow.config;
 
     // Build skill registry with built-in skills
     const skillRegistry = new SkillRegistry();
@@ -51,7 +56,8 @@ export const agentRunTask = task({
     // TODO: register additional built-in skills as they're ported
 
     // Build workspace + context assembler
-    const workspacePath = resolve(projectRoot, config.workspacePath);
+    const rawWorkspacePath = config.workspacePath ?? `data/projects/${projectId}/agents/${agentId}`;
+    const workspacePath = resolve(dataRoot, rawWorkspacePath);
     const workspaceStore = new WorkspaceStore(workspacePath);
     const contextAssembler = new ContextAssembler(workspaceStore, memoryStore);
 

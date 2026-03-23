@@ -10,7 +10,7 @@ import type { SkillDefinition, SkillData } from "../types/skill";
  * Create an AI SDK model from environment configuration.
  *
  * Supports multiple providers via LLM_PROVIDER env var:
- * - "zhipu" → Zhipu GLM (bigmodel.cn), model default: "glm-4"
+ * - "zai" → Zai GLM (bigmodel.cn), model default: "glm-4"
  * - "anthropic" → Anthropic Claude (default), model default: "claude-sonnet-4-20250514"
  * - "openai" → OpenAI GPT, model default: "gpt-4o"
  *
@@ -24,14 +24,14 @@ export function createModel(modelOverride?: string): LanguageModelV1 {
   const provider = process.env.LLM_PROVIDER ?? "anthropic";
 
   switch (provider) {
-    case "zhipu": {
+    case "zai": {
       const { createOpenAICompatible } = require("@ai-sdk/openai-compatible");
-      const zhipu = createOpenAICompatible({
-        name: "zhipu",
+      const zai = createOpenAICompatible({
+        name: "zai",
         baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
         apiKey: process.env.ZAI_API_KEY,
       });
-      return zhipu(modelOverride ?? process.env.LLM_MODEL ?? "glm-4.7");
+      return zai(modelOverride ?? process.env.LLM_MODEL ?? "glm-4.7");
     }
 
     case "openai": {
@@ -117,6 +117,12 @@ export async function executeSkill(
       prompt: JSON.stringify(data),
       output: Output.object({ schema: jsonSchema(skill.outputSchema) }),
     });
+
+    if (result.output === undefined) {
+      throw new Error(
+        `Skill "${skill.id}" LLM returned no structured output — model may not support JSON schema`,
+      );
+    }
 
     return result.output;
   }

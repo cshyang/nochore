@@ -67,7 +67,21 @@ export async function resolveScope(params: {
   const llmResult = result.output as {
     selectedSkills: string[];
     reasoning: string;
-  };
+  } | undefined;
+
+  // If LLM output is undefined (e.g., model doesn't support structured output),
+  // fall back to running all configured skills
+  if (!llmResult?.selectedSkills) {
+    const duration = performance.now() - start;
+    return {
+      skillIds: config.skills,
+      stepOutput: {
+        step: "scope" as const,
+        duration,
+        data: { strategy: "llm-fallback", selectedSkills: config.skills },
+      },
+    };
+  }
 
   // Validate: filter out any skill IDs that don't exist in the registry
   const validSkillIds = llmResult.selectedSkills.filter((id) => {

@@ -95,7 +95,21 @@ export async function planActions(params: {
 
   const raw = result.output as {
     proposals: Array<Partial<ActionProposal>>;
-  };
+  } | undefined;
+
+  // If LLM output is undefined (e.g., model doesn't support structured output),
+  // return empty proposals
+  if (!raw?.proposals) {
+    const duration = performance.now() - start;
+    return {
+      proposals: [],
+      stepOutput: {
+        step: "plan" as const,
+        duration,
+        data: { proposalCount: 0, note: "LLM returned no structured output" },
+      },
+    };
+  }
 
   // Post-process: ensure every proposal has id and idempotencyKey
   const proposals: ActionProposal[] = raw.proposals.map((p) => ({
