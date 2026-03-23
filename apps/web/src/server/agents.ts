@@ -43,7 +43,7 @@ export const createBlankAgent = createServerFn({ method: "POST" })
       triggers: [],
       policyRules: [],
       globalApprovalRequired: false,
-      scopeStrategy: "llm",
+      scopeStrategy: "static",
     };
     db.insert(agents)
       .values({
@@ -142,7 +142,7 @@ export const createAgent = createServerFn({ method: "POST" })
       connectionIds: [],
       memoryEnabled: true,
       lessonDistillationInterval: 5,
-      scopeStrategy: data.scopeStrategy,
+      scopeStrategy: data.scopeStrategy ?? "static",
     };
 
     // Insert agent record
@@ -215,7 +215,7 @@ export const createDraftAgent = createServerFn({ method: "POST" })
       connectionIds: [],
       memoryEnabled: true,
       lessonDistillationInterval: 5,
-      scopeStrategy: data.scopeStrategy,
+      scopeStrategy: data.scopeStrategy ?? "static",
     };
 
     const { db } = getProjectDeps(data.projectId);
