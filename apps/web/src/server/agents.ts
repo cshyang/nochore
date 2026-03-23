@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { tasks, runs } from "@trigger.dev/sdk/v3";
+import { tasks, runs as triggerRuns } from "@trigger.dev/sdk/v3";
 import { getProjectDeps } from "./deps";
 import { buildAgentView } from "./projects";
 import {
@@ -309,7 +309,7 @@ export const launchAgent = createServerFn({ method: "POST" })
       trigger: { type: "manual", metadata: { source: "launch" } },
     });
 
-    const completed = await runs.poll(handle, { pollIntervalMs: 1000 });
+    const completed = await triggerRuns.poll(handle, { pollIntervalMs: 1000 });
 
     return jsonSafe({ launched: true, runId: handle.id, ok: completed.isSuccess });
   });
@@ -330,7 +330,7 @@ export const triggerManualRun = createServerFn({ method: "POST" })
     });
 
     // Wait for the pipeline to complete before returning
-    const completed = await runs.poll(handle, { pollIntervalMs: 1000 });
+    const completed = await triggerRuns.poll(handle, { pollIntervalMs: 1000 });
 
     return jsonSafe({
       triggered: true,
