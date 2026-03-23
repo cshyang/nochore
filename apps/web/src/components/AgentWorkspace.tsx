@@ -30,6 +30,7 @@ export interface AgentWorkspaceProps {
   agent: AgentView;
   project: ProjectView;
   availableSkills?: Array<{ id: string; name: string; description: string }>;
+  projectConnections?: Array<{ id: string; provider: string; status: string }>;
   onBack: () => void;
   onDeleteAgent?: () => void;
   runs?: SerializedRun[];
@@ -561,7 +562,7 @@ function ChatDrawer({
   agentName: string;
   mode?: "chat" | "blueprint";
   availableSkills?: Array<{ id: string; name: string; description: string }>;
-  onBlueprintComplete?: (data?: { name: string; description: string; skills?: string[]; schedule?: string }) => void;
+  onBlueprintComplete?: (data?: { name: string; description: string; skills?: string[]; schedule?: string; connections?: Array<{ provider: string; reason: string }> }) => void;
   onClose: () => void;
 }) {
   const [input, setInput] = useState("");
@@ -681,6 +682,7 @@ function ChatDrawer({
             description: (lastBlueprint.summary as string) || "",
             skills: (lastBlueprint.skills as string[]) || [],
             schedule: (lastBlueprint.trigger as { schedule?: string })?.schedule || "manual",
+            connections: (lastBlueprint.connections as Array<{ provider: string; reason: string }>) || [],
           },
         });
 
@@ -699,6 +701,7 @@ function ChatDrawer({
           description: (lastBlueprint!.summary as string) || "",
           skills: (lastBlueprint!.skills as string[]) || [],
           schedule: (lastBlueprint!.trigger as { schedule?: string })?.schedule || "manual",
+          connections: (lastBlueprint!.connections as Array<{ provider: string; reason: string }>) || [],
         });
       } else if (textAccumulator.trim()) {
         setMessages((prev) => [
@@ -1154,13 +1157,27 @@ function ChatDrawer({
 // OverviewPanel
 // ---------------------------------------------------------------------------
 
+const PROVIDER_NAMES: Record<string, string> = {
+  googleads: "Google Ads",
+  slack: "Slack",
+  meta: "Meta Ads",
+  ga4: "Google Analytics",
+  shopify: "Shopify",
+  stripe: "Stripe",
+  github: "GitHub",
+};
+
 function OverviewPanel({
   agent,
+  projectId,
   availableSkills = [],
+  projectConnections = [],
   onUpdateConfig,
 }: {
   agent: AgentView;
-  availableSkills?: Array<{ id: string; name: string; description: string }>;
+  projectId: string;
+  availableSkills?: Array<{ id: string; name: string; description: string; consumes?: string[] }>;
+  projectConnections?: Array<{ id: string; provider: string; status: string }>;
   onUpdateConfig?: (updates: Record<string, unknown>) => void;
 }) {
   const [instructions, setInstructions] = useState(agent.description || agent.intent || "");
@@ -1420,13 +1437,78 @@ function OverviewPanel({
       {/* Connections */}
       <SectionHeading>Connections</SectionHeading>
       <SettingsCard>
-        <SettingsRow
-          icon="○"
-          title="Connections"
-          description="API integrations this agent can use"
-          value="Coming soon"
-          isLast={true}
-        />
+        {(agent.connections?.length ?? 0) > 0 ? (
+          agent.connections.map((conn, i) => {
+            const isConnected = projectConnections.some(
+              (pc) => pc.provider === conn.provider && pc.status === "active"
+            );
+            return (
+              <SettingsRow
+                key={conn.provider}
+                icon={isConnected ? "○" : "\u26A0"}
+                title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
+                description={conn.reason}
+                isLast={i === agent.connections.length - 1}
+                trailing={
+                  isConnected ? (
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: COLORS.green,
+                      padding: "3px 10px",
+                      borderRadius: 99,
+                      background: COLORS.greenDim,
+                    }}>
+                      Connected
+                    </span>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { initiateConnection } = await import("~/server/connections");
+                          const result = await initiateConnection({
+                            data: {
+                              projectId,
+                              provider: conn.provider,
+                              callbackUrl: window.location.href,
+                            },
+                          });
+                          const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
+                          if (redirectUrl) {
+                            window.open(redirectUrl, "_blank");
+                          }
+                        } catch (err) {
+                          console.error("Failed to initiate connection:", err);
+                        }
+                      }}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: COLORS.yellow,
+                        padding: "3px 10px",
+                        borderRadius: 99,
+                        background: COLORS.yellowDim,
+                        border: `1px solid ${COLORS.yellow}`,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      Connect
+                    </button>
+                  )
+                }
+              />
+            );
+          })
+        ) : (
+          <SettingsRow
+            icon="○"
+            title="No connections needed"
+            description="This agent works with its instructions alone"
+            isLast={true}
+          />
+        )}
       </SettingsCard>
 
       {/* Notifications */}
@@ -1620,6 +1702,7 @@ export function AgentWorkspace({
   agent,
   project,
   availableSkills = [],
+  projectConnections = [],
   onBack,
   onDeleteAgent,
   runs = [],
@@ -1807,7 +1890,9 @@ export function AgentWorkspace({
       {activeTab === "overview" ? (
         <OverviewPanel
           agent={displayAgent}
+          projectId={project.id}
           availableSkills={availableSkills}
+          projectConnections={projectConnections}
           onUpdateConfig={async (updates) => {
             const { updateAgentConfig } = await import("~/server/agents");
             await updateAgentConfig({
@@ -1846,6 +1931,7 @@ export function AgentWorkspace({
                 description: data.description,
                 skills: data.skills ?? [],
                 schedule: data.schedule ?? "manual",
+                connections: data.connections ?? [],
               });
             }
           }}

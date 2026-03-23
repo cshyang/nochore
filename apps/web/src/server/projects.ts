@@ -73,7 +73,7 @@ function extractSchedule(config: AgentConfig): string {
 type DrizzleDb = ReturnType<typeof getProjectDeps>["db"];
 
 export function buildAgentView(
-  agentRow: { id: string; config: string; createdAt: number },
+  agentRow: { id: string; config: string; status: string | null; createdAt: number },
   db: DrizzleDb,
 ): AgentView {
   const config = JSON.parse(agentRow.config) as AgentConfig;
@@ -129,6 +129,7 @@ export function buildAgentView(
     policyRules: config.policyRules,
     globalApprovalRequired: config.globalApprovalRequired,
     scopeStrategy: config.scopeStrategy,
+    lifecycleStatus: (agentRow.status as AgentView["lifecycleStatus"]) ?? "live",
     status,
     lastRunAt: latestRun?.startedAt ?? null,
     lastRunRelative: latestRun ? relativeTime(latestRun.startedAt) : null,
@@ -136,6 +137,7 @@ export function buildAgentView(
     pendingCount,
     lessonCount,
     runCount: allRuns.length,
+    connections: (config as Record<string, unknown>).connections as Array<{ provider: string; reason: string }> ?? [],
     createdAt: agentRow.createdAt,
   };
 }
@@ -214,8 +216,8 @@ export const listProjects = createServerFn({ method: "GET" }).handler(
         const projectRow = db.select().from(projects).get();
         if (!projectRow) continue;
         result.push(buildProjectView(projectRow, db));
-      } catch {
-        // Skip projects with corrupted DBs
+      } catch (err) {
+        console.error(`[listProjects] Failed to load project "${dir}":`, err);
         continue;
       }
     }
@@ -261,6 +263,7 @@ const DDL = `
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
     config TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'live',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -342,8 +345,11 @@ export const createProject = createServerFn({ method: "POST" })
     (input: { name: string; icon?: string; color?: string }) => input,
   )
   .handler(async ({ data }) => {
-    const projectId =
-      slugify(data.name) || crypto.randomUUID().slice(0, 8);
+    const projectId = slugify(data.name) || crypto.randomUUID().slice(0, 8);
+    const projectDir0 = join("data/projects", projectId);
+    if (existsSync(projectDir0)) {
+      throw new Error(`A project named "${data.name}" already exists`);
+    }
     const projectDir = join("data/projects", projectId);
 
     // Create directory

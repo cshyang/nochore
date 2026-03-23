@@ -23,6 +23,7 @@ export interface AgentView {
   pendingCount: number;
   lessonCount: number;
   runCount: number;
+  connections: Array<{ provider: string; reason: string }>;
   createdAt: number;
 }
 

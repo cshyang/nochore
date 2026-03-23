@@ -320,6 +320,7 @@ export const updateAgentConfig = createServerFn({ method: "POST" })
       policyRules?: string[];
       globalApprovalRequired?: boolean;
       schedule?: string;
+      connections?: Array<{ provider: string; reason: string }>;
     }) => input,
   )
   .handler(async ({ data }) => {
@@ -327,12 +328,13 @@ export const updateAgentConfig = createServerFn({ method: "POST" })
     const row = db.select().from(agents).where(eq(agents.id, data.agentId)).get();
     if (!row) throw new Error("Agent not found");
 
-    const config = JSON.parse(row.config) as AgentConfig;
+    const config = JSON.parse(row.config) as AgentConfig & { connections?: Array<{ provider: string; reason: string }> };
     if (data.name !== undefined) config.name = data.name;
     if (data.description !== undefined) config.description = data.description;
     if (data.skills !== undefined) config.skills = data.skills;
     if (data.policyRules !== undefined) config.policyRules = data.policyRules;
     if (data.globalApprovalRequired !== undefined) config.globalApprovalRequired = data.globalApprovalRequired;
+    if (data.connections !== undefined) config.connections = data.connections;
     if (data.schedule !== undefined) {
       config.triggers = data.schedule === "manual"
         ? [{ type: "manual", config: {} }]
