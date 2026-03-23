@@ -17,6 +17,7 @@ import {
   CircleNotch,
   PaperPlaneTilt,
   ArrowCounterClockwise,
+  DotsThree,
 } from "@phosphor-icons/react";
 import { sendChat, getChatHistory } from "~/server/chat";
 import type { AgentView, ProjectView } from "~/lib/types";
@@ -909,6 +910,7 @@ function ChatDrawer({
         {/* Messages */}
         <div
           ref={scrollRef}
+          className="aw-scroll"
           style={{
             flex: 1,
             overflowY: "auto",
@@ -1136,6 +1138,18 @@ function ChatDrawer({
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .aw-scroll::-webkit-scrollbar { width: 6px; }
+        .aw-scroll::-webkit-scrollbar-track { background: transparent; }
+        .aw-scroll::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
+        .aw-scroll::-webkit-scrollbar-thumb:hover { background: #352F3D; }
+        .aw-scroll { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
+
+        textarea::-webkit-scrollbar { width: 5px; }
+        textarea::-webkit-scrollbar-track { background: transparent; }
+        textarea::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
+        textarea::-webkit-scrollbar-thumb:hover { background: #352F3D; }
+        textarea { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
       `}</style>
     </>
   );
@@ -1147,16 +1161,19 @@ function ChatDrawer({
 
 function OverviewPanel({
   agent,
-  onDeleteAgent,
+  availableSkills = [],
   onUpdateConfig,
 }: {
   agent: AgentView;
-  onDeleteAgent?: () => void;
+  availableSkills?: Array<{ id: string; name: string; description: string }>;
   onUpdateConfig?: (updates: Record<string, unknown>) => void;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [instructions, setInstructions] = useState(agent.description || agent.intent || "");
+  const [notifyOnComplete, setNotifyOnComplete] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set(agent.skills));
+  const [globalApproval, setGlobalApproval] = useState(agent.globalApprovalRequired);
+  const [rules, setRules] = useState<string[]>(agent.policyRules);
 
   const scheduleLabels: Record<string, string> = {
     hourly: "Every hour",
@@ -1175,6 +1192,18 @@ function OverviewPanel({
   useEffect(() => {
     setCurrentSchedule(agent.schedule);
   }, [agent.schedule]);
+
+  useEffect(() => {
+    setActiveSkills(new Set(agent.skills));
+  }, [agent.skills]);
+
+  useEffect(() => {
+    setGlobalApproval(agent.globalApprovalRequired);
+  }, [agent.globalApprovalRequired]);
+
+  useEffect(() => {
+    setRules(agent.policyRules);
+  }, [agent.policyRules]);
 
   return (
     <div>
@@ -1243,23 +1272,47 @@ function OverviewPanel({
       </SettingsCard>
 
       {/* Skills */}
-      {agent.skills.length > 0 && (
+      {(availableSkills.length > 0 || agent.skills.length > 0) && (
         <>
           <SectionHeading>Skills</SectionHeading>
           <SettingsCard>
-            {agent.skills.map((skill, i) => (
-              <SettingsRow
-                key={skill}
-                icon="◈"
-                title={skill
-                  .split(/[-_]/)
-                  .map((w) => w[0].toUpperCase() + w.slice(1))
-                  .join(" ")}
-                description={skill}
-                value={<Badge color="green">Active</Badge>}
-                isLast={i === agent.skills.length - 1}
-              />
-            ))}
+            {availableSkills.map((skill, i) => {
+              const isActive = activeSkills.has(skill.id);
+              return (
+                <SettingsRow
+                  key={skill.id}
+                  icon="◈"
+                  title={skill.name}
+                  description={skill.description}
+                  isLast={i === availableSkills.length - 1}
+                  trailing={
+                    <button
+                      onClick={() => {
+                        const next = new Set(activeSkills);
+                        if (isActive) next.delete(skill.id);
+                        else next.add(skill.id);
+                        setActiveSkills(next);
+                        onUpdateConfig?.({ skills: [...next] });
+                      }}
+                      style={{
+                        background: isActive ? COLORS.accentDim : "transparent",
+                        border: `1px solid ${isActive ? COLORS.accent : COLORS.border}`,
+                        borderRadius: 99,
+                        padding: "4px 12px",
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: isActive ? COLORS.accentLight : COLORS.textDim,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {isActive ? "Active" : "Off"}
+                    </button>
+                  }
+                />
+              );
+            })}
           </SettingsCard>
         </>
       )}
@@ -1271,122 +1324,162 @@ function OverviewPanel({
           icon="⊘"
           title="Global approval"
           description="Require approval for all actions"
-          value={agent.globalApprovalRequired ? "On" : "Off"}
-        />
-        {agent.policyRules.length > 0 ? (
-          agent.policyRules.map((rule, i) => (
-            <SettingsRow
-              key={i}
-              icon="◉"
-              title={rule}
-              description="Policy rule"
-            />
-          ))
-        ) : (
-          <SettingsRow
-            icon="◉"
-            title="No custom rules"
-            description="Using platform defaults"
-          />
-        )}
-      </SettingsCard>
-
-      {/* Danger zone */}
-      {onDeleteAgent && (
-        <>
-          <SectionHeading>Danger zone</SectionHeading>
-          <SettingsCard>
-            <div
+          trailing={
+            <button
+              onClick={() => {
+                const next = !globalApproval;
+                setGlobalApproval(next);
+                onUpdateConfig?.({ globalApprovalRequired: next });
+              }}
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "14px 16px",
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                border: "none",
+                background: globalApproval ? COLORS.accent : COLORS.border,
+                cursor: "pointer",
+                position: "relative",
+                transition: "background 0.15s ease",
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span
-                  style={{
-                    fontSize: 16,
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: COLORS.bg,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    color: COLORS.red,
-                    opacity: 0.7,
-                  }}
-                >
-                  ⚠
-                </span>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>
-                    Delete this agent
-                  </div>
-                  <div style={{ fontSize: 13, color: COLORS.textDim, marginTop: 2 }}>
-                    Permanently remove this agent and all its data
-                  </div>
-                </div>
-              </div>
+              <span style={{
+                position: "absolute",
+                top: 2,
+                left: globalApproval ? 18 : 2,
+                width: 16,
+                height: 16,
+                borderRadius: 8,
+                background: COLORS.white,
+                transition: "left 0.15s ease",
+              }} />
+            </button>
+          }
+        />
+        {rules.map((rule, i) => (
+          <SettingsRow
+            key={i}
+            icon="◉"
+            title={rule}
+            description="Policy rule"
+            trailing={
+              <button
+                onClick={() => {
+                  const next = rules.filter((_, j) => j !== i);
+                  setRules(next);
+                  onUpdateConfig?.({ policyRules: next });
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: COLORS.textDim,
+                  cursor: "pointer",
+                  padding: 4,
+                  fontSize: 14,
+                  lineHeight: 1,
+                  transition: "color 0.15s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
+              >
+                ×
+              </button>
+            }
+          />
+        ))}
+        <div style={{ padding: "8px 16px 12px 62px" }}>
+          <input
+            placeholder="Add policy rule..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
+                const value = (e.target as HTMLInputElement).value.trim();
+                const next = [...rules, value];
+                setRules(next);
+                onUpdateConfig?.({ policyRules: next });
+                (e.target as HTMLInputElement).value = "";
+              }
+            }}
+            style={{
+              width: "100%",
+              background: "none",
+              border: "none",
+              borderBottom: `1px solid ${COLORS.border}`,
+              color: COLORS.text,
+              fontSize: 13,
+              padding: "6px 0",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+          />
+        </div>
+      </SettingsCard>
 
-              {confirmDelete ? (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => setConfirmDelete(false)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: COLORS.textSecondary,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      padding: "6px 12px",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={onDeleteAgent}
-                    style={{
-                      background: COLORS.redDim,
-                      border: `1px solid ${COLORS.red}`,
-                      color: COLORS.red,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      padding: "6px 12px",
-                      borderRadius: RADIUS.button,
-                    }}
-                  >
-                    Confirm delete
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: COLORS.textDim,
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    padding: "6px 12px",
-                    transition: "color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          </SettingsCard>
-        </>
-      )}
+      {/* Connections */}
+      <SectionHeading>Connections</SectionHeading>
+      <SettingsCard>
+        <SettingsRow
+          icon="○"
+          title="Connections"
+          description="API integrations this agent can use"
+          value="Coming soon"
+          isLast={true}
+        />
+      </SettingsCard>
+
+      {/* Notifications */}
+      <SectionHeading>Notifications</SectionHeading>
+      <SettingsCard>
+        <SettingsRow
+          icon="◎"
+          title="Approval requests"
+          description="Get notified when actions need approval"
+          trailing={
+            <span style={{
+              fontSize: 12,
+              color: globalApproval ? COLORS.accentLight : COLORS.textDim,
+              fontWeight: 500,
+            }}>
+              {globalApproval ? "Always" : rules.some((r) => r.includes("ask")) ? "Some rules" : "Off"}
+            </span>
+          }
+          isLast={false}
+        />
+        <SettingsRow
+          icon="◎"
+          title="Run complete"
+          description="Notify when a run finishes"
+          trailing={
+            <button
+              onClick={() => {
+                setNotifyOnComplete((v) => !v);
+              }}
+              style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                border: "none",
+                background: notifyOnComplete ? COLORS.accent : COLORS.border,
+                cursor: "pointer",
+                position: "relative",
+                transition: "background 0.15s ease",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{
+                position: "absolute",
+                top: 2,
+                left: notifyOnComplete ? 18 : 2,
+                width: 16,
+                height: 16,
+                borderRadius: 8,
+                background: COLORS.white,
+                transition: "left 0.15s ease",
+              }} />
+            </button>
+          }
+          isLast={true}
+        />
+      </SettingsCard>
     </div>
   );
 }
@@ -1408,6 +1501,7 @@ export function AgentWorkspace({
   onReject,
 }: AgentWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
   const [blueprintDone, setBlueprintDone] = useState(false);
   const [localOverrides, setLocalOverrides] = useState<Partial<AgentView> | null>(null);
@@ -1478,6 +1572,63 @@ export function AgentWorkspace({
           {displayAgent.name}
         </h1>
 
+        {/* More menu */}
+        <div style={{ position: "relative" }}>
+          <IconButton
+            active={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+            label="More"
+          >
+            <DotsThree size={18} weight="bold" />
+          </IconButton>
+          {menuOpen && (
+            <>
+              <div
+                onClick={() => setMenuOpen(false)}
+                style={{ position: "fixed", inset: 0, zIndex: 39 }}
+              />
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: 4,
+                background: COLORS.surface,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 6,
+                padding: "4px 0",
+                minWidth: 180,
+                zIndex: 40,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+              }}>
+                <button
+                  onClick={() => {
+                    if (confirm("Delete this agent and all its data?")) {
+                      onDeleteAgent?.();
+                    }
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 16px",
+                    background: "none",
+                    border: "none",
+                    color: COLORS.red,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                    transition: "background 0.1s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surfaceHover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                >
+                  Delete agent
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Chat icon */}
         <IconButton
           active={chatOpen}
@@ -1522,7 +1673,7 @@ export function AgentWorkspace({
       {activeTab === "overview" ? (
         <OverviewPanel
           agent={displayAgent}
-          onDeleteAgent={onDeleteAgent}
+          availableSkills={availableSkills}
           onUpdateConfig={async (updates) => {
             const { updateAgentConfig } = await import("~/server/agents");
             await updateAgentConfig({
