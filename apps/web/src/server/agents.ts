@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
+import { tasks } from "@trigger.dev/sdk/v3";
 import { getProjectDeps } from "./deps";
 import { buildAgentView } from "./projects";
 import {
@@ -22,6 +23,7 @@ import {
 import { initializeWorkspace } from "../../../../packages/harness/src/workspace/templates";
 import { jsonSafe } from "./serializable";
 import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
+import type { agentRunTask } from "../../../../services/worker/src/triggers/agent-run";
 
 // ---------------------------------------------------------------------------
 // createBlankAgent — create an untitled agent and return its id
@@ -300,9 +302,32 @@ export const launchAgent = createServerFn({ method: "POST" })
       .where(eq(agents.id, agentId))
       .run();
 
-    // TODO: trigger first run via trigger.dev
+    // Trigger first run via trigger.dev
+    const handle = await tasks.trigger<typeof agentRunTask>("agent-run", {
+      agentId,
+      projectId,
+      trigger: { type: "manual", metadata: { source: "launch" } },
+    });
 
-    return jsonSafe({ launched: true });
+    return jsonSafe({ launched: true, runHandle: handle.id });
+  });
+
+// ---------------------------------------------------------------------------
+// triggerManualRun — kick off a pipeline run for an agent on demand
+// ---------------------------------------------------------------------------
+
+export const triggerManualRun = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { agentId: string; projectId: string }) => input,
+  )
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const handle = await tasks.trigger<typeof agentRunTask>("agent-run", {
+      agentId,
+      projectId,
+      trigger: { type: "manual", metadata: { source: "run_now" } },
+    });
+
+    return jsonSafe({ triggered: true, runHandle: handle.id });
   });
 
 // ---------------------------------------------------------------------------

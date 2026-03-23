@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
-import { getAgent, deleteAgent } from "~/server/agents";
+import { getAgent, deleteAgent, triggerManualRun } from "~/server/agents";
 import { getProject } from "~/server/projects";
 import { getRunHistory } from "~/server/runs";
 import { getPendingActions, approveAction, rejectAction } from "~/server/approvals";
@@ -65,6 +65,10 @@ function AgentDetailPage() {
     navigate({ to: "/$projectId", params: { projectId } });
   };
 
+  const handleRunNow = async () => {
+    await triggerManualRun({ data: { agentId, projectId } });
+  };
+
   return (
     <AgentWorkspace
       agent={agent}
@@ -75,6 +79,7 @@ function AgentDetailPage() {
         navigate({ to: "/$projectId", params: { projectId } })
       }
       onDeleteAgent={handleDeleteAgent}
+      onRunNow={handleRunNow}
       runs={loaderData.runs as any[]}
       pendingActions={loaderData.pending as any[]}
       onApprove={handleApprove}

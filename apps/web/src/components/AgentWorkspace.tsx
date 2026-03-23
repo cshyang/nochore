@@ -18,6 +18,7 @@ import {
   PaperPlaneTilt,
   ArrowCounterClockwise,
   DotsThree,
+  Play,
 } from "@phosphor-icons/react";
 import { sendChat, getChatHistory } from "~/server/chat";
 import type { AgentView, ProjectView } from "~/lib/types";
@@ -33,6 +34,7 @@ export interface AgentWorkspaceProps {
   projectConnections?: Array<{ id: string; provider: string; status: string }>;
   onBack: () => void;
   onDeleteAgent?: () => void;
+  onRunNow?: () => Promise<void>;
   runs?: SerializedRun[];
   pendingActions?: SerializedPendingAction[];
   onApprove?: (actionId: string) => void;
@@ -1209,6 +1211,10 @@ function OverviewPanel({
   const [approvalConditions, setApprovalConditions] = useState<string[]>([]);
   const [channelInApp, setChannelInApp] = useState(true);
   const [rules, setRules] = useState<string[]>(agent.policyRules);
+  const [connectingProviders, setConnectingProviders] = useState<Set<string>>(new Set());
+  const [localConnections, setLocalConnections] = useState<Array<{ id: string; provider: string; status: string }>>([]);
+
+  const allConnections = [...(projectConnections ?? []), ...localConnections];
 
   const scheduleLabels: Record<string, string> = {
     hourly: "Every hour",
@@ -1361,9 +1367,10 @@ function OverviewPanel({
                         return (
                           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                             {requiredProviders.map((provider) => {
-                              const isConnected = projectConnections?.some(
+                              const isConnected = allConnections.some(
                                 (pc) => pc.provider === provider && pc.status === "active"
-                              ) ?? false;
+                              );
+                              const isConnecting = connectingProviders.has(provider);
                               return (
                                 <div
                                   key={provider}
@@ -1387,18 +1394,65 @@ function OverviewPanel({
                                   </div>
                                   {isConnected ? (
                                     <span style={{ fontSize: 11, color: COLORS.green, fontWeight: 500 }}>Connected</span>
+                                  ) : isConnecting ? (
+                                    <span style={{
+                                      fontSize: 11,
+                                      fontWeight: 500,
+                                      color: COLORS.accent,
+                                      animation: "aw-pulse 1.5s ease-in-out infinite",
+                                    }}>
+                                      Waiting for auth...
+                                    </span>
                                   ) : (
                                     <button
                                       onClick={async () => {
+                                        setConnectingProviders((prev) => new Set(prev).add(provider));
                                         try {
                                           const { initiateConnection } = await import("~/server/connections");
                                           const result = await initiateConnection({
-                                            data: { projectId, provider, callbackUrl: window.location.href },
+                                            data: {
+                                              projectId,
+                                              provider,
+                                              callbackUrl: `${window.location.origin}/${projectId}/callback/composio?provider=${provider}&popup=true`,
+                                            },
                                           });
-                                          const url = (result as { redirectUrl: string }).redirectUrl;
-                                          if (url) window.open(url, "_blank");
+                                          const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
+                                          if (redirectUrl) {
+                                            const popup = window.open(redirectUrl, `connect-${provider}`, "width=600,height=700,left=200,top=100");
+
+                                            const pollInterval = setInterval(async () => {
+                                              try {
+                                                const { checkConnection } = await import("~/server/connections");
+                                                const status = await checkConnection({ data: { projectId, provider } });
+                                                if ((status as { connected: boolean }).connected) {
+                                                  clearInterval(pollInterval);
+                                                  setConnectingProviders((prev) => {
+                                                    const next = new Set(prev);
+                                                    next.delete(provider);
+                                                    return next;
+                                                  });
+                                                  setLocalConnections((prev) => [...prev, { id: provider, provider, status: "active" }]);
+                                                  try { popup?.close(); } catch {}
+                                                }
+                                              } catch {}
+                                            }, 2000);
+
+                                            setTimeout(() => {
+                                              clearInterval(pollInterval);
+                                              setConnectingProviders((prev) => {
+                                                const next = new Set(prev);
+                                                next.delete(provider);
+                                                return next;
+                                              });
+                                            }, 60000);
+                                          }
                                         } catch (err) {
                                           console.error("Failed to initiate connection:", err);
+                                          setConnectingProviders((prev) => {
+                                            const next = new Set(prev);
+                                            next.delete(provider);
+                                            return next;
+                                          });
                                         }
                                       }}
                                       style={{
@@ -1529,9 +1583,9 @@ function OverviewPanel({
           <SectionHeading>Connections</SectionHeading>
           <SettingsCard>
             {agent.connections.map((conn, i) => {
-              const isConnected = projectConnections?.some(
+              const isConnected = allConnections.some(
                 (pc) => pc.provider === conn.provider && pc.status === "active"
-              ) ?? false;
+              );
               return (
                 <SettingsRow
                   key={conn.provider}
@@ -1749,6 +1803,7 @@ export function AgentWorkspace({
   projectConnections = [],
   onBack,
   onDeleteAgent,
+  onRunNow,
   runs = [],
   pendingActions = [],
   onApprove,
@@ -1756,6 +1811,7 @@ export function AgentWorkspace({
 }: AgentWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [runningNow, setRunningNow] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
   const [blueprintDone, setBlueprintDone] = useState(false);
   const [localOverrides, setLocalOverrides] = useState<Partial<AgentView> | null>(null);
@@ -1777,6 +1833,10 @@ export function AgentWorkspace({
         textarea::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
         textarea::-webkit-scrollbar-thumb:hover { background: #352F3D; }
         textarea { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
+        @keyframes aw-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
       `}</style>
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}
@@ -1832,6 +1892,56 @@ export function AgentWorkspace({
         >
           {displayAgent.name}
         </h1>
+
+        {/* Run Now */}
+        {onRunNow && !isNewAgent && (
+          <button
+            onClick={async () => {
+              setRunningNow(true);
+              try {
+                await onRunNow();
+              } finally {
+                setRunningNow(false);
+              }
+            }}
+            disabled={runningNow}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 14px",
+              background: runningNow ? COLORS.surface : COLORS.accentDim,
+              border: `1px solid ${runningNow ? COLORS.border : COLORS.accent}`,
+              borderRadius: RADIUS.button,
+              color: runningNow ? COLORS.textDim : COLORS.accent,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: runningNow ? "default" : "pointer",
+              transition: "all 0.15s ease",
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              if (!runningNow) {
+                e.currentTarget.style.background = COLORS.accent;
+                e.currentTarget.style.color = "#fff";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!runningNow) {
+                e.currentTarget.style.background = COLORS.accentDim;
+                e.currentTarget.style.color = COLORS.accent;
+              }
+            }}
+          >
+            {runningNow ? (
+              <CircleNotch size={14} weight="bold" style={{ animation: "spin 1s linear infinite" }} />
+            ) : (
+              <Play size={14} weight="fill" />
+            )}
+            {runningNow ? "Running..." : "Run now"}
+          </button>
+        )}
 
         {/* More menu */}
         <div style={{ position: "relative" }}>

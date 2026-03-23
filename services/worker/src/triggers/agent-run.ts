@@ -107,17 +107,15 @@ export const waitForApprovalTask = task({
 // ---------------------------------------------------------------------------
 
 function buildConnectionManager(_config: AgentConfig): ConnectionManager {
-  // TODO: Replace with Composio-backed ConnectionManager in Phase 4
+  // Stub — returns empty data so the pipeline runs end-to-end.
+  // Skills that don't need external data (deterministic, LLM-only) work fine.
+  // Replace with Composio-backed ConnectionManager in Phase 4.
   return {
     async fetch(_dataTypeId: string) {
-      throw new Error(
-        `ConnectionManager not configured — Composio integration pending`,
-      );
+      return null;
     },
     async execute(_action, _toolCategory, _args) {
-      throw new Error(
-        `ConnectionManager not configured — Composio integration pending`,
-      );
+      return { status: "skipped" as const, message: "No connection configured" };
     },
     availableDataTypes() {
       return [];
