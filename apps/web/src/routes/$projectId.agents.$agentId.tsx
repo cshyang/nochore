@@ -131,26 +131,45 @@ function AgentDetailPage() {
     navigate({ to: "/$projectId", params: { projectId } });
   };
 
+  const [runError, setRunError] = useState<string | null>(null);
+
   const handleRunNow = async () => {
-    const result = await triggerManualRun({ data: { agentId, projectId } });
-    const data = result as { runId?: string; triggerRunId?: string };
-    if (data.runId && data.triggerRunId) {
-      void activateRun(data.runId, data.triggerRunId);
+    setRunError(null);
+    try {
+      const result = await triggerManualRun({ data: { agentId, projectId } });
+      const data = result as { runId?: string; triggerRunId?: string };
+      if (data.runId && data.triggerRunId) {
+        void activateRun(data.runId, data.triggerRunId);
+      }
+      void router.invalidate();
+      return data;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setRunError(msg.includes("fetch") || msg.includes("ECONNREFUSED")
+        ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
+        : `Run failed: ${msg}`);
+      return {};
     }
-    void router.invalidate();
-    return data;
   };
 
   const handleAskDeeper = async (prompt: string, context?: { eventId?: string; runId?: string }) => {
-    const message = context?.runId
-      ? `[Re: run ${context.runId}] ${prompt}`
-      : prompt;
-    const result = await sendChat({ data: { agentId, projectId, message } });
-    const data = result as { startedRunId?: string; triggerRunId?: string };
-    if (data.startedRunId && data.triggerRunId) {
-      void activateRun(data.startedRunId, data.triggerRunId);
+    setRunError(null);
+    try {
+      const message = context?.runId
+        ? `[Re: run ${context.runId}] ${prompt}`
+        : prompt;
+      const result = await sendChat({ data: { agentId, projectId, message } });
+      const data = result as { startedRunId?: string; triggerRunId?: string };
+      if (data.startedRunId && data.triggerRunId) {
+        void activateRun(data.startedRunId, data.triggerRunId);
+      }
+      void router.invalidate();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setRunError(msg.includes("fetch") || msg.includes("ECONNREFUSED")
+        ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
+        : `Run failed: ${msg}`);
     }
-    void router.invalidate();
   };
 
   return (
@@ -161,6 +180,7 @@ function AgentDetailPage() {
       projectConnections={projectConnections}
       activeRun={activeRun}
       onLiveRunComplete={handleLiveRunComplete}
+      runError={runError}
       onBack={() =>
         navigate({ to: "/$projectId", params: { projectId } })
       }

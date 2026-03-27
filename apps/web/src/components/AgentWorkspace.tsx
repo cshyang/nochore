@@ -146,6 +146,7 @@ export interface AgentWorkspaceProps {
   isDraft?: boolean;
   activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
   onLiveRunComplete?: () => void;
+  runError?: string | null;
 }
 
 type TimelineItem = {
@@ -992,6 +993,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     isDraft: isDraftProp,
     activeRun,
     onLiveRunComplete,
+    runError,
   } = props;
 
   const availableSkills = props.availableSkills ?? props.skills ?? [];
@@ -1163,6 +1165,23 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
         {tab === "timeline" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
+            {runError && (
+              <div style={{
+                padding: "10px 14px",
+                margin: "0 0 8px 0",
+                background: "rgba(231, 76, 60, 0.08)",
+                borderLeft: `3px solid #E74C3C`,
+                borderRadius: RADIUS.sharp,
+                fontSize: 13,
+                color: "#E74C3C",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}>
+                <WarningCircle size={16} weight="bold" />
+                {runError}
+              </div>
+            )}
             {activeRun && (
               <LiveRunView
                 triggerRunId={activeRun.triggerRunId}
