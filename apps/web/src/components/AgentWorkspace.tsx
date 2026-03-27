@@ -541,6 +541,7 @@ function TimelinePanel({
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea
+              className="textarea"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={selected ? `Ask about ${selected.title}...` : "Ask what this agent should do next..."}
@@ -690,6 +691,7 @@ function SettingsPanel({
           <SettingsCard>
             <SettingsRow icon="✦" title="Name" description="How the workspace refers to this agent." defaultExpanded>
               <input
+                className="input"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 onBlur={() => void persist({ name })}
@@ -698,6 +700,7 @@ function SettingsPanel({
             </SettingsRow>
             <SettingsRow icon="◌" title="Description" description="A concise summary of the agent's job." defaultExpanded>
               <textarea
+                className="textarea"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 onBlur={() => void persist({ description })}
@@ -709,6 +712,7 @@ function SettingsPanel({
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
                   <button
+                    className="pill"
                     key={value}
                     onClick={() => {
                       setSchedule(value);
@@ -738,6 +742,7 @@ function SettingsPanel({
           <SettingsCard>
             <div style={{ padding: 16 }}>
               <textarea
+                className="textarea"
                 value={instructions}
                 onChange={(event) => setInstructions(event.target.value)}
                 onBlur={() => void persist({ instructions })}
@@ -860,6 +865,7 @@ function SettingsPanel({
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {(["auto", "approval", "blocked"] as const).map((mode) => (
                       <button
+                        className="pill"
                         key={mode}
                         onClick={() => {
                           const next = {

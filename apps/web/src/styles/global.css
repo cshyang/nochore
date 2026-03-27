@@ -120,6 +120,29 @@ body::before {
   background-size: 256px 256px;
 }
 
+/* ── Interactive states (pseudo-classes need real CSS, not inline styles) ── */
+
+/* Button press — just enough to feel the click */
+.btn:active {
+  transform: translateY(1px) !important;
+  transition-duration: 0.05s;
+}
+
+/* Pill selector — hover lifts border, active presses */
+.pill:hover {
+  border-color: var(--text-dim) !important;
+}
+.pill:active {
+  transform: translateY(1px);
+  transition-duration: 0.05s;
+}
+
+/* Input/textarea focus ring */
+.input:focus, .textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
 /* ── Keyframes ── */
 @keyframes spin {
   from { transform: rotate(0deg); }

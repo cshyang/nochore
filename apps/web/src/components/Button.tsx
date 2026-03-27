@@ -60,6 +60,7 @@ export function Button({
 }) {
   return (
     <button
+      className="btn"
       onClick={onClick}
       style={{ ...base, ...sizes[size], ...variants[variant], ...style }}
       onMouseEnter={(e) => {
