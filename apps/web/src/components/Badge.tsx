@@ -6,10 +6,10 @@ const colorMap: Record<BadgeColor, { bg: string; text: string }> = {
   green: { bg: COLORS.greenDim, text: COLORS.green },
   orange: { bg: COLORS.orangeDim, text: COLORS.orange },
   yellow: { bg: COLORS.orangeDim, text: COLORS.orange },
-  accent: { bg: COLORS.accentDim, text: COLORS.accentBright },
+  accent: { bg: COLORS.accentDim, text: COLORS.accent },
   red: { bg: COLORS.redDim, text: COLORS.red },
-  gray: { bg: COLORS.accentSubtle, text: COLORS.textSecondary },
-  blue: { bg: COLORS.accentDim, text: COLORS.accentBright },
+  gray: { bg: "rgba(110, 106, 122, 0.12)", text: COLORS.textSecondary },
+  blue: { bg: COLORS.accentDim, text: COLORS.accent },
   read: { bg: COLORS.readDim, text: COLORS.read },
   write: { bg: COLORS.writeDim, text: COLORS.write },
 };
@@ -25,14 +25,16 @@ export function Badge({
   return (
     <span
       style={{
-        display: "inline-block",
-        padding: "4px 12px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 10px",
         borderRadius: RADIUS.pill,
         fontSize: 11,
-        fontWeight: 600,
+        fontWeight: 500,
+        lineHeight: 1.4,
         background: c.bg,
         color: c.text,
-        letterSpacing: 0.3,
       }}
     >
       {children}

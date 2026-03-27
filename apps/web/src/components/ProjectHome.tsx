@@ -66,18 +66,19 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
           )}
         </div>
         {/* Project tabs */}
-        <div style={{ display: "flex", gap: 4, background: COLORS.surface, padding: 4, borderRadius: 12 }}>
+        <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}` }}>
           {[
             { key: "agents", label: "Agents" },
             { key: "connections", label: "Connections" },
           ].map((t) => (
             <button key={t.key} onClick={() => setProjectTab(t.key)}
               style={{
-                flex: 1, padding: "8px 0", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+                background: "none", border: "none", cursor: "pointer", fontFamily: TYPE.body,
                 fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium,
-                background: projectTab === t.key ? COLORS.accentDim : "transparent",
-                color: projectTab === t.key ? COLORS.accentBright : COLORS.textSecondary,
-                transition: `all ${transition}`,
+                color: projectTab === t.key ? COLORS.text : COLORS.textDim,
+                padding: "12px 0", marginBottom: -1,
+                borderBottom: `2px solid ${projectTab === t.key ? COLORS.accent : "transparent"}`,
+                transition: `color ${transition}`,
               }}>
               {t.label}
             </button>
@@ -159,7 +160,7 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
             const isRunning = agent.status === "running";
             const isDraft = agent.lifecycleStatus === "draft";
             return (
-              <Card key={agent.id} onClick={() => onSelectAgent(agent.id)} style={{ cursor: "pointer" }}>
+              <Card key={agent.id} onClick={() => onSelectAgent(agent.id)} style={{ cursor: "pointer", padding: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{
                     width: 8,

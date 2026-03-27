@@ -7,8 +7,10 @@ const base: React.CSSProperties = {
   border: "none",
   borderRadius: RADIUS.md,
   cursor: "pointer",
-  fontWeight: 600,
+  fontWeight: 500,
   fontFamily: "inherit",
+  lineHeight: 1,
+  whiteSpace: "nowrap",
   transition: `all ${MOTION.duration} ${MOTION.ease}`,
   display: "inline-flex",
   alignItems: "center",
@@ -16,17 +18,21 @@ const base: React.CSSProperties = {
 };
 
 const sizes: Record<ButtonSize, React.CSSProperties> = {
-  sm: { padding: "8px 12px", fontSize: 13 },
-  md: { padding: "12px 24px", fontSize: 14 },
-  lg: { padding: "12px 32px", fontSize: 15 },
+  sm: { padding: "6px 12px", fontSize: 11 },
+  md: { padding: "10px 22px", fontSize: 13 },
+  lg: { padding: "10px 32px", fontSize: 14 },
 };
 
 const variants: Record<ButtonVariant, React.CSSProperties> = {
-  primary: { background: COLORS.accent, color: COLORS.white },
+  primary: {
+    background: COLORS.accent,
+    color: COLORS.white,
+    boxShadow: "0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
+  },
   secondary: {
-    background: COLORS.surfaceHover,
+    background: "transparent",
     color: COLORS.text,
-    border: `1px solid ${COLORS.border}`,
+    border: `1px solid ${COLORS.borderStrong}`,
   },
   ghost: { background: "transparent", color: COLORS.textSecondary },
   success: { background: COLORS.green, color: COLORS.black },
@@ -34,8 +40,8 @@ const variants: Record<ButtonVariant, React.CSSProperties> = {
 
 const hoverStyles: Record<ButtonVariant, React.CSSProperties> = {
   primary: { background: COLORS.accentBright },
-  secondary: { background: COLORS.surfaceHover },
-  ghost: { color: COLORS.text },
+  secondary: { borderColor: COLORS.textDim },
+  ghost: { color: COLORS.text, background: COLORS.surfaceHover },
   success: { opacity: 0.9 },
 };
 
@@ -60,14 +66,16 @@ export function Button({
         const hover = hoverStyles[variant];
         if (hover.background) e.currentTarget.style.background = hover.background as string;
         if (hover.color) e.currentTarget.style.color = hover.color as string;
+        if (hover.borderColor) e.currentTarget.style.borderColor = hover.borderColor as string;
         if (hover.opacity !== undefined) e.currentTarget.style.opacity = String(hover.opacity);
       }}
       onMouseLeave={(e) => {
-        const base = variants[variant];
-        e.currentTarget.style.background = (base.background as string) ?? "";
-        e.currentTarget.style.color = (base.color as string) ?? "";
+        const v = variants[variant];
+        e.currentTarget.style.background = (v.background as string) ?? "";
+        e.currentTarget.style.color = (v.color as string) ?? "";
         e.currentTarget.style.opacity = "1";
-        // Re-apply any style overrides from props
+        if (variant === "secondary") e.currentTarget.style.borderColor = COLORS.borderStrong;
+        if (variant === "ghost") e.currentTarget.style.background = "transparent";
         if (style?.background) e.currentTarget.style.background = style.background as string;
         if (style?.color) e.currentTarget.style.color = style.color as string;
       }}

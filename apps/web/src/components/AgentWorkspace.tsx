@@ -715,13 +715,16 @@ function SettingsPanel({
                       void persist({ schedule: value });
                     }}
                     style={{
-                      padding: "8px 12px",
+                      fontFamily: TYPE.body,
+                      padding: "6px 14px",
                       borderRadius: RADIUS.pill,
                       border: `1px solid ${schedule === value ? COLORS.accent : COLORS.border}`,
-                      background: schedule === value ? COLORS.accentDim : COLORS.bg,
-                      color: schedule === value ? COLORS.accentBright : COLORS.textSecondary,
+                      background: schedule === value ? COLORS.accentDim : "transparent",
+                      color: schedule === value ? COLORS.accent : COLORS.textSecondary,
                       fontSize: TYPE.scale.xs,
+                      fontWeight: TYPE.weight.medium,
                       cursor: "pointer",
+                      transition: `all ${MOTION.duration} ${MOTION.ease}`,
                     }}
                   >
                     {humanize(value)}
@@ -875,13 +878,16 @@ function SettingsPanel({
                           void persist({ toolConfig: next });
                         }}
                         style={{
-                          padding: "7px 10px",
+                          fontFamily: TYPE.body,
+                          padding: "6px 14px",
                           borderRadius: RADIUS.pill,
                           border: `1px solid ${tool.approvalMode === mode ? COLORS.accent : COLORS.border}`,
-                          background: tool.approvalMode === mode ? COLORS.accentDim : COLORS.bg,
-                          color: tool.approvalMode === mode ? COLORS.accentBright : COLORS.textSecondary,
+                          background: tool.approvalMode === mode ? COLORS.accentDim : "transparent",
+                          color: tool.approvalMode === mode ? COLORS.accent : COLORS.textSecondary,
                           fontSize: TYPE.scale.xs,
+                          fontWeight: TYPE.weight.medium,
                           cursor: "pointer",
+                          transition: `all ${MOTION.duration} ${MOTION.ease}`,
                         }}
                       >
                         {humanize(mode)}
@@ -935,23 +941,24 @@ function Toggle({
     <button
       onClick={() => onChange(!checked)}
       style={{
-        width: 42,
-        height: 24,
+        width: 36,
+        height: 20,
         border: "none",
-        borderRadius: 999,
-        background: checked ? COLORS.accent : COLORS.border,
+        borderRadius: RADIUS.pill,
+        background: checked ? COLORS.accent : COLORS.borderStrong,
         position: "relative",
         cursor: "pointer",
+        transition: `background ${MOTION.duration} ${MOTION.ease}`,
       }}
     >
       <span
         style={{
           position: "absolute",
-          top: 4,
-          left: checked ? 22 : 4,
-          width: 16,
-          height: 16,
-          borderRadius: 999,
+          top: 3,
+          left: checked ? 19 : 3,
+          width: 14,
+          height: 14,
+          borderRadius: RADIUS.pill,
           background: COLORS.white,
           transition: `left ${MOTION.duration} ${MOTION.ease}`,
         }}
@@ -1151,7 +1158,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 12, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
+        <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
           {(["timeline", "objective", "tools", "chat", "memory"] as const).map((item) => (
             <button
               key={item}
@@ -1159,7 +1166,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               style={{
                 background: "transparent",
                 border: "none",
-                padding: "12px 4px",
+                padding: "12px 0",
                 marginBottom: -1,
                 cursor: "pointer",
                 color: tab === item ? COLORS.text : COLORS.textDim,

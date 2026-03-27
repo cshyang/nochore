@@ -141,7 +141,7 @@ function ComposioCallbackPage() {
         padding: 32,
       }}
     >
-      <Card style={{ maxWidth: 440, width: "100%", textAlign: "center" }}>
+      <Card style={{ maxWidth: 440, width: "100%", textAlign: "center", padding: 24 }}>
         {status === "verifying" && (
           <>
             <div

@@ -15,8 +15,8 @@ export function Card({
       style={{
         background: COLORS.surface,
         border: `1px solid ${COLORS.border}`,
-        borderRadius: RADIUS.sm,
-        padding: 20,
+        borderRadius: RADIUS.lg,
+        overflow: "hidden",
         cursor: onClick ? "pointer" : "default",
         transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
         ...style,
