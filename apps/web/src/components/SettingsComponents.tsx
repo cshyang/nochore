@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { COLORS, RADIUS } from "~/lib/colors";
+import { COLORS, RADIUS, MOTION, TYPE } from "~/lib/colors";
 
 // ---------------------------------------------------------------------------
 // SectionHeading — group label that sits ABOVE the card
@@ -18,11 +18,11 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 600,
         color: COLORS.textDim,
         textTransform: "uppercase",
-        letterSpacing: 0.8,
+        letterSpacing: TYPE.tracking.wide,
         marginTop: 24,
         marginBottom: 8,
       }}
@@ -41,7 +41,7 @@ export function SettingsCard({ children }: { children: React.ReactNode }) {
     <div
       style={{
         background: COLORS.surface,
-        borderRadius: RADIUS.modal,
+        borderRadius: RADIUS.lg,
         border: `1px solid ${COLORS.border}`,
         overflow: "hidden",
       }}
@@ -100,7 +100,7 @@ export function SettingsRow({
           gap: 14,
           padding: "14px 16px",
           cursor: isClickable ? "pointer" : "default",
-          transition: "background 0.15s ease",
+          transition: `background ${MOTION.duration} ${MOTION.ease}`,
         }}
         onMouseEnter={(e) => {
           if (isClickable) e.currentTarget.style.background = COLORS.surfaceHover;
@@ -115,13 +115,13 @@ export function SettingsRow({
             fontSize: 15,
             width: 32,
             height: 32,
-            borderRadius: 8,
-            background: COLORS.bg,
+            borderRadius: RADIUS.lg,
+            background: COLORS.surfaceHover,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            color: iconColor ?? COLORS.textDim,
+            color: iconColor ?? COLORS.textSecondary,
           }}
         >
           {icon}
@@ -168,7 +168,7 @@ export function SettingsRow({
             style={{
               fontSize: 14,
               color: COLORS.textDim,
-              transition: "transform 0.15s ease",
+              transition: `transform ${MOTION.duration} ${MOTION.ease}`,
               transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
               flexShrink: 0,
             }}

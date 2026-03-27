@@ -1,14 +1,17 @@
 import { COLORS, RADIUS } from "~/lib/colors";
 
-type BadgeColor = "green" | "yellow" | "accent" | "red" | "gray" | "blue";
+type BadgeColor = "green" | "yellow" | "orange" | "accent" | "red" | "gray" | "blue" | "read" | "write";
 
 const colorMap: Record<BadgeColor, { bg: string; text: string }> = {
   green: { bg: COLORS.greenDim, text: COLORS.green },
-  yellow: { bg: COLORS.yellowDim, text: COLORS.yellow },
-  accent: { bg: COLORS.accentDim, text: COLORS.accentLight },
+  orange: { bg: COLORS.orangeDim, text: COLORS.orange },
+  yellow: { bg: COLORS.orangeDim, text: COLORS.orange },
+  accent: { bg: COLORS.accentDim, text: COLORS.accentBright },
   red: { bg: COLORS.redDim, text: COLORS.red },
-  gray: { bg: COLORS.grayDim, text: COLORS.textSecondary },
-  blue: { bg: COLORS.blueDim, text: COLORS.blue },
+  gray: { bg: COLORS.accentSubtle, text: COLORS.textSecondary },
+  blue: { bg: COLORS.accentDim, text: COLORS.accentBright },
+  read: { bg: COLORS.readDim, text: COLORS.read },
+  write: { bg: COLORS.writeDim, text: COLORS.write },
 };
 
 export function Badge({
@@ -24,8 +27,8 @@ export function Badge({
       style={{
         display: "inline-block",
         padding: "4px 12px",
-        borderRadius: 99,
-        fontSize: 12,
+        borderRadius: RADIUS.pill,
+        fontSize: 11,
         fontWeight: 600,
         background: c.bg,
         color: c.text,

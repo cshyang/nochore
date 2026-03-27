@@ -11,7 +11,7 @@ import { clearProjectDeps, getProjectDeps } from "./deps";
 import { jsonSafe } from "./serializable";
 
 const DEFAULT_PROJECT_ICON = "briefcase";
-const DEFAULT_PROJECT_COLOR = "#6C5CE7";
+const DEFAULT_PROJECT_COLOR = "#5A7ACD";
 
 export const listProjects = createServerFn({ method: "GET" }).handler(async () => {
   const projectsRoot = join(getWebDataRoot(), "data/projects");

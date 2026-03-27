@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowLeft, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
+import { ArrowLeft, BookOpen, ChatCircle, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
 import { LiveRunView } from "~/components/LiveRunView";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
-import { COLORS, RADIUS } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE, MOTION, SPACE } from "~/lib/colors";
 import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
 
 type JsonRecord = Record<string, unknown>;
@@ -217,7 +217,7 @@ function toneColor(tone: TimelineItem["tone"]): string {
     case "success":
       return COLORS.green;
     case "warning":
-      return COLORS.yellow;
+      return COLORS.orange;
     case "danger":
       return COLORS.red;
     case "info":
@@ -389,31 +389,32 @@ function TimelineCard({
       style={{
         padding: 18,
         borderLeft: `3px solid ${toneColor(item.tone)}`,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.015), transparent)",
+        borderRadius: RADIUS.sm,
+        background: COLORS.surface,
       }}
       onClick={() => onSelect?.(item)}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <Badge color={item.tone === "danger" ? "red" : item.tone === "warning" ? "yellow" : item.tone === "success" ? "green" : "accent"}>
+            <Badge color={item.tone === "danger" ? "red" : item.tone === "warning" ? "orange" : item.tone === "success" ? "green" : "accent"}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Icon size={12} weight="bold" />
                 {item.type.includes("approval") ? "Approval" : item.type.startsWith("run") ? "Run" : "Timeline"}
               </span>
             </Badge>
-            <span style={{ color: COLORS.textDim, fontSize: 12 }}>{formatTimeAgo(item.timestamp)}</span>
+            <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>{formatTimeAgo(item.timestamp)}</span>
           </div>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 650, color: COLORS.text, lineHeight: 1.3 }}>
+          <h3 style={{ margin: 0, fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text, lineHeight: TYPE.leading.snug, fontFamily: TYPE.display }}>
             {item.title}
           </h3>
-          <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, fontSize: TYPE.scale.base, lineHeight: TYPE.leading.normal, fontFamily: TYPE.body }}>
             {item.summary}
           </p>
           {item.details?.length ? (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
               {item.details.map((detail) => (
-                <div key={detail} style={{ color: COLORS.textDim, fontSize: 12, lineHeight: 1.45 }}>
+                <div key={detail} style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs, lineHeight: TYPE.leading.snug }}>
                   • {detail}
                 </div>
               ))}
@@ -421,16 +422,16 @@ function TimelineCard({
           ) : null}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
-          <span style={{ color: COLORS.textDim, fontSize: 12 }}>{item.timestamp.toLocaleString()}</span>
+          <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>{item.timestamp.toLocaleString()}</span>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             {item.tags.map((tag) => (
               <span
                 key={tag}
                 style={{
-                  fontSize: 11,
+                  fontSize: TYPE.scale.xs,
                   padding: "4px 8px",
-                  borderRadius: 999,
-                  background: COLORS.bg,
+                  borderRadius: RADIUS.pill,
+                  background: COLORS.surface,
                   color: COLORS.textSecondary,
                   border: `1px solid ${COLORS.border}`,
                 }}
@@ -486,13 +487,13 @@ function TimelinePanel({
                 Timeline surface
               </Badge>
               {selected ? (
-                <Badge color="gray">Focused on {selected.title}</Badge>
+                <Badge color="accent">Focused on {selected.title}</Badge>
               ) : null}
             </div>
-            <h2 style={{ margin: 0, fontSize: 18, color: COLORS.text, lineHeight: 1.25 }}>
+            <h2 style={{ margin: 0, fontSize: TYPE.scale.md, fontFamily: TYPE.display, fontWeight: TYPE.weight.semibold, color: COLORS.text, lineHeight: TYPE.leading.snug }}>
               Event-driven work, approvals, and outcomes in one place.
             </h2>
-            <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, lineHeight: 1.6, maxWidth: 600 }}>
+            <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, maxWidth: 600, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
               Review what the agent found, approve or reject requested actions, and ask for more context without leaving the timeline.
             </p>
           </div>
@@ -506,7 +507,7 @@ function TimelinePanel({
       </Card>
 
       {items.length === 0 ? (
-        <Card style={{ padding: 28, textAlign: "center", color: COLORS.textDim }}>
+        <Card style={{ padding: SPACE[6], textAlign: "center", color: COLORS.textDim, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
           No timeline events yet. Trigger a run or keep the agent in draft while you finish setup.
         </Card>
       ) : (
@@ -527,8 +528,8 @@ function TimelinePanel({
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Go deeper</div>
-              <div style={{ fontSize: 12, color: COLORS.textDim }}>
+              <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display }}>Go deeper</div>
+              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
                 Ask a follow-up about the selected card or the current run.
               </div>
             </div>
@@ -548,13 +549,14 @@ function TimelinePanel({
                 flex: 1,
                 resize: "none",
                 border: `1px solid ${COLORS.border}`,
-                borderRadius: RADIUS.modal,
+                borderRadius: RADIUS.lg,
                 background: COLORS.bg,
                 color: COLORS.text,
                 padding: "12px 14px",
-                fontSize: 14,
-                lineHeight: 1.5,
+                fontSize: TYPE.scale.base,
+                lineHeight: TYPE.leading.normal,
                 outline: "none",
+                fontFamily: TYPE.body,
               }}
             />
             <Button
@@ -586,8 +588,8 @@ function ToolTrustRow({
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-      <span style={{ color: COLORS.textSecondary, fontSize: 13 }}>{label}</span>
-      <Badge color={tone === "success" ? "green" : tone === "warning" ? "yellow" : tone === "danger" ? "red" : "gray"}>
+      <span style={{ color: COLORS.textSecondary, fontSize: TYPE.scale.sm }}>{label}</span>
+      <Badge color={tone === "success" ? "green" : tone === "warning" ? "orange" : tone === "danger" ? "red" : "accent"}>
         {value}
       </Badge>
     </div>
@@ -602,6 +604,7 @@ function SettingsPanel({
   onUpdateAgent,
   isDraft,
   onRunNow,
+  section = "objective",
 }: {
   agent: AgentLike;
   skills: SkillLike[];
@@ -610,6 +613,7 @@ function SettingsPanel({
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   isDraft: boolean;
   onRunNow?: () => void;
+  section?: "objective" | "tools";
 }) {
   const toolConfig = normalizeToolConfig(agent.toolConfig);
   const notificationConfig = normalizeNotificationConfig(agent.notificationConfig);
@@ -651,13 +655,13 @@ function SettingsPanel({
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {isDraft ? (
-        <Card style={{ padding: 18, borderLeft: `3px solid ${COLORS.yellow}` }}>
+      {isDraft && section === "objective" ? (
+        <Card style={{ padding: 18, borderLeft: `3px solid ${COLORS.orange}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ minWidth: 0 }}>
-              <Badge color="yellow">Setup</Badge>
-              <h3 style={{ margin: "10px 0 6px", color: COLORS.text, fontSize: 16 }}>Draft agent</h3>
-              <p style={{ margin: 0, color: COLORS.textSecondary, lineHeight: 1.6 }}>
+              <Badge color="orange">Setup</Badge>
+              <h3 style={{ margin: "10px 0 6px", color: COLORS.text, fontSize: TYPE.scale.md, fontFamily: TYPE.display, fontWeight: TYPE.weight.semibold }}>Draft agent</h3>
+              <p style={{ margin: 0, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
                 Finish the instructions, tools, and required connections before launching.
               </p>
             </div>
@@ -670,9 +674,9 @@ function SettingsPanel({
           {missingProviders.length > 0 ? (
             <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
               {missingProviders.map((provider) => (
-                <div key={provider.provider} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: RADIUS.button, background: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
-                  <span style={{ color: COLORS.textSecondary, fontSize: 13 }}>{humanize(provider.provider)}</span>
-                  <Badge color="yellow">Required</Badge>
+                <div key={provider.provider} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: RADIUS.md, background: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
+                  <span style={{ color: COLORS.textSecondary, fontSize: TYPE.scale.sm }}>{humanize(provider.provider)}</span>
+                  <Badge color="orange">Required</Badge>
                 </div>
               ))}
             </div>
@@ -680,10 +684,10 @@ function SettingsPanel({
         </Card>
       ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(300px, 1fr)", gap: 18, alignItems: "start" }}>
+      {section === "objective" && (
         <div style={{ display: "grid", gap: 18 }}>
+          <SectionHeading>Identity</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Identity</SectionHeading>
             <SettingsRow icon="✦" title="Name" description="How the workspace refers to this agent." defaultExpanded>
               <input
                 value={name}
@@ -712,11 +716,11 @@ function SettingsPanel({
                     }}
                     style={{
                       padding: "8px 12px",
-                      borderRadius: 999,
+                      borderRadius: RADIUS.pill,
                       border: `1px solid ${schedule === value ? COLORS.accent : COLORS.border}`,
                       background: schedule === value ? COLORS.accentDim : COLORS.bg,
-                      color: schedule === value ? COLORS.accentLight : COLORS.textSecondary,
-                      fontSize: 12,
+                      color: schedule === value ? COLORS.accentBright : COLORS.textSecondary,
+                      fontSize: TYPE.scale.xs,
                       cursor: "pointer",
                     }}
                   >
@@ -727,8 +731,8 @@ function SettingsPanel({
             </SettingsRow>
           </SettingsCard>
 
+          <SectionHeading>Instructions</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Instructions</SectionHeading>
             <div style={{ padding: 16 }}>
               <textarea
                 value={instructions}
@@ -739,7 +743,7 @@ function SettingsPanel({
                 style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
               />
               <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ color: COLORS.textDim, fontSize: 12 }}>
+                <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
                   {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
                 </span>
                 <Button variant="secondary" size="sm" onClick={() => void persist({ instructions, description, name })}>
@@ -749,10 +753,10 @@ function SettingsPanel({
             </div>
           </SettingsCard>
 
+          <SectionHeading>Skills</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Skills</SectionHeading>
             {skills.length === 0 ? (
-              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>No skills selected yet.</div>
+              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>No skills selected yet.</div>
             ) : (
               skills.map((skill, index) => {
                 const isEnabled = selectedSkills.includes(skill.id);
@@ -782,7 +786,7 @@ function SettingsPanel({
                           cursor: "pointer",
                         }}
                       >
-                        <span style={{ position: "absolute", inset: 3, width: 16, height: 16, borderRadius: 999, background: COLORS.white, left: isEnabled ? 19 : 3, transition: "left 0.15s ease" }} />
+                        <span style={{ position: "absolute", inset: 3, width: 16, height: 16, borderRadius: 999, background: COLORS.white, left: isEnabled ? 19 : 3, transition: `left ${MOTION.duration} ${MOTION.ease}` }} />
                       </button>
                     }
                   />
@@ -790,11 +794,36 @@ function SettingsPanel({
               })
             )}
           </SettingsCard>
-        </div>
 
-        <div style={{ display: "grid", gap: 18 }}>
+          <SectionHeading>Notifications</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Tool Trust</SectionHeading>
+            <SettingsRow
+              icon="◎"
+              title="In-app"
+              description="Show events in Nochore."
+              trailing={<Toggle checked={pendingNotificationConfig.inApp !== false} onChange={(checked) => { const next = { ...pendingNotificationConfig, inApp: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+            <SettingsRow
+              icon="✉"
+              title="Email"
+              description="Send email summaries."
+              trailing={<Toggle checked={pendingNotificationConfig.email === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, email: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+            <SettingsRow
+              icon="▣"
+              title="Slack"
+              description="Notify a Slack channel."
+              isLast
+              trailing={<Toggle checked={pendingNotificationConfig.slack === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, slack: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+          </SettingsCard>
+        </div>
+      )}
+
+      {section === "tools" && (
+        <div style={{ display: "grid", gap: 18 }}>
+          <SectionHeading>Tool Trust</SectionHeading>
+          <SettingsCard>
             <div style={{ padding: 16, display: "grid", gap: 10 }}>
               <ToolTrustRow label="Auto" value={autoCount} tone="success" />
               <ToolTrustRow label="Approval" value={approvalCount} tone="warning" />
@@ -803,10 +832,10 @@ function SettingsPanel({
             </div>
           </SettingsCard>
 
+          <SectionHeading>Per-tool settings</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Per-tool settings</SectionHeading>
             {toolEntries.length === 0 ? (
-              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>
+              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
                 No tool settings yet. They will appear once the server provides the tool catalog.
               </div>
             ) : (
@@ -819,6 +848,11 @@ function SettingsPanel({
                   value={tool.approvalMode ? humanize(tool.approvalMode) : "Auto"}
                   isLast={index === toolEntries.length - 1}
                   defaultExpanded
+                  trailing={
+                    <Badge color={tool.mode === "write" ? "write" : "read"}>
+                      {tool.mode === "write" ? "Write" : "Read"}
+                    </Badge>
+                  }
                 >
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {(["auto", "approval", "blocked"] as const).map((mode) => (
@@ -842,11 +876,11 @@ function SettingsPanel({
                         }}
                         style={{
                           padding: "7px 10px",
-                          borderRadius: 999,
+                          borderRadius: RADIUS.pill,
                           border: `1px solid ${tool.approvalMode === mode ? COLORS.accent : COLORS.border}`,
                           background: tool.approvalMode === mode ? COLORS.accentDim : COLORS.bg,
-                          color: tool.approvalMode === mode ? COLORS.accentLight : COLORS.textSecondary,
-                          fontSize: 12,
+                          color: tool.approvalMode === mode ? COLORS.accentBright : COLORS.textSecondary,
+                          fontSize: TYPE.scale.xs,
                           cursor: "pointer",
                         }}
                       >
@@ -859,10 +893,10 @@ function SettingsPanel({
             )}
           </SettingsCard>
 
+          <SectionHeading>Connections</SectionHeading>
           <SettingsCard>
-            <SectionHeading>Connections</SectionHeading>
             {requiredProviders.length === 0 && connections.length === 0 ? (
-              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>
+              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
                 No required providers yet.
               </div>
             ) : (
@@ -884,43 +918,8 @@ function SettingsPanel({
             )}
           </SettingsCard>
 
-          <SettingsCard>
-            <SectionHeading>Notifications</SectionHeading>
-            <SettingsRow
-              icon="◎"
-              title="In-app"
-              description="Show events in Nochore."
-              trailing={<Toggle checked={pendingNotificationConfig.inApp !== false} onChange={(checked) => { const next = { ...pendingNotificationConfig, inApp: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
-            />
-            <SettingsRow
-              icon="✉"
-              title="Email"
-              description="Send email summaries."
-              trailing={<Toggle checked={pendingNotificationConfig.email === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, email: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
-            />
-            <SettingsRow
-              icon="▣"
-              title="Slack"
-              description="Notify a Slack channel."
-              isLast
-              trailing={<Toggle checked={pendingNotificationConfig.slack === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, slack: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
-            />
-          </SettingsCard>
-
-          <Card style={{ padding: 18 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <Badge color={isDraft ? "yellow" : "green"}>{isDraft ? "Draft" : "Live"}</Badge>
-              <div style={{ fontSize: 15, fontWeight: 650, color: COLORS.text }}>Living dossier</div>
-            </div>
-            <div style={{ display: "grid", gap: 8, color: COLORS.textSecondary, fontSize: 13, lineHeight: 1.6 }}>
-              <div>Instructions: {instructions.trim() || "Not written yet."}</div>
-              <div>Skills: {selectedSkills.length ? selectedSkills.join(", ") : "None selected."}</div>
-              <div>Schedule: {humanize(schedule)}</div>
-              <div>Notifications: {pendingNotificationConfig.inApp !== false ? "In-app" : "Muted"}{pendingNotificationConfig.email ? ", email" : ""}{pendingNotificationConfig.slack ? ", Slack" : ""}</div>
-            </div>
-          </Card>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -954,7 +953,7 @@ function Toggle({
           height: 16,
           borderRadius: 999,
           background: COLORS.white,
-          transition: "left 0.15s ease",
+          transition: `left ${MOTION.duration} ${MOTION.ease}`,
         }}
       />
     </button>
@@ -964,14 +963,15 @@ function Toggle({
 const fieldStyle: CSSProperties = {
   width: "100%",
   border: `1px solid ${COLORS.border}`,
-  borderRadius: RADIUS.modal,
+  borderRadius: RADIUS.lg,
   background: COLORS.bg,
   color: COLORS.text,
   padding: "12px 14px",
-  fontSize: 14,
-  lineHeight: 1.55,
+  fontSize: TYPE.scale.base,
+  lineHeight: TYPE.leading.normal,
   outline: "none",
-  fontFamily: "inherit",
+  fontFamily: TYPE.body,
+  transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
 };
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
@@ -999,7 +999,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const availableSkills = props.availableSkills ?? props.skills ?? [];
   const projectConnections = props.projectConnections ?? [];
   const isDraft = isDraftProp ?? (agent.status?.toLowerCase() === "draft");
-  const [tab, setTab] = useState<"timeline" | "settings">("timeline");
+  const [tab, setTab] = useState<"timeline" | "objective" | "tools" | "chat" | "memory">("timeline");
   const [moreOpen, setMoreOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<TimelineItem | null>(null);
 
@@ -1039,11 +1039,21 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   return (
     <div style={{ position: "relative", minHeight: "100vh" }}>
       <style>{`
-        .aw-shell { color: ${COLORS.text}; }
+        .aw-shell { color: ${COLORS.text}; font-family: ${TYPE.body}; }
         .aw-shell textarea::-webkit-scrollbar { width: 6px; }
         .aw-shell textarea::-webkit-scrollbar-track { background: transparent; }
         .aw-shell textarea::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 999px; }
         .aw-shell textarea { scrollbar-width: thin; scrollbar-color: ${COLORS.border} transparent; }
+        @keyframes awFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes awPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        .aw-panel-enter { animation: awFadeIn 0.4s ${MOTION.easeOutExpo} both; }
+        .aw-running-dot { animation: awPulse 3s ease-in-out infinite; }
       `}</style>
 
       <div
@@ -1060,7 +1070,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               style={{
                 background: "transparent",
                 border: `1px solid ${COLORS.border}`,
-                borderRadius: RADIUS.button,
+                borderRadius: RADIUS.md,
                 cursor: "pointer",
                 color: COLORS.textSecondary,
                 width: 36,
@@ -1076,14 +1086,19 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
                 <Badge color="accent">{project.icon ?? "◌"} {project.name}</Badge>
-                <Badge color={isDraft ? "yellow" : agent.status === "paused" ? "gray" : "green"}>
-                  {humanize(agent.status ?? (isDraft ? "draft" : "live"))}
+                <Badge color={isDraft ? "orange" : agent.status === "paused" ? "accent" : "green"}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {!isDraft && agent.status !== "paused" && (
+                      <span className="aw-running-dot" style={{ width: 6, height: 6, borderRadius: RADIUS.pill, background: COLORS.green, display: "inline-block" }} />
+                    )}
+                    {humanize(agent.status ?? (isDraft ? "draft" : "live"))}
+                  </span>
                 </Badge>
               </div>
-              <h1 style={{ margin: 0, fontSize: "clamp(24px, 3vw, 36px)", color: COLORS.text, lineHeight: 1.1 }}>
+              <h1 style={{ margin: 0, fontSize: TYPE.scale.xl, fontFamily: TYPE.display, fontWeight: TYPE.weight.bold, letterSpacing: TYPE.tracking.tight, color: COLORS.text, lineHeight: TYPE.leading.tight }}>
                 {agent.name}
               </h1>
-              <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, maxWidth: 780, lineHeight: 1.6 }}>
+              <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, maxWidth: 780, lineHeight: TYPE.leading.normal, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
                 {agent.description || agent.instructions || "No description yet."}
               </p>
             </div>
@@ -1137,7 +1152,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         </div>
 
         <div style={{ display: "flex", gap: 12, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
-          {(["timeline", "settings"] as const).map((item) => (
+          {(["timeline", "objective", "tools", "chat", "memory"] as const).map((item) => (
             <button
               key={item}
               onClick={() => setTab(item)}
@@ -1149,31 +1164,33 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 cursor: "pointer",
                 color: tab === item ? COLORS.text : COLORS.textDim,
                 borderBottom: `2px solid ${tab === item ? COLORS.accent : "transparent"}`,
-                fontWeight: 600,
-                fontSize: 14,
+                fontWeight: TYPE.weight.medium,
+                fontSize: TYPE.scale.sm,
+                fontFamily: TYPE.body,
+                transition: `color ${MOTION.duration} ${MOTION.ease}`,
               }}
             >
-              {item === "timeline" ? "Timeline" : "Settings"}
+              {item.charAt(0).toUpperCase() + item.slice(1)}
             </button>
           ))}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, color: COLORS.textDim, fontSize: 12 }}>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
             <span>{activeConnections.length} connected</span>
             <span>•</span>
             <span>{mergedRequiredProviders.length} required</span>
           </div>
         </div>
 
-        {tab === "timeline" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
+        {tab === "timeline" && (
+          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
             {runError && (
               <div style={{
                 padding: "10px 14px",
                 margin: "0 0 8px 0",
-                background: "rgba(231, 76, 60, 0.08)",
-                borderLeft: `3px solid #E74C3C`,
-                borderRadius: RADIUS.sharp,
-                fontSize: 13,
-                color: "#E74C3C",
+                background: COLORS.redSubtle,
+                borderLeft: `3px solid ${COLORS.red}`,
+                borderRadius: RADIUS.sm,
+                fontSize: TYPE.scale.sm,
+                color: COLORS.red,
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
@@ -1208,16 +1225,60 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               }}
             />
           </div>
-        ) : (
-          <SettingsPanel
-            agent={agent}
-            skills={availableSkills}
-            connections={projectConnections}
-            requiredProviders={mergedRequiredProviders}
-            onUpdateAgent={handleSave}
-            isDraft={isDraft}
-            onRunNow={onRunNow ? () => void onRunNow() : undefined}
-          />
+        )}
+
+        {tab === "objective" && (
+          <div className="aw-panel-enter">
+            <SettingsPanel
+              agent={agent}
+              skills={availableSkills}
+              connections={projectConnections}
+              requiredProviders={mergedRequiredProviders}
+              onUpdateAgent={handleSave}
+              isDraft={isDraft}
+              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              section="objective"
+            />
+          </div>
+        )}
+
+        {tab === "tools" && (
+          <div className="aw-panel-enter">
+            <SettingsPanel
+              agent={agent}
+              skills={availableSkills}
+              connections={projectConnections}
+              requiredProviders={mergedRequiredProviders}
+              onUpdateAgent={handleSave}
+              isDraft={isDraft}
+              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              section="tools"
+            />
+          </div>
+        )}
+
+        {tab === "chat" && (
+          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
+            <ChatCircle size={40} weight="light" style={{ color: COLORS.textDim, marginBottom: 16 }} />
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 8 }}>
+              Talk to {agent.name}
+            </div>
+            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal }}>
+              Ask questions about what the agent has found, request deeper analysis, or give it new instructions.
+            </div>
+          </div>
+        )}
+
+        {tab === "memory" && (
+          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
+            <BookOpen size={40} weight="light" style={{ color: COLORS.textDim, marginBottom: 16 }} />
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 8 }}>
+              {agent.name} hasn't learned anything yet
+            </div>
+            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal }}>
+              As the agent runs, it will build up lessons and observations here. These shape how it approaches future tasks.
+            </div>
+          </div>
         )}
       </div>
     </div>

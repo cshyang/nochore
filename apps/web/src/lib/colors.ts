@@ -1,83 +1,128 @@
-// Nochore Design Tokens
-// Source of truth: .impeccable.md
-// Grid: 8px base | Border radius: 2/6/8/99 (crisp) | Transitions: 0.15s ease
-// Typography: Satoshi (headings) + General Sans (body)
+// Nochore Design Tokens (TypeScript)
+// Source of truth: design-system.html → global.css (CSS custom properties)
+// These TS exports exist for components still using inline styles.
+// Prefer var(--token) in CSS when possible.
+//
+// Fonts: Satoshi (headings) + General Sans (body)
 // Icons: Phosphor (light default, regular emphasis, duotone agent identity)
+// Grid: 8px base | Radii: 3/6/8/99 (crisp) | Transitions: 0.15s ease
 //
 // Color philosophy: quiet until important.
 // - Orange = needs attention (the only "loud" color)
+// - Green = success, running, healthy
 // - Red = error/problem
-// - Purple = brand/interactive
-// - Everything else = neutral slate
+// - Periwinkle = brand/interactive
+// - Read (slate blue) = passive tools | Write (warm amber) = active tools
+// - Everything else = warm neutral with plum undertone
 
 export const COLORS = {
-  // Warm neutral base (plum undertone, not cold blue)
-  bg: "#100F14",
-  surface: "#1A1820",
-  surfaceHover: "#23202A",
-  border: "#2A2630",
-  borderLight: "#352F3D",
+  // Warm neutral base (plum undertone)
+  bg: "#0E0D12",
+  bgRaised: "#15141A",
+  surface: "#1B1A21",
+  surfaceHover: "#222128",
+  border: "#2B2935",
+  borderStrong: "#3A3845",
 
-  // Brand accent — reserved for system/brand only
-  accent: "#6C5CE7",
-  accentLight: "#8B7CF7",
-  accentDim: "rgba(108, 92, 231, 0.15)",
-  accentSubtle: "rgba(108, 92, 231, 0.06)",
+  // Brand accent — periwinkle blue
+  accent: "#5A7ACD",
+  accentBright: "#7090E0",
+  accentDim: "rgba(90, 122, 205, 0.14)",
+  accentSubtle: "rgba(90, 122, 205, 0.06)",
+  accentSurface: "rgba(90, 122, 205, 0.04)",
+  accentBorder: "rgba(90, 122, 205, 0.18)",
 
-  // Neutral status — slate-blue for "all good", "running", "active", "handled"
-  green: "#7B8A9E",
-  greenDim: "rgba(123, 138, 158, 0.12)",
+  // Semantic: present, not shouting
+  orange: "#E0905A",
+  orangeDim: "rgba(224, 144, 90, 0.12)",
+  orangeSubtle: "rgba(224, 144, 90, 0.05)",
+  orangeBorder: "rgba(224, 144, 90, 0.22)",
+  green: "#6CB48A",
+  greenDim: "rgba(108, 180, 138, 0.10)",
+  greenSubtle: "rgba(108, 180, 138, 0.05)",
+  greenBorder: "rgba(108, 180, 138, 0.20)",
+  red: "#D97272",
+  redDim: "rgba(217, 114, 114, 0.10)",
+  redSubtle: "rgba(217, 114, 114, 0.05)",
+  redBorder: "rgba(217, 114, 114, 0.20)",
 
-  // Attention: cosmic orange — the ONE color that says "look here"
-  yellow: "#D47A3A",
-  yellowDim: "rgba(212, 122, 58, 0.10)",
-  yellowSubtle: "rgba(212, 122, 58, 0.04)",
-
-  // Error: soft rose — problems, waste, failures
-  red: "#E07070",
-  redDim: "rgba(224, 112, 112, 0.10)",
-  redSubtle: "rgba(224, 112, 112, 0.04)",
-
-  blue: "#7B8A9E",
-  blueDim: "rgba(123, 138, 158, 0.12)",
+  // Functional: tool mode colors
+  read: "#7CA8C4",
+  readDim: "rgba(124, 168, 196, 0.10)",
+  write: "#C49B7C",
+  writeDim: "rgba(196, 155, 124, 0.10)",
 
   // Text
-  text: "#E8E9ED",
-  textSecondary: "#8B8D98",
-  textDim: "#838591",
+  text: "#ECEAF2",
+  textSecondary: "#9B97AB",
+  textDim: "#6B6780",
 
   // Utility
-  grayDim: "rgba(139, 141, 152, 0.15)",
   white: "#FFFFFF",
   black: "#000000",
 } as const;
 
-// Agent signature colors — all neutral slate now.
-// Agents don't need individual colors when the UI is this quiet.
-// Their identity comes from their name and position, not decoration.
-const SLATE = { primary: "#7B8A9E", dim: "rgba(123, 138, 158, 0.10)" };
-
-export const AGENT_COLORS: Record<string, { primary: string; dim: string }> = {
-  "ad-guardian": SLATE,
-  "content-sched": SLATE,
-  "lead-qual": SLATE,
-  "meta-optimizer": SLATE,
-  "funnel-monitor": SLATE,
-  "invoice-tracker": SLATE,
-  "competitor-mon": SLATE,
-};
-
-// Fallback for unknown agents
-export function getAgentColor(agentId: string): { primary: string; dim: string } {
-  return AGENT_COLORS[agentId] ?? SLATE;
-}
+// Spacing scale (8px grid)
+export const SPACE = {
+  1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 8: 48, 10: 64, 12: 80, 16: 120,
+} as const;
 
 // Border radius scale (crisp direction)
 export const RADIUS = {
-  sharp: 2,    // cards, containers
-  button: 6,   // buttons, inputs
-  modal: 8,    // modals, overlays
-  pill: 99,    // badges, pills, avatars
+  sm: 3,     // cards, containers, badges
+  md: 6,     // buttons, inputs
+  lg: 8,     // modals, overlays
+  pill: 99,  // pills, avatars
 } as const;
+
+// Typography
+export const TYPE = {
+  display: "'Satoshi', system-ui, sans-serif",
+  body: "'General Sans', system-ui, sans-serif",
+  mono: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+  scale: {
+    xs: "0.6875rem",    // 11px
+    sm: "0.8125rem",    // 13px
+    base: "0.875rem",   // 14px
+    md: "1rem",          // 16px
+    lg: "1.25rem",       // 20px
+    xl: "1.875rem",      // 30px
+    "2xl": "2.75rem",    // 44px
+    "3xl": "3.5rem",     // 56px
+  },
+  leading: {
+    tight: 1.15,
+    snug: 1.3,
+    normal: 1.6,
+    loose: 1.75,
+  },
+  weight: {
+    regular: 400,
+    medium: 500,
+    semibold: 600,
+    bold: 700,
+  },
+  tracking: {
+    tight: "-0.03em",
+    normal: "0",
+    wide: "0.06em",
+  },
+} as const;
+
+// Motion
+export const MOTION = {
+  ease: "cubic-bezier(0.25, 0.1, 0.25, 1)",
+  easeOutExpo: "cubic-bezier(0.16, 1, 0.3, 1)",
+  easeOutBack: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+  duration: "0.15s",
+  durationSlow: "0.3s",
+} as const;
+
+// Agent signature colors
+const AGENT_DEFAULT = { primary: COLORS.accent, dim: COLORS.accentDim };
+export const AGENT_COLORS: Record<string, { primary: string; dim: string }> = {};
+export function getAgentColor(_agentId: string): { primary: string; dim: string } {
+  return AGENT_COLORS[_agentId] ?? AGENT_DEFAULT;
+}
 
 export type ColorKey = keyof typeof COLORS;

@@ -65,7 +65,7 @@ export function SetupWorkspace({
           style={{
             background: COLORS.surface,
             border: `1px solid ${COLORS.border}`,
-            borderRadius: RADIUS.modal,
+            borderRadius: RADIUS.lg,
             padding: 32,
           }}
         >
@@ -87,7 +87,7 @@ export function SetupWorkspace({
             <p
               style={{
                 margin: "0 0 12px",
-                color: COLORS.accentLight,
+                color: COLORS.accentBright,
                 fontSize: 12,
                 letterSpacing: 1,
                 textTransform: "uppercase",
@@ -126,7 +126,7 @@ export function SetupWorkspace({
               alignItems: "center",
               gap: 12,
               padding: 14,
-              borderRadius: RADIUS.button,
+              borderRadius: RADIUS.md,
               background: COLORS.bg,
               border: `1px solid ${COLORS.border}`,
               marginBottom: 28,
@@ -161,7 +161,7 @@ export function SetupWorkspace({
               disabled={!projectName.trim() || submitting || !onCreateProject}
               style={{
                 border: "none",
-                borderRadius: RADIUS.button,
+                borderRadius: RADIUS.md,
                 padding: "10px 14px",
                 background:
                   !projectName.trim() || submitting || !onCreateProject
@@ -213,7 +213,7 @@ export function SetupWorkspace({
           style={{
             background: COLORS.surface,
             border: `1px solid ${COLORS.border}`,
-            borderRadius: RADIUS.modal,
+            borderRadius: RADIUS.lg,
             padding: 24,
             display: "flex",
             flexDirection: "column",
@@ -251,7 +251,7 @@ export function SetupWorkspace({
                   key={skill.id}
                   style={{
                     padding: "14px 16px",
-                    borderRadius: RADIUS.sharp,
+                    borderRadius: RADIUS.sm,
                     background: COLORS.bg,
                     border: `1px solid ${COLORS.border}`,
                   }}
@@ -269,7 +269,7 @@ export function SetupWorkspace({
             <div
               style={{
                 padding: 16,
-                borderRadius: RADIUS.sharp,
+                borderRadius: RADIUS.sm,
                 background: COLORS.bg,
                 border: `1px solid ${COLORS.border}`,
                 color: COLORS.textSecondary,

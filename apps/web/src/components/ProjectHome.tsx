@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { COLORS } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE, MOTION } from "~/lib/colors";
 import { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
 import { ProjectConnections } from "~/components/ProjectConnections";
+
+const transition = `${MOTION.duration} ${MOTION.ease}`;
 
 interface ProjectHomeProps {
   project: ProjectView;
@@ -18,14 +20,25 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
   const needsAttention = project.agents.filter((a) => a.status === "attention");
 
   return (
-    <div>
+    <div style={{ animation: "fadeIn 0.3s ease" }}>
+      <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }`}</style>
+
       {/* Project header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <span style={{ fontSize: 24 }}>{project.icon}</span>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 600, color: COLORS.text, margin: 0 }}>{project.name}</h1>
-            <div style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 2 }}>
+            <h1 style={{
+              fontSize: TYPE.scale.xl,
+              fontWeight: TYPE.weight.semibold,
+              fontFamily: TYPE.display,
+              letterSpacing: TYPE.tracking.tight,
+              color: COLORS.text,
+              margin: 0,
+            }}>
+              {project.name}
+            </h1>
+            <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, marginTop: 2 }}>
               {project.agents.length} agents · {project.connectionCount} connections
             </div>
           </div>
@@ -38,13 +51,13 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
                   No
                 </button>
                 <button onClick={onDeleteProject}
-                  style={{ background: COLORS.redDim, border: `1px solid ${COLORS.red}`, color: COLORS.red, fontSize: 12, cursor: "pointer", fontFamily: "inherit", padding: "4px 10px", borderRadius: 6 }}>
+                  style={{ background: COLORS.redDim, border: `1px solid ${COLORS.red}`, color: COLORS.red, fontSize: 12, cursor: "pointer", fontFamily: "inherit", padding: "4px 10px", borderRadius: RADIUS.md }}>
                   Yes, delete
                 </button>
               </div>
             ) : (
               <button onClick={() => setConfirmDelete(true)}
-                style={{ background: "none", border: "none", color: COLORS.textDim, fontSize: 12, cursor: "pointer", fontFamily: "inherit", padding: "4px 8px" }}
+                style={{ background: "none", border: "none", color: COLORS.textDim, fontSize: 12, cursor: "pointer", fontFamily: "inherit", padding: "4px 8px", transition }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
                 onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}>
                 Delete
@@ -61,10 +74,10 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
             <button key={t.key} onClick={() => setProjectTab(t.key)}
               style={{
                 flex: 1, padding: "8px 0", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
-                fontSize: 13, fontWeight: 600,
+                fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium,
                 background: projectTab === t.key ? COLORS.accentDim : "transparent",
-                color: projectTab === t.key ? COLORS.accentLight : COLORS.textSecondary,
-                transition: "all 0.15s ease",
+                color: projectTab === t.key ? COLORS.accentBright : COLORS.textSecondary,
+                transition: `all ${transition}`,
               }}>
               {t.label}
             </button>
@@ -78,10 +91,10 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
         /* Empty state — no agents yet */
         <div style={{ textAlign: "center", padding: "80px 0 40px" }}>
           <div style={{ fontSize: 32, color: COLORS.accent, marginBottom: 12 }}>✦</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: COLORS.text, marginBottom: 6 }}>
+          <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, marginBottom: 6 }}>
             No agents yet
           </div>
-          <div style={{ fontSize: 14, color: COLORS.textSecondary, marginBottom: 24, lineHeight: 1.5 }}>
+          <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, marginBottom: 24, lineHeight: 1.5 }}>
             Create your first agent to start monitoring and optimizing.
           </div>
           <button
@@ -90,16 +103,16 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
               background: COLORS.accent,
               border: "none",
               color: COLORS.white,
-              fontSize: 14,
-              fontWeight: 500,
+              fontSize: TYPE.scale.base,
+              fontWeight: TYPE.weight.medium,
               padding: "10px 24px",
-              borderRadius: 8,
+              borderRadius: RADIUS.md,
               cursor: "pointer",
               fontFamily: "inherit",
-              transition: "opacity 0.15s ease",
+              transition: `background ${transition}`,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.accentBright)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = COLORS.accent)}
           >
             + New agent
           </button>
@@ -108,16 +121,16 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
         <>
         {/* Attention-needed summary */}
         {needsAttention.length > 0 && (
-          <Card style={{ marginBottom: 20, borderColor: COLORS.yellowDim, background: COLORS.yellowSubtle }}>
+          <Card style={{ marginBottom: 20, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <Badge color="yellow">{needsAttention.length} need{needsAttention.length === 1 ? "s" : ""} attention</Badge>
+              <Badge color="orange">{needsAttention.length} need{needsAttention.length === 1 ? "s" : ""} attention</Badge>
             </div>
             {needsAttention.map((agent) => (
               <div key={agent.id} onClick={() => onSelectAgent(agent.id)}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{agent.name}</div>
-                  <div style={{ fontSize: 13, color: COLORS.yellow, marginTop: 1 }}>
+                  <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{agent.name}</div>
+                  <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>
                     {agent.pendingCount > 0
                       ? `${agent.pendingCount} action${agent.pendingCount === 1 ? "" : "s"} need approval`
                       : "Needs attention"}
@@ -137,12 +150,14 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
           {project.agents.map((agent) => {
             const statusDotColor =
               agent.status === "attention"
-                ? COLORS.yellow
+                ? COLORS.orange
                 : agent.status === "error"
                   ? COLORS.red
                   : agent.status === "running"
                     ? COLORS.green
                     : COLORS.textDim;
+            const isRunning = agent.status === "running";
+            const isDraft = agent.lifecycleStatus === "draft";
             return (
               <Card key={agent.id} onClick={() => onSelectAgent(agent.id)} style={{ cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -153,8 +168,21 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
                     background: statusDotColor,
                     opacity: agent.status === "idle" ? 0.5 : 1,
                     flexShrink: 0,
+                    ...(isRunning ? { animation: "pulse 1.5s ease-in-out infinite" } : {}),
                   }} />
-                  <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.text }}>{agent.name}</span>
+                  <span style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{agent.name}</span>
+                  {isDraft && (
+                    <span style={{
+                      fontSize: TYPE.scale.xs,
+                      fontWeight: TYPE.weight.medium,
+                      background: "rgba(107,103,128,0.15)",
+                      color: COLORS.textSecondary,
+                      padding: "2px 8px",
+                      borderRadius: RADIUS.sm,
+                    }}>
+                      Draft
+                    </span>
+                  )}
                 </div>
                 <div style={{ marginBottom: 12 }}>
                   <span style={{ fontSize: 12, color: COLORS.textSecondary }}>
@@ -173,7 +201,7 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
           <Card onClick={() => onNewAgent?.()} style={{ cursor: "pointer", borderStyle: "dashed", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120 }}>
             <div style={{ textAlign: "center" }}>
               <span style={{ fontSize: 24, color: COLORS.accent }}>+</span>
-              <div style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4 }}>Add agent</div>
+              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, marginTop: 4 }}>Add agent</div>
             </div>
           </Card>
         </div>

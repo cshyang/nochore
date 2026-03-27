@@ -1,4 +1,4 @@
-import { COLORS, RADIUS, getAgentColor } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE, MOTION, getAgentColor } from "~/lib/colors";
 import type { ProjectView, AgentView } from "~/lib/types";
 import { Button } from "~/components/Button";
 import {
@@ -34,8 +34,8 @@ export function ProjectSidebar({
   return (
     <div
       style={{
-        width: 260,
-        background: COLORS.surface,
+        width: 240,
+        background: COLORS.bgRaised,
         borderRight: `1px solid ${COLORS.border}`,
         display: "flex",
         flexDirection: "column",
@@ -55,7 +55,7 @@ export function ProjectSidebar({
           alignItems: "center",
           gap: 8,
           cursor: "pointer",
-          transition: "background 0.15s ease",
+          transition: `background ${MOTION.duration} ${MOTION.ease}`,
         }}
         onMouseEnter={(e) =>
           (e.currentTarget.style.background = COLORS.surfaceHover)
@@ -65,7 +65,7 @@ export function ProjectSidebar({
         }
       >
         <ArrowLeft size={14} weight="light" color={COLORS.textSecondary} />
-        <span style={{ fontSize: 13, color: COLORS.textSecondary }}>
+        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
           All projects
         </span>
       </div>
@@ -82,15 +82,15 @@ export function ProjectSidebar({
           <div>
             <div
               style={{
-                fontSize: 15,
-                fontWeight: 700,
+                fontSize: TYPE.scale.md,
+                fontWeight: TYPE.weight.bold,
                 color: COLORS.text,
-                fontFamily: '"Satoshi", sans-serif',
+                fontFamily: TYPE.display,
               }}
             >
               {project.name}
             </div>
-            <div style={{ fontSize: 12, color: COLORS.textSecondary }}>
+            <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
               {project.agents.length} agents · {project.connectionCount} conn
             </div>
           </div>
@@ -104,12 +104,13 @@ export function ProjectSidebar({
           <div style={{ marginBottom: 8 }}>
             <div
               style={{
-                fontSize: 12,
+                fontSize: TYPE.scale.xs,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
-                letterSpacing: 0.8,
+                letterSpacing: TYPE.tracking.wide,
                 padding: "8px 12px 4px",
-                fontWeight: 600,
+                fontWeight: TYPE.weight.semibold,
+                fontFamily: TYPE.body,
               }}
             >
               Needs attention
@@ -130,12 +131,13 @@ export function ProjectSidebar({
           <div>
             <div
               style={{
-                fontSize: 12,
+                fontSize: TYPE.scale.xs,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
-                letterSpacing: 0.8,
+                letterSpacing: TYPE.tracking.wide,
                 padding: "8px 12px 4px",
-                fontWeight: 600,
+                fontWeight: TYPE.weight.semibold,
+                fontFamily: TYPE.body,
               }}
             >
               Running
@@ -156,12 +158,13 @@ export function ProjectSidebar({
           <div style={{ padding: "8px 0" }}>
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 600,
+                fontSize: TYPE.scale.xs,
+                fontWeight: TYPE.weight.semibold,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
-                letterSpacing: 0.6,
+                letterSpacing: TYPE.tracking.wide,
                 padding: "4px 16px 6px",
+                fontFamily: TYPE.body,
               }}
             >
               Drafts
@@ -223,12 +226,12 @@ function AgentRow({
       onClick={onSelect}
       style={{
         padding: "8px 12px",
-        borderRadius: RADIUS.sharp,
+        borderRadius: RADIUS.sm,
         cursor: "pointer",
         marginBottom: 1,
         background: isActive ? COLORS.surfaceHover : "transparent",
         borderLeft: isActive ? `2px solid ${agentColor.primary}` : "2px solid transparent",
-        transition: "all 0.15s ease",
+        transition: `all ${MOTION.duration} ${MOTION.ease}`,
       }}
       onMouseEnter={(e) =>
         !isActive && (e.currentTarget.style.background = COLORS.surfaceHover)
@@ -251,7 +254,7 @@ function AgentRow({
             height: 6,
             borderRadius: RADIUS.pill,
             background: isAttention
-              ? COLORS.yellow
+              ? COLORS.orange
               : agent.status === "error"
                 ? COLORS.red
                 : agent.status === "idle"
@@ -263,19 +266,20 @@ function AgentRow({
         />
         <span
           style={{
-            fontSize: 13,
-            fontWeight: isActive ? 600 : 400,
+            fontSize: TYPE.scale.sm,
+            fontWeight: isActive ? TYPE.weight.semibold : TYPE.weight.regular,
             color: isDraft ? COLORS.textDim : isActive ? COLORS.text : COLORS.textSecondary,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
             fontStyle: isDraft ? "italic" : "normal",
+            fontFamily: TYPE.body,
           }}
         >
           {agent.name}
         </span>
         {isDraft && (
-          <span style={{ fontSize: 10, color: COLORS.textDim, marginLeft: "auto", flexShrink: 0, padding: "1px 6px", borderRadius: 99, border: `1px solid ${COLORS.border}` }}>
+          <span style={{ fontSize: 10, color: COLORS.textDim, marginLeft: "auto", flexShrink: 0, padding: "1px 6px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}` }}>
             Draft
           </span>
         )}
@@ -283,11 +287,12 @@ function AgentRow({
       {isAttention && agent.pendingCount > 0 && (
         <div
           style={{
-            fontSize: 12,
-            color: COLORS.yellow,
+            fontSize: TYPE.scale.xs,
+            color: COLORS.orange,
             marginTop: 4,
             marginLeft: 14,
             lineHeight: 1.3,
+            fontFamily: TYPE.body,
           }}
         >
           {agent.pendingCount} action{agent.pendingCount === 1 ? "" : "s"} need{agent.pendingCount === 1 ? "s" : ""} approval

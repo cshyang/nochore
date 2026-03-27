@@ -1,4 +1,4 @@
-import { COLORS } from "~/lib/colors";
+import { COLORS, RADIUS, MOTION } from "~/lib/colors";
 
 export function ProgressBar({
   value,
@@ -14,7 +14,7 @@ export function ProgressBar({
       style={{
         height: 8,
         background: COLORS.surfaceHover,
-        borderRadius: 99,
+        borderRadius: RADIUS.pill,
         overflow: "hidden",
         ...style,
       }}
@@ -24,8 +24,8 @@ export function ProgressBar({
           height: "100%",
           width: `${value}%`,
           background: color,
-          borderRadius: 99,
-          transition: "width 0.15s ease",
+          borderRadius: RADIUS.pill,
+          transition: `width ${MOTION.duration} ${MOTION.ease}`,
         }}
       />
     </div>

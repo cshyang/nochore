@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { COLORS } from "~/lib/colors";
+import { COLORS, RADIUS, MOTION } from "~/lib/colors";
 
 export interface ToastData {
   id: string;
@@ -36,9 +36,9 @@ export function Toast({
   }, [toast.id, toast.duration, onDismiss]);
 
   const colors = {
-    error: { bg: COLORS.redSubtle, border: COLORS.red, text: COLORS.red },
+    error: { bg: COLORS.redDim, border: COLORS.red, text: COLORS.red },
     success: { bg: COLORS.greenDim, border: COLORS.green, text: COLORS.text },
-    info: { bg: COLORS.accentDim, border: COLORS.accent, text: COLORS.accentLight },
+    info: { bg: COLORS.accentDim, border: COLORS.accent, text: COLORS.accentBright },
   };
 
   const c = colors[toast.type ?? "info"];
@@ -47,7 +47,7 @@ export function Toast({
     <div
       style={{
         padding: "12px 16px",
-        borderRadius: 8,
+        borderRadius: RADIUS.lg,
         background: COLORS.surface,
         border: `1px solid ${c.border}`,
         fontSize: 13,
@@ -59,7 +59,7 @@ export function Toast({
         boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
         transform: visible ? "translateX(0)" : "translateX(120%)",
         opacity: visible ? 1 : 0,
-        transition: "all 0.2s ease",
+        transition: `all ${MOTION.durationSlow} ${MOTION.ease}`,
       }}
     >
       <span style={{ flex: 1, lineHeight: 1.4 }}>{toast.message}</span>

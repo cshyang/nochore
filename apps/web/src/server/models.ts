@@ -137,7 +137,7 @@ export function buildProjectView(params: {
     id: params.project.id,
     name: params.project.name,
     icon: resolveIcon(params.project.icon),
-    color: params.project.color ?? "#6C5CE7",
+    color: params.project.color ?? "#5A7ACD",
     agents: params.agents,
     connectionCount: params.activeConnectionCount,
     attentionCount: params.agents.filter((agent) => agent.status === "attention").length,

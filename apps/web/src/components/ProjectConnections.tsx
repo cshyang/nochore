@@ -106,7 +106,7 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
 
   const statusConfig: Record<Connection["status"], { color: string; label: string; bg: string }> = {
     healthy: { color: COLORS.green, label: "Healthy", bg: COLORS.greenDim },
-    warning: { color: COLORS.yellow, label: "Warning", bg: COLORS.yellowDim },
+    warning: { color: COLORS.orange, label: "Warning", bg: COLORS.orangeDim },
     error: { color: COLORS.red, label: "Disconnected", bg: COLORS.redDim },
   };
 
@@ -154,7 +154,7 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
             ))}
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: COLORS.textDim }}>
-            500+ integrations available via Composio · <span style={{ color: COLORS.accentLight, cursor: "pointer" }}>Browse all →</span>
+            500+ integrations available via Composio · <span style={{ color: COLORS.accentBright, cursor: "pointer" }}>Browse all →</span>
           </div>
         </Card>
       )}
@@ -196,9 +196,9 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                 <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "16px 24px" }}>
                   {/* Health warning */}
                   {conn.health.warning && (
-                    <div style={{ padding: "10px 14px", background: COLORS.yellowDim, borderRadius: 8, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ padding: "10px 14px", background: COLORS.orangeDim, borderRadius: 8, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 14 }}>{"\u26A0\uFE0F"}</span>
-                      <span style={{ fontSize: 13, color: COLORS.yellow }}>{conn.health.warning}</span>
+                      <span style={{ fontSize: 13, color: COLORS.orange }}>{conn.health.warning}</span>
                     </div>
                   )}
 
@@ -222,13 +222,13 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                         <div style={{ fontSize: 13 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                             <span style={{ color: COLORS.textSecondary }}>API quota</span>
-                            <span style={{ color: conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.yellow : COLORS.text }}>
+                            <span style={{ color: conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.orange : COLORS.text }}>
                               {(conn.health.apiQuota.used / 1000).toFixed(1)}k / {(conn.health.apiQuota.limit / 1000).toFixed(0)}k
                             </span>
                           </div>
                           <ProgressBar
                             value={(conn.health.apiQuota.used / conn.health.apiQuota.limit) * 100}
-                            color={conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.yellow : COLORS.accent}
+                            color={conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.orange : COLORS.accent}
                           />
                         </div>
                       </div>
@@ -270,7 +270,7 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                               <div style={{
                                 width: 20, height: 20, borderRadius: 4,
-                                border: `2px solid ${sub.selected ? COLORS.accent : COLORS.borderLight}`,
+                                border: `2px solid ${sub.selected ? COLORS.accent : COLORS.borderStrong}`,
                                 background: sub.selected ? COLORS.accent : "transparent",
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 fontSize: 12, color: COLORS.white, cursor: "pointer",

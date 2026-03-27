@@ -1,11 +1,11 @@
-import { COLORS } from "~/lib/colors";
+import { COLORS, RADIUS } from "~/lib/colors";
 
 export function MiniConfidence({ value }: { value: number }) {
   const color =
     value >= 80
       ? COLORS.green
       : value >= 60
-        ? COLORS.yellow
+        ? COLORS.orange
         : COLORS.textSecondary;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
@@ -14,7 +14,7 @@ export function MiniConfidence({ value }: { value: number }) {
           width: 40,
           height: 4,
           background: COLORS.surfaceHover,
-          borderRadius: 99,
+          borderRadius: RADIUS.pill,
           overflow: "hidden",
         }}
       >
@@ -23,7 +23,7 @@ export function MiniConfidence({ value }: { value: number }) {
             height: "100%",
             width: `${value}%`,
             background: color,
-            borderRadius: 99,
+            borderRadius: RADIUS.pill,
           }}
         />
       </div>

@@ -1,4 +1,4 @@
-import { COLORS, RADIUS } from "~/lib/colors";
+import { COLORS, RADIUS, MOTION } from "~/lib/colors";
 
 export function Card({
   children,
@@ -15,14 +15,14 @@ export function Card({
       style={{
         background: COLORS.surface,
         border: `1px solid ${COLORS.border}`,
-        borderRadius: RADIUS.sharp,
+        borderRadius: RADIUS.sm,
         padding: 20,
         cursor: onClick ? "pointer" : "default",
-        transition: "border-color 0.15s ease",
+        transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
         ...style,
       }}
       onMouseEnter={(e) =>
-        onClick && (e.currentTarget.style.borderColor = COLORS.borderLight)
+        onClick && (e.currentTarget.style.borderColor = COLORS.borderStrong)
       }
       onMouseLeave={(e) =>
         onClick && (e.currentTarget.style.borderColor = COLORS.border)

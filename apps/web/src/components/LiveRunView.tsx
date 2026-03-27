@@ -35,16 +35,16 @@ interface LiveRunViewProps {
 }
 
 const EVENT_BORDER_COLORS: Record<string, string> = {
-  tool_called: "#4A9EFF",
-  tool_executed: "#4A9EFF",
-  finding_recorded: "#2ECC71",
-  tool_approval_requested: "#F1C40F",
-  tool_approval_resolved: "#F1C40F",
-  run_completed: "#2ECC71",
-  run_failed: "#E74C3C",
+  tool_called: COLORS.accent,
+  tool_executed: COLORS.accent,
+  finding_recorded: COLORS.green,
+  tool_approval_requested: COLORS.orange,
+  tool_approval_resolved: COLORS.orange,
+  run_completed: COLORS.green,
+  run_failed: COLORS.red,
 };
 
-const DEFAULT_BORDER_COLOR = "#6B7280";
+const DEFAULT_BORDER_COLOR = COLORS.textDim;
 
 function getBorderColor(type: string): string {
   return EVENT_BORDER_COLORS[type] ?? DEFAULT_BORDER_COLOR;
@@ -232,15 +232,15 @@ export function LiveRunView({
         <div
           style={{
             padding: "10px 14px",
-            background: status === "completed" ? "rgba(46, 204, 113, 0.08)" : "rgba(231, 76, 60, 0.08)",
-            borderLeft: `3px solid ${status === "completed" ? "#2ECC71" : "#E74C3C"}`,
-            borderRadius: RADIUS.sharp,
+            background: status === "completed" ? COLORS.greenDim : COLORS.redDim,
+            borderLeft: `3px solid ${status === "completed" ? COLORS.green : COLORS.red}`,
+            borderRadius: RADIUS.sm,
             display: "flex",
             alignItems: "center",
             gap: 8,
             fontSize: 13,
             fontWeight: 600,
-            color: status === "completed" ? "#2ECC71" : "#E74C3C",
+            color: status === "completed" ? COLORS.green : COLORS.red,
             marginBottom: 4,
           }}
         >
@@ -330,7 +330,7 @@ const containerStyle: CSSProperties = {
   flexDirection: "column",
   background: COLORS.bg,
   border: `1px solid ${COLORS.border}`,
-  borderRadius: RADIUS.sharp,
+  borderRadius: RADIUS.sm,
   overflow: "hidden",
   height: "100%",
 };
@@ -379,7 +379,7 @@ function eventCardStyle(type: string): CSSProperties {
     background: COLORS.surface,
     border: `1px solid ${COLORS.border}`,
     borderLeft: `3px solid ${getBorderColor(type)}`,
-    borderRadius: RADIUS.sharp,
+    borderRadius: RADIUS.sm,
     transition: "border-color 0.15s ease",
   };
 }

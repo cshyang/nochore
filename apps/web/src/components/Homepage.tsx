@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { COLORS, RADIUS } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE, MOTION } from "~/lib/colors";
 import type { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import {
@@ -61,8 +61,22 @@ export function Homepage({
       .map((a) => ({ ...a, projectName: p.name, projectId: p.id })),
   );
 
+  const transition = `${MOTION.duration} ${MOTION.ease}`;
+
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg }}>
+      {/* Keyframes for pulse and fadeIn */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       {/* Minimal top bar */}
       <div
         style={{
@@ -76,11 +90,11 @@ export function Homepage({
           <Sparkle size={20} weight="duotone" color={COLORS.accent} />
           <span
             style={{
-              fontSize: 16,
-              fontWeight: 700,
+              fontSize: TYPE.scale.md,
+              fontWeight: TYPE.weight.bold,
               color: COLORS.text,
-              letterSpacing: -0.3,
-              fontFamily: '"Satoshi", sans-serif',
+              letterSpacing: TYPE.tracking.tight,
+              fontFamily: TYPE.display,
             }}
           >
             Nochore
@@ -89,27 +103,35 @@ export function Homepage({
       </div>
 
       {/* Main content */}
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "48px 48px 64px" }}>
+      <div
+        style={{
+          maxWidth: 800,
+          margin: "0 auto",
+          padding: "48px 48px 64px",
+          animation: "fadeIn 0.4s var(--ease-out-expo) both",
+        }}
+      >
         {/* Greeting — the emotional anchor */}
         <div style={{ marginBottom: 48 }}>
           <h1
             style={{
-              fontSize: 32,
-              fontWeight: 700,
+              fontSize: TYPE.scale.xl,
+              fontWeight: TYPE.weight.bold,
               color: COLORS.text,
               margin: 0,
-              letterSpacing: -0.5,
-              fontFamily: '"Satoshi", sans-serif',
+              letterSpacing: TYPE.tracking.tight,
+              fontFamily: TYPE.display,
             }}
           >
             Good morning, Chau Shyang.
           </h1>
           <p
             style={{
-              fontSize: 16,
+              fontSize: TYPE.scale.md,
               color: COLORS.textSecondary,
               marginTop: 8,
-              lineHeight: 1.5,
+              lineHeight: TYPE.leading.normal,
+              fontFamily: TYPE.body,
             }}
           >
             {totalAttention > 0
@@ -132,11 +154,11 @@ export function Homepage({
               <WarningCircle size={14} weight="light" color={COLORS.textDim} />
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: TYPE.scale.xs,
                   color: COLORS.textDim,
                   textTransform: "uppercase",
-                  letterSpacing: 0.8,
-                  fontWeight: 500,
+                  letterSpacing: TYPE.tracking.wide,
+                  fontWeight: TYPE.weight.semibold,
                 }}
               >
                 Needs attention
@@ -154,31 +176,31 @@ export function Homepage({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "14px 16px",
-                      borderRadius: RADIUS.sharp,
-                      background: COLORS.surface,
+                      borderRadius: RADIUS.sm,
+                      background: COLORS.orangeSubtle,
                       cursor: "pointer",
-                      transition: "background 0.15s ease",
-                      borderLeft: `1px solid ${COLORS.border}`,
+                      transition: `background ${transition}`,
+                      borderLeft: `1px solid ${COLORS.orangeBorder}`,
                     }}
                     onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = COLORS.surfaceHover)
+                      (e.currentTarget.style.background = COLORS.orangeDim)
                     }
                     onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = COLORS.surface)
+                      (e.currentTarget.style.background = COLORS.orangeSubtle)
                     }
                   >
                     <div>
                       <div
                         style={{
                           fontSize: 15,
-                          fontWeight: 600,
+                          fontWeight: TYPE.weight.semibold,
                           color: COLORS.text,
                           marginBottom: 2,
                         }}
                       >
                         {item.name}
                       </div>
-                      <div style={{ fontSize: 13, color: COLORS.textSecondary }}>
+                      <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
                         {item.pendingCount > 0
                           ? `${item.pendingCount} action${item.pendingCount === 1 ? "" : "s"} need approval`
                           : "Needs attention"}
@@ -199,15 +221,16 @@ export function Homepage({
             style={{
               marginBottom: 48,
               padding: "20px 24px",
-              borderRadius: RADIUS.sharp,
+              borderRadius: RADIUS.sm,
               background: COLORS.greenDim,
+              border: `1px solid ${COLORS.greenBorder}`,
               display: "flex",
               alignItems: "center",
               gap: 12,
             }}
           >
             <CheckCircle size={20} weight="light" color={COLORS.green} />
-            <span style={{ fontSize: 14, color: COLORS.green, fontWeight: 500 }}>
+            <span style={{ fontSize: TYPE.scale.base, color: COLORS.green, fontWeight: TYPE.weight.medium }}>
               All clear — your agents are watching. You'll be notified when something needs you.
             </span>
           </div>
@@ -225,11 +248,11 @@ export function Homepage({
           >
             <span
               style={{
-                fontSize: 13,
+                fontSize: TYPE.scale.xs,
                 color: COLORS.textDim,
                 textTransform: "uppercase",
-                letterSpacing: 0.8,
-                fontWeight: 600,
+                letterSpacing: TYPE.tracking.wide,
+                fontWeight: TYPE.weight.semibold,
               }}
             >
               Projects
@@ -241,14 +264,14 @@ export function Homepage({
                   background: "none",
                   border: "none",
                   color: COLORS.textSecondary,
-                  fontSize: 13,
+                  fontSize: TYPE.scale.sm,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
                   padding: "4px 8px",
-                  borderRadius: RADIUS.button,
-                  transition: "color 0.15s ease",
+                  borderRadius: RADIUS.md,
+                  transition: `color ${transition}`,
                   fontFamily: "inherit",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.text)}
@@ -269,13 +292,13 @@ export function Homepage({
               <div
                 style={{
                   padding: "12px 16px",
-                  borderRadius: RADIUS.sharp,
+                  borderRadius: RADIUS.sm,
                   background: COLORS.surface,
                   border: `1px solid ${COLORS.accent}`,
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
-                  transition: "all 0.15s ease",
+                  transition: `all ${transition}`,
                 }}
               >
                 <FolderSimplePlus
@@ -301,9 +324,9 @@ export function Homepage({
                     border: "none",
                     outline: "none",
                     color: COLORS.text,
-                    fontSize: 16,
-                    fontWeight: 600,
-                    fontFamily: '"Satoshi", sans-serif',
+                    fontSize: TYPE.scale.md,
+                    fontWeight: TYPE.weight.semibold,
+                    fontFamily: TYPE.display,
                     padding: 0,
                   }}
                 />
@@ -321,10 +344,10 @@ export function Homepage({
                         style={{
                           fontSize: 12,
                           padding: "2px 6px",
-                          borderRadius: RADIUS.sharp,
+                          borderRadius: RADIUS.sm,
                           background: newName.trim() ? COLORS.accentDim : "transparent",
-                          color: newName.trim() ? COLORS.accentLight : COLORS.textDim,
-                          transition: "all 0.15s ease",
+                          color: newName.trim() ? COLORS.accentBright : COLORS.textDim,
+                          transition: `all ${transition}`,
                         }}
                       >
                         Enter
@@ -364,10 +387,10 @@ export function Homepage({
                   onClick={() => onSelectProject(proj.id)}
                   style={{
                     padding: "16px",
-                    borderRadius: RADIUS.sharp,
+                    borderRadius: RADIUS.sm,
                     background: COLORS.surface,
                     cursor: "pointer",
-                    transition: "background 0.15s ease",
+                    transition: `background ${transition}`,
                   }}
                   onMouseEnter={(e) =>
                     (e.currentTarget.style.background = COLORS.surfaceHover)
@@ -396,17 +419,17 @@ export function Homepage({
                       <div>
                         <div
                           style={{
-                            fontSize: 16,
-                            fontWeight: 600,
+                            fontSize: TYPE.scale.md,
+                            fontWeight: TYPE.weight.semibold,
                             color: COLORS.text,
-                            fontFamily: '"Satoshi", sans-serif',
+                            fontFamily: TYPE.display,
                           }}
                         >
                           {proj.name}
                         </div>
                         <div
                           style={{
-                            fontSize: 13,
+                            fontSize: TYPE.scale.sm,
                             color: COLORS.textSecondary,
                             marginTop: 2,
                           }}
@@ -418,7 +441,7 @@ export function Homepage({
 
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       {proj.attentionCount > 0 && (
-                        <Badge color="yellow">{proj.attentionCount}</Badge>
+                        <Badge color="orange">{proj.attentionCount}</Badge>
                       )}
                       <ArrowRight size={16} weight="light" color={COLORS.textDim} />
                     </div>
@@ -435,12 +458,13 @@ export function Homepage({
                     {proj.agents.map((agent) => {
                       const statusDotColor =
                         agent.status === "attention"
-                          ? COLORS.yellow
+                          ? COLORS.orange
                           : agent.status === "error"
                             ? COLORS.red
                             : agent.status === "running"
                               ? COLORS.green
                               : COLORS.textDim;
+                      const isRunning = agent.status === "running";
                       return (
                         <div
                           key={agent.id}
@@ -448,7 +472,7 @@ export function Homepage({
                             display: "flex",
                             alignItems: "center",
                             gap: 6,
-                            fontSize: 13,
+                            fontSize: TYPE.scale.sm,
                           }}
                         >
                           <span
@@ -459,6 +483,9 @@ export function Homepage({
                               background: statusDotColor,
                               flexShrink: 0,
                               opacity: agent.status === "idle" ? 0.5 : 1,
+                              ...(isRunning
+                                ? { animation: "pulse 3s ease-in-out infinite" }
+                                : {}),
                             }}
                           />
                           <span
@@ -467,7 +494,7 @@ export function Homepage({
                                 agent.status === "attention"
                                   ? COLORS.text
                                   : COLORS.textSecondary,
-                              fontWeight: agent.status === "attention" ? 500 : 400,
+                              fontWeight: agent.status === "attention" ? TYPE.weight.medium : TYPE.weight.regular,
                             }}
                           >
                             {agent.name}
