@@ -98,9 +98,19 @@ async function loadProjectView(projectId: string) {
 
   try {
     const { db, agentRepository, runRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
-    const projectRow = db.select().from(projects).get();
+    let projectRow = db.select().from(projects).get();
     if (!projectRow) {
-      return null;
+      // Self-heal: directory exists but no DB row (created by older version)
+      const now = Date.now();
+      db.insert(projects).values({
+        id: projectId,
+        name: projectId.charAt(0).toUpperCase() + projectId.slice(1),
+        icon: DEFAULT_PROJECT_ICON,
+        color: DEFAULT_PROJECT_COLOR,
+        createdAt: now,
+      }).run();
+      projectRow = db.select().from(projects).get();
+      if (!projectRow) return null;
     }
 
     const agentRows = await agentRepository.listByProject(projectId);

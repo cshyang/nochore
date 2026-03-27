@@ -51,7 +51,8 @@ const CREATE_DDL = `
     started_at INTEGER NOT NULL,
     completed_at INTEGER,
     error TEXT,
-    summary TEXT
+    summary TEXT,
+    trigger_run_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_runs_agent_started ON runs (agent_id, started_at);
 
@@ -144,6 +145,14 @@ function ensureSchema(sqlite: Database.Database, forceReset = false) {
   }
 
   sqlite.exec(CREATE_DDL);
+  migrateAddColumns(sqlite);
+}
+
+function migrateAddColumns(sqlite: Database.Database) {
+  const runCols = sqlite.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
+  if (runCols.length > 0 && !runCols.some((c) => c.name === "trigger_run_id")) {
+    sqlite.exec("ALTER TABLE runs ADD COLUMN trigger_run_id TEXT");
+  }
 }
 
 function hasLegacyAgentSchema(sqlite: Database.Database): boolean {
