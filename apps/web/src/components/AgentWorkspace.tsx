@@ -1,2213 +1,1206 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { COLORS, RADIUS } from "~/lib/colors";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { ArrowLeft, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
+import { LiveRunView } from "~/components/LiveRunView";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
-import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
 import { Card } from "~/components/Card";
-import {
-  ArrowLeft,
-  ChatCircle,
-  Check,
-  X,
-  WarningCircle,
-  CheckCircle,
-  Info,
-  CaretRight,
-  Sparkle,
-  CircleNotch,
-  PaperPlaneTilt,
-  ArrowCounterClockwise,
-  DotsThree,
-  Play,
-} from "@phosphor-icons/react";
-import Markdown from "react-markdown";
-import { sendChat, getChatHistory } from "~/server/chat";
-import type { AgentView, ProjectView } from "~/lib/types";
+import { COLORS, RADIUS } from "~/lib/colors";
+import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+type JsonRecord = Record<string, unknown>;
 
-export interface AgentWorkspaceProps {
-  agent: AgentView;
-  project: ProjectView;
-  availableSkills?: Array<{ id: string; name: string; description: string }>;
-  projectConnections?: Array<{ id: string; provider: string; status: string }>;
-  onBack: () => void;
-  onDeleteAgent?: () => void;
-  onRunNow?: () => Promise<void>;
-  runs?: SerializedRun[];
-  pendingActions?: SerializedPendingAction[];
-  onApprove?: (actionId: string) => void;
-  onReject?: (actionId: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Feed data types (mirrored from InsightFeed for locality)
-// ---------------------------------------------------------------------------
-
-interface SerializedRun {
+type AgentLike = {
   id: string;
-  agentId: string;
-  triggerType: string;
-  startedAt: string;
-  completedAt?: string;
-  result?: {
-    runId: string;
-    agentId: string;
-    duration: number;
-    steps: Array<{
-      step: string;
-      duration: number;
-      data: unknown;
-      llmUsage?: { inputTokens: number; outputTokens: number; cost: number };
-    }>;
-    proposals: Array<{
-      id: string;
-      action: string;
-      toolCategory: string;
-      args: Record<string, unknown>;
-      reason: string;
-      confidence: number;
-      skillSource: string;
-      reversible: boolean;
-      idempotencyKey: string;
-    }>;
-    eventsLogged: number;
-  };
-}
-
-interface SerializedPendingAction {
-  id: string;
-  runId: string;
-  agentId: string;
-  proposal: {
-    id: string;
-    action: string;
-    toolCategory: string;
-    args: Record<string, unknown>;
-    reason: string;
-    confidence: number;
-    skillSource: string;
-    reversible: boolean;
-    idempotencyKey: string;
-  };
-  status: string;
-  createdAt: string;
-  resolvedAt?: string;
-  resolvedReason?: string;
-}
-
-interface Insight {
-  id: string;
-  tier: "input" | "auto" | "fyi";
-  title: string;
-  summary: string;
-  recommendation?: string;
-  reasoning?: string[];
-  policy: string;
-  time: string;
-  actionId?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Chat message type
-// ---------------------------------------------------------------------------
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: Date;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return `${Math.floor(diffHr / 24)}d ago`;
-}
-
-function humanizeAction(action: string): string {
-  return action.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-}
-
-function transformToInsights(
-  runs: SerializedRun[],
-  pendingActions: SerializedPendingAction[],
-): Insight[] {
-  const insights: Insight[] = [];
-
-  for (const action of pendingActions) {
-    insights.push({
-      id: `pending-${action.id}`,
-      actionId: action.id,
-      tier: "input",
-      title: humanizeAction(action.proposal.action),
-      summary: action.proposal.reason,
-      recommendation: `${humanizeAction(action.proposal.action)} via ${action.proposal.toolCategory} (${Math.round(action.proposal.confidence * 100)}% confidence)`,
-      policy: `Skill: ${action.proposal.skillSource}`,
-      time: formatTimeAgo(action.createdAt),
-    });
-  }
-
-  const pendingRunIds = new Set(pendingActions.map((a) => a.runId));
-
-  for (const run of runs) {
-    if (!run.result) continue;
-    if (pendingRunIds.has(run.id)) continue;
-
-    const proposals = run.result.proposals;
-
-    if (proposals.length > 0) {
-      insights.push({
-        id: `run-${run.id}`,
-        tier: "auto",
-        title:
-          proposals.length === 1
-            ? humanizeAction(proposals[0].action)
-            : `${proposals.length} actions executed`,
-        summary:
-          proposals.length === 1
-            ? proposals[0].reason
-            : `Executed: ${proposals.map((p) => humanizeAction(p.action)).join(", ")}`,
-        reasoning: proposals.map(
-          (p) =>
-            `${humanizeAction(p.action)}: ${p.reason} (${Math.round(p.confidence * 100)}% confidence)`,
-        ),
-        policy: `Skill: ${proposals[0].skillSource}`,
-        time: formatTimeAgo(run.startedAt),
-      });
-    } else {
-      const stepNames = run.result.steps.map((s) => s.step).join(" → ");
-      insights.push({
-        id: `run-${run.id}`,
-        tier: "fyi",
-        title: `Run completed (${run.triggerType})`,
-        summary: `Pipeline: ${stepNames}. No actions needed.`,
-        policy: "",
-        time: formatTimeAgo(run.startedAt),
-      });
-    }
-  }
-
-  return insights;
-}
-
-// ---------------------------------------------------------------------------
-// Tier card config
-// ---------------------------------------------------------------------------
-
-const tierConfig = {
-  input: {
-    badgeColor: "yellow" as const,
-    label: "NEEDS YOUR INPUT",
-    Icon: WarningCircle,
-    iconColor: COLORS.yellow,
-    leftBorderColor: COLORS.yellow,
-  },
-  auto: {
-    badgeColor: "green" as const,
-    label: "AUTO-HANDLED",
-    Icon: CheckCircle,
-    iconColor: COLORS.green,
-    leftBorderColor: COLORS.green,
-  },
-  fyi: {
-    badgeColor: "gray" as const,
-    label: "FYI",
-    Icon: Info,
-    iconColor: COLORS.textDim,
-    leftBorderColor: "transparent",
-  },
+  name: string;
+  description?: string | null;
+  instructions?: string | null;
+  skills?: string[];
+  schedule?: string | null;
+  status?: string | null;
+  toolConfig?: JsonRecord | null;
+  notificationConfig?: JsonRecord | null;
+  [key: string]: unknown;
 };
 
-// ---------------------------------------------------------------------------
-// InsightCard
-// ---------------------------------------------------------------------------
+type ProjectLike = {
+  id: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+};
 
-function InsightCard({
-  insight,
+type SkillLike = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+type ConnectionLike = {
+  id?: string;
+  provider: string;
+  status: string;
+  reason?: string;
+};
+
+type TimelineEventLike = {
+  id: string;
+  type?: string;
+  title?: string;
+  summary?: string;
+  description?: string;
+  status?: string;
+  timestamp?: string | number | Date;
+  runId?: string;
+  approvalId?: string;
+  actionId?: string;
+  toolName?: string;
+  tags?: string[];
+  details?: string[];
+  tone?: "info" | "success" | "warning" | "danger";
+};
+
+type ApprovalLike = {
+  id: string;
+  approvalId?: string;
+  runId?: string;
+  toolName?: string;
+  toolInput?: JsonRecord;
+  status?: string;
+  decisionReason?: string;
+  createdAt?: string | number | Date;
+  resolvedAt?: string | number | Date;
+};
+
+type RunLike = {
+  id: string;
+  agentId?: string;
+  triggerType?: string;
+  status?: string;
+  startedAt?: string | number | Date;
+  completedAt?: string | number | Date;
+  error?: string | null;
+  result?: {
+    headline?: string;
+    details?: string[];
+    eventsLogged?: number;
+    proposals?: Array<{
+      id?: string;
+      action?: string;
+      reason?: string;
+      confidence?: number;
+      skillSource?: string;
+    }>;
+    steps?: Array<{
+      step?: string;
+    }>;
+  };
+};
+
+type ToolConfigEntryLike = {
+  toolName?: string;
+  title?: string;
+  description?: string;
+  mode?: "read" | "write";
+  enabled?: boolean;
+  approvalMode?: "auto" | "approval" | "blocked";
+};
+
+type ToolConfigLike = {
+  requiredProviders?: Array<{ provider: string; reason?: string }>;
+  tools?: Record<string, ToolConfigEntryLike>;
+};
+
+type NotificationConfigLike = {
+  inApp?: boolean;
+  email?: boolean;
+  slack?: boolean;
+};
+
+export interface AgentWorkspaceProps {
+  agent: AgentLike;
+  project: ProjectLike;
+  onBack: () => void;
+  onDeleteAgent?: () => void;
+  onRunNow?: () => Promise<{ runId?: string } | void>;
+  onApprove?: (approvalId: string) => Promise<{ runId?: string } | void> | void;
+  onReject?: (approvalId: string) => Promise<void> | void;
+  onUpdateAgent?: (updates: Partial<{
+    name: string;
+    description: string;
+    instructions: string;
+    skills: string[];
+    schedule: string;
+    toolConfig: ToolConfigLike;
+    notificationConfig: NotificationConfigLike;
+    status: string;
+  }>) => Promise<void> | void;
+  onAskDeeper?: (prompt: string, context?: { eventId?: string; runId?: string }) => void;
+  availableSkills?: SkillLike[];
+  skills?: SkillLike[];
+  projectConnections?: ConnectionLike[];
+  requiredProviders?: Array<{ provider: string; reason?: string }>;
+  timelineEvents?: TimelineEventLike[];
+  approvals?: ApprovalLike[];
+  runs?: RunLike[];
+  pendingActions?: ApprovalLike[];
+  isDraft?: boolean;
+  activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
+  onLiveRunComplete?: () => void;
+}
+
+type TimelineItem = {
+  id: string;
+  type: string;
+  title: string;
+  summary: string;
+  timestamp: Date;
+  tone: "info" | "success" | "warning" | "danger";
+  tags: string[];
+  runId?: string;
+  approvalId?: string;
+  actionId?: string;
+  details?: string[];
+  toolName?: string;
+  raw?: TimelineEventLike | RunLike | ApprovalLike;
+};
+
+function toDate(value: string | number | Date | undefined): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === "number") return new Date(value);
+  if (typeof value === "string") return new Date(value);
+  return new Date();
+}
+
+function formatTimeAgo(value: Date): string {
+  const diff = Date.now() - value.getTime();
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function humanize(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getStatusTone(status?: string): TimelineItem["tone"] {
+  switch ((status ?? "").toLowerCase()) {
+    case "completed":
+    case "approved":
+    case "executed":
+    case "active":
+    case "live":
+      return "success";
+    case "failed":
+    case "rejected":
+    case "blocked":
+    case "warning":
+      return "danger";
+    case "pending":
+    case "queued":
+    case "running":
+    case "waiting_for_approval":
+      return "warning";
+    default:
+      return "info";
+  }
+}
+
+function toneColor(tone: TimelineItem["tone"]): string {
+  switch (tone) {
+    case "success":
+      return COLORS.green;
+    case "warning":
+      return COLORS.yellow;
+    case "danger":
+      return COLORS.red;
+    case "info":
+    default:
+      return COLORS.accent;
+  }
+}
+
+function normalizeToolConfig(value: unknown): ToolConfigLike {
+  if (!value || typeof value !== "object") {
+    return { requiredProviders: [], tools: {} };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    requiredProviders: Array.isArray(record.requiredProviders)
+      ? record.requiredProviders.filter(
+          (item): item is { provider: string; reason?: string } =>
+            !!item &&
+            typeof item === "object" &&
+            typeof (item as Record<string, unknown>).provider === "string",
+        )
+      : [],
+    tools:
+      record.tools && typeof record.tools === "object"
+        ? (record.tools as Record<string, ToolConfigEntryLike>)
+        : {},
+  };
+}
+
+function normalizeNotificationConfig(value: unknown): NotificationConfigLike {
+  if (!value || typeof value !== "object") {
+    return { inApp: true, email: false, slack: false };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    inApp: record.inApp !== false,
+    email: record.email === true,
+    slack: record.slack === true,
+  };
+}
+
+function toTimelineItems(params: {
+  timelineEvents: TimelineEventLike[];
+  approvals: ApprovalLike[];
+  runs: RunLike[];
+  pendingActions: ApprovalLike[];
+}): TimelineItem[] {
+  const approvalItems = params.approvals.map((approval) => {
+    const timestamp = toDate(approval.createdAt);
+    return {
+      id: `approval-${approval.id}`,
+      type: "approval",
+      title: approval.toolName ? humanize(approval.toolName) : "Approval requested",
+      summary: approval.decisionReason ?? "Waiting on a decision.",
+      timestamp,
+      tone: getStatusTone(approval.status),
+      tags: [
+        approval.status ? humanize(approval.status) : "pending",
+        approval.runId ? "Run attached" : "No run",
+      ],
+      runId: approval.runId,
+      approvalId: approval.approvalId ?? approval.id,
+      actionId: approval.id,
+      toolName: approval.toolName,
+      raw: approval,
+    } satisfies TimelineItem;
+  });
+
+  const pendingItems = params.pendingActions.map((approval) => ({
+    id: `pending-${approval.id}`,
+    type: "approval",
+    title: approval.toolName ? humanize(approval.toolName) : "Approval requested",
+    summary: approval.decisionReason ?? "Waiting on a decision.",
+    timestamp: toDate(approval.createdAt),
+    tone: getStatusTone(approval.status),
+    tags: [approval.status ? humanize(approval.status) : "pending"],
+    runId: approval.runId,
+    approvalId: approval.approvalId ?? approval.id,
+    actionId: approval.id,
+    toolName: approval.toolName,
+    raw: approval,
+  } satisfies TimelineItem));
+
+  const runItems = params.runs.map((run) => {
+    const status = (run.status ?? "").toLowerCase();
+    const tone = getStatusTone(status);
+    const startedAt = toDate(run.startedAt);
+    const baseTitle =
+      run.result?.headline ??
+      (status === "failed"
+        ? "Run failed"
+        : status === "running"
+          ? "Run in progress"
+          : status === "queued"
+            ? "Run queued"
+            : "Run completed");
+    const summary =
+      run.error ??
+      run.result?.details?.[0] ??
+      (run.result?.proposals?.length
+        ? `${run.result.proposals.length} proposal${run.result.proposals.length === 1 ? "" : "s"} surfaced`
+        : `Triggered by ${run.triggerType ?? "manual"}.`);
+
+    return {
+      id: `run-${run.id}`,
+      type: `run:${status || "unknown"}`,
+      title: baseTitle,
+      summary,
+      timestamp: startedAt,
+      tone,
+      tags: [
+        run.triggerType ? humanize(run.triggerType) : "Run",
+        run.status ? humanize(run.status) : "Unknown",
+      ],
+      runId: run.id,
+      details: run.result?.details,
+      raw: run,
+    } satisfies TimelineItem;
+  });
+
+  const eventItems = params.timelineEvents.map((event) => ({
+    id: event.id,
+    type: event.type ?? "event",
+    title: event.title ?? humanize(event.type ?? "event"),
+    summary: event.summary ?? event.description ?? "",
+    timestamp: toDate(event.timestamp),
+    tone: event.tone ?? getStatusTone(event.status),
+    tags: event.tags ?? [event.type ? humanize(event.type) : "Event"],
+    runId: event.runId,
+    approvalId: event.approvalId,
+    actionId: event.actionId,
+    details: event.details,
+    toolName: event.toolName,
+    raw: event,
+  } satisfies TimelineItem));
+
+  return [...eventItems, ...approvalItems, ...pendingItems, ...runItems]
+    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
+}
+
+function iconForTone(tone: TimelineItem["tone"]) {
+  switch (tone) {
+    case "success":
+      return CheckCircle;
+    case "warning":
+      return WarningCircle;
+    case "danger":
+      return X;
+    default:
+      return Info;
+  }
+}
+
+function TimelineCard({
+  item,
   onApprove,
   onReject,
+  onSelect,
 }: {
-  insight: Insight;
-  onApprove?: (actionId: string) => void;
-  onReject?: (actionId: string) => void;
+  item: TimelineItem;
+  onApprove?: (approvalId: string) => void;
+  onReject?: (approvalId: string) => void;
+  onSelect?: (item: TimelineItem) => void;
 }) {
-  const [reasoningOpen, setReasoningOpen] = useState(false);
-  const [resolved, setResolved] = useState<"approved" | "dismissed" | null>(null);
-  const tier = tierConfig[insight.tier];
-
-  const isFyi = insight.tier === "fyi";
-
-  const cardStyle: React.CSSProperties = isFyi
-    ? {
-        background: "transparent",
-        border: "none",
-        borderBottom: `1px solid ${COLORS.border}`,
-        borderRadius: 0,
-        paddingLeft: 0,
-        paddingRight: 0,
-        opacity: resolved ? 0.5 : 1,
-        transition: "opacity 0.15s ease",
-      }
-    : {
-        borderLeft: `3px solid ${tier.leftBorderColor}`,
-        opacity: resolved ? 0.5 : 1,
-        transition: "opacity 0.15s ease",
-      };
-
+  const Icon = iconForTone(item.tone);
   return (
-    <Card style={cardStyle}>
-      {/* Header row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 12,
-        }}
-      >
-        <Badge color={tier.badgeColor}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <tier.Icon size={13} weight="light" color={tier.iconColor} />
-            {tier.label}
-          </span>
-        </Badge>
-        <span style={{ fontSize: 12, color: COLORS.textDim }}>{insight.time}</span>
-      </div>
-
-      {/* Title */}
-      <h3
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: COLORS.text,
-          margin: "0 0 8px 0",
-          fontFamily: '"Satoshi", sans-serif',
-          lineHeight: 1.3,
-        }}
-      >
-        {insight.title}
-      </h3>
-
-      {/* Summary */}
-      <p
-        style={{
-          fontSize: 14,
-          color: COLORS.textSecondary,
-          lineHeight: 1.6,
-          margin: 0,
-          fontFamily: '"General Sans", sans-serif',
-        }}
-      >
-        {insight.summary}
-      </p>
-
-      {/* Recommendation */}
-      {insight.recommendation && (
-        <div
-          style={{
-            marginTop: 16,
-            paddingLeft: 16,
-            borderLeft: `1px solid ${COLORS.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              color: COLORS.textDim,
-              fontWeight: 500,
-              marginBottom: 4,
-              fontFamily: '"Satoshi", sans-serif',
-            }}
-          >
-            Recommendation
+    <Card
+      style={{
+        padding: 18,
+        borderLeft: `3px solid ${toneColor(item.tone)}`,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.015), transparent)",
+      }}
+      onClick={() => onSelect?.(item)}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <Badge color={item.tone === "danger" ? "red" : item.tone === "warning" ? "yellow" : item.tone === "success" ? "green" : "accent"}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon size={12} weight="bold" />
+                {item.type.includes("approval") ? "Approval" : item.type.startsWith("run") ? "Run" : "Timeline"}
+              </span>
+            </Badge>
+            <span style={{ color: COLORS.textDim, fontSize: 12 }}>{formatTimeAgo(item.timestamp)}</span>
           </div>
-          <div
-            style={{
-              fontSize: 14,
-              color: COLORS.text,
-              lineHeight: 1.5,
-              fontFamily: '"General Sans", sans-serif',
-            }}
-          >
-            {insight.recommendation}
-          </div>
-        </div>
-      )}
-
-      {/* Reasoning toggle */}
-      {insight.reasoning && (
-        <div style={{ marginTop: 12 }}>
-          <button
-            onClick={() => setReasoningOpen((v) => !v)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              color: COLORS.textSecondary,
-              fontSize: 13,
-              fontFamily: "inherit",
-            }}
-          >
-            <CaretRight
-              size={13}
-              weight="light"
-              style={{
-                transform: reasoningOpen ? "rotate(90deg)" : "rotate(0deg)",
-                transition: "transform 0.15s ease",
-              }}
-            />
-            Why I think this
-          </button>
-          {reasoningOpen && (
-            <div style={{ marginTop: 8, paddingLeft: 4 }}>
-              {insight.reasoning.map((r, i) => (
-                <div
-                  key={i}
-                  style={{ display: "flex", gap: 8, marginBottom: 6 }}
-                >
-                  <span style={{ color: COLORS.textDim, fontSize: 13 }}>
-                    {i === insight.reasoning!.length - 1 ? "└" : "├"}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: COLORS.textSecondary,
-                      lineHeight: 1.5,
-                      fontFamily: '"General Sans", sans-serif',
-                    }}
-                  >
-                    {r}
-                  </span>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 650, color: COLORS.text, lineHeight: 1.3 }}>
+            {item.title}
+          </h3>
+          <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, fontSize: 14, lineHeight: 1.55 }}>
+            {item.summary}
+          </p>
+          {item.details?.length ? (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {item.details.map((detail) => (
+                <div key={detail} style={{ color: COLORS.textDim, fontSize: 12, lineHeight: 1.45 }}>
+                  • {detail}
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
-      )}
-
-      {/* Footer: policy + actions */}
-      <div
-        style={{
-          marginTop: 16,
-          paddingTop: 12,
-          borderTop: `1px solid ${COLORS.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            color: COLORS.textDim,
-            fontStyle: "italic",
-            fontFamily: '"General Sans", sans-serif',
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {insight.policy}
-        </span>
-
-        <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
-          {insight.tier === "input" && !resolved && (
-            <>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setResolved("approved");
-                  if (insight.actionId && onApprove) onApprove(insight.actionId);
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+          <span style={{ color: COLORS.textDim, fontSize: 12 }}>{item.timestamp.toLocaleString()}</span>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {item.tags.map((tag) => (
+              <span
+                key={tag}
+                style={{
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  borderRadius: 999,
+                  background: COLORS.bg,
+                  color: COLORS.textSecondary,
+                  border: `1px solid ${COLORS.border}`,
                 }}
               >
-                <Check size={13} weight="bold" />
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setResolved("dismissed");
-                  if (insight.actionId && onReject) onReject(insight.actionId);
-                }}
-              >
-                Dismiss
-              </Button>
-            </>
-          )}
-          {resolved === "approved" && (
-            <Badge color="green">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <Check size={12} weight="bold" />
-                Approved
+                {tag}
               </span>
-            </Badge>
-          )}
-          {resolved === "dismissed" && <Badge color="gray">Dismissed</Badge>}
-          {insight.tier === "auto" && !resolved && (
-            <Button size="sm" variant="ghost">
-              <ArrowCounterClockwise size={13} weight="light" />
-              Undo
-            </Button>
-          )}
-          {insight.tier === "fyi" && (
-            <Button size="sm" variant="ghost">
-              View full report
-            </Button>
-          )}
+            ))}
+          </div>
         </div>
       </div>
+      {item.approvalId ? (
+        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button size="sm" onClick={() => onApprove?.(item.approvalId!)}>
+            <Check size={13} weight="bold" />
+            Approve
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onReject?.(item.approvalId!)}>
+            Reject
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }
 
-// ---------------------------------------------------------------------------
-// ActivityFeed
-// ---------------------------------------------------------------------------
-
-function ActivityFeed({
-  runs = [],
-  pendingActions = [],
+function TimelinePanel({
+  items,
   onApprove,
   onReject,
+  onAskDeeper,
+  onRunNow,
+  selected,
+  onSelect,
 }: {
-  runs?: SerializedRun[];
-  pendingActions?: SerializedPendingAction[];
-  onApprove?: (actionId: string) => void;
-  onReject?: (actionId: string) => void;
+  items: TimelineItem[];
+  onApprove?: (approvalId: string) => void;
+  onReject?: (approvalId: string) => void;
+  onAskDeeper?: (prompt: string, context?: { eventId?: string; runId?: string }) => void;
+  onRunNow?: () => void;
+  selected: TimelineItem | null;
+  onSelect: (item: TimelineItem | null) => void;
 }) {
-  const insights = useMemo(() => {
-    const hasData = runs.length > 0 || pendingActions.length > 0;
-    if (!hasData) return [];
-    return transformToInsights(runs, pendingActions);
-  }, [runs, pendingActions]);
-
-  if (insights.length === 0) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          padding: "64px 0",
-          color: COLORS.textDim,
-        }}
-      >
-        <span style={{ fontSize: 24, opacity: 0.4 }}>✦</span>
-        <span style={{ fontSize: 14, fontFamily: '"General Sans", sans-serif' }}>
-          No activity yet. Turn on the schedule to start your agent's first run.
-        </span>
-      </div>
-    );
-  }
+  const [prompt, setPrompt] = useState("");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {insights.map((insight) => (
-        <InsightCard
-          key={insight.id}
-          insight={insight}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ChatDrawer
-// ---------------------------------------------------------------------------
-
-const QUICK_ACTIONS_CHAT = [
-  "Explain last run",
-  "What should I review?",
-  "Run analysis now",
-];
-
-const QUICK_ACTIONS_BLUEPRINT = [
-  "Monitor Google Ads for budget waste",
-  "Research articles and publish to blog",
-  "Track competitor pricing changes",
-];
-
-function ChatDrawer({
-  agentId,
-  projectId,
-  agentName,
-  mode = "chat",
-  availableSkills = [],
-  onBlueprintComplete,
-  onClose,
-}: {
-  agentId: string;
-  projectId: string;
-  agentName: string;
-  mode?: "chat" | "blueprint";
-  availableSkills?: Array<{ id: string; name: string; description: string }>;
-  onBlueprintComplete?: (data?: { name: string; description: string; skills?: string[]; schedule?: string; connections?: Array<{ provider: string; reason: string }> }) => void;
-  onClose: () => void;
-}) {
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [reasoningText, setReasoningText] = useState("");
-  const [toolStatus, setToolStatus] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Load chat history on mount — only when in chat mode and no messages yet.
-  // Skip if messages exist (e.g. from a blueprint session that just completed).
-  useEffect(() => {
-    if (mode === "blueprint") {
-      setLoading(false);
-      return;
-    }
-    if (messages.length > 0) {
-      setLoading(false);
-      return;
-    }
-    getChatHistory({ data: { agentId, projectId, limit: 50 } })
-      .then((history) => {
-        setMessages(
-          (
-            history as Array<{
-              id: string;
-              role: string;
-              content: string;
-              createdAt: string | number;
-            }>
-          ).map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            createdAt: new Date(m.createdAt),
-          })),
-        );
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId, projectId]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, sending]);
-
-  // Focus input after open animation
-  useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 150);
-    return () => clearTimeout(t);
-  }, []);
-
-  const handleBlueprintSend = async (text: string) => {
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setSending(true);
-    setReasoningText("");
-    setToolStatus("");
-
-    try {
-      const res = await fetch("/api/blueprint", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intent: text,
-          availableSkills: availableSkills.map((s) => ({
-            id: s.id, name: s.name, description: s.description,
-          })),
-        }),
-      });
-
-      if (!res.ok || !res.body) throw new Error("Blueprint generation failed");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let lastBlueprint: Record<string, unknown> | null = null;
-      let textAccumulator = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed._type === "reasoning") {
-              setReasoningText((prev) => prev + (parsed.text ?? ""));
-            } else if (parsed._type === "tool-status") {
-              setToolStatus(parsed.text as string);
-            } else if (parsed._type === "text") {
-              textAccumulator += parsed.text ?? "";
-            } else if (parsed._type === "blueprint") {
-              const { _type, ...bp } = parsed;
-              lastBlueprint = bp;
-            }
-          } catch { /* skip unparseable */ }
-        }
-      }
-
-      if (lastBlueprint) {
-        const { updateAgentConfig } = await import("~/server/agents");
-        await updateAgentConfig({
-          data: {
-            agentId,
-            projectId,
-            name: (lastBlueprint.agentName as string) || "Untitled Agent",
-            description: (lastBlueprint.summary as string) || "",
-            skills: (lastBlueprint.skills as string[]) || [],
-            schedule: (lastBlueprint.trigger as { schedule?: string })?.schedule || "manual",
-            connections: (lastBlueprint.connections as Array<{ provider: string; reason: string }>) || [],
-          },
-        });
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            content: `I've set up **${lastBlueprint!.agentName}**. The overview shows your agent's configuration — adjust anything you'd like.`,
-            createdAt: new Date(),
-          },
-        ]);
-
-        onBlueprintComplete?.({
-          name: (lastBlueprint!.agentName as string) || "Untitled Agent",
-          description: (lastBlueprint!.summary as string) || "",
-          skills: (lastBlueprint!.skills as string[]) || [],
-          schedule: (lastBlueprint!.trigger as { schedule?: string })?.schedule || "manual",
-          connections: (lastBlueprint!.connections as Array<{ provider: string; reason: string }>) || [],
-        });
-      } else if (textAccumulator.trim()) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            content: textAccumulator.trim(),
-            createdAt: new Date(),
-          },
-        ]);
-      }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant" as const,
-          content: "Something went wrong generating the blueprint. Please try again.",
-          createdAt: new Date(),
-        },
-      ]);
-    } finally {
-      setSending(false);
-      setReasoningText("");
-      setToolStatus("");
-    }
-  };
-
-  const handleSend = async (text?: string) => {
-    const content = (text ?? input).trim();
-    if (!content || sending) return;
-
-    if (mode === "blueprint") {
-      return handleBlueprintSend(content);
-    }
-
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setSending(true);
-
-    try {
-      const result = await sendChat({
-        data: { agentId, projectId, message: content },
-      });
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: (result as { response: string }).response,
-          createdAt: new Date(),
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "Something went wrong. Please try again.",
-          createdAt: new Date(),
-        },
-      ]);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <>
-      {/* Scrim */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.45)",
-          zIndex: 40,
-          animation: "fadeIn 0.15s ease",
-        }}
-      />
-
-      {/* Drawer panel */}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 400,
-          background: COLORS.surface,
-          borderLeft: `1px solid ${COLORS.border}`,
-          zIndex: 50,
-          display: "flex",
-          flexDirection: "column",
-          animation: "slideInRight 0.2s ease",
-        }}
-      >
-        {/* Drawer header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "16px 20px",
-            borderBottom: `1px solid ${COLORS.border}`,
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: COLORS.text,
-                fontFamily: '"Satoshi", sans-serif',
-              }}
-            >
-              {mode === "blueprint" ? "Set up your agent" : `Chat with ${agentName}`}
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Card style={{ padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 680 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <Badge color="accent">
+                <Sparkle size={12} weight="bold" />
+                Timeline surface
+              </Badge>
+              {selected ? (
+                <Badge color="gray">Focused on {selected.title}</Badge>
+              ) : null}
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: COLORS.textDim,
-                marginTop: 2,
-                fontFamily: '"General Sans", sans-serif',
-              }}
-            >
-              {mode === "blueprint" ? "Describe what you want — I'll configure it" : "Ask anything about your campaigns"}
-            </div>
+            <h2 style={{ margin: 0, fontSize: 18, color: COLORS.text, lineHeight: 1.25 }}>
+              Event-driven work, approvals, and outcomes in one place.
+            </h2>
+            <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, lineHeight: 1.6, maxWidth: 600 }}>
+              Review what the agent found, approve or reject requested actions, and ask for more context without leaving the timeline.
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              color: COLORS.textSecondary,
-              padding: 6,
-              borderRadius: RADIUS.button,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = COLORS.surfaceHover;
-              e.currentTarget.style.color = COLORS.text;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = COLORS.textSecondary;
-            }}
-          >
-            <X size={18} weight="light" />
-          </button>
+          {onRunNow ? (
+            <Button onClick={onRunNow}>
+              <Play size={13} weight="bold" />
+              Run now
+            </Button>
+          ) : null}
         </div>
+      </Card>
 
-        {/* Quick actions */}
-        {messages.length === 0 && !loading && (
-          <div
-            style={{
-              padding: "12px 20px",
-              borderBottom: `1px solid ${COLORS.border}`,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              flexShrink: 0,
-            }}
-          >
-            {(mode === "blueprint" ? QUICK_ACTIONS_BLUEPRINT : QUICK_ACTIONS_CHAT).map((qa) => (
-              <button
-                key={qa}
-                onClick={() => handleSend(qa)}
-                style={{
-                  background: COLORS.bg,
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: RADIUS.pill,
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  color: COLORS.textSecondary,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.15s ease",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = COLORS.borderLight;
-                  e.currentTarget.style.color = COLORS.text;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = COLORS.border;
-                  e.currentTarget.style.color = COLORS.textSecondary;
-                }}
-              >
-                {qa}
-              </button>
-            ))}
-          </div>
-        )}
+      {items.length === 0 ? (
+        <Card style={{ padding: 28, textAlign: "center", color: COLORS.textDim }}>
+          No timeline events yet. Trigger a run or keep the agent in draft while you finish setup.
+        </Card>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {items.map((item) => (
+            <TimelineCard
+              key={item.id}
+              item={item}
+              onApprove={onApprove}
+              onReject={onReject}
+              onSelect={(next) => onSelect(next)}
+            />
+          ))}
+        </div>
+      )}
 
-        {/* Messages */}
-        <div
-          ref={scrollRef}
-          className="aw-scroll"
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            padding: "16px 20px",
-          }}
-        >
-          {loading ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: 32,
-                color: COLORS.textDim,
-                fontSize: 13,
-              }}
-            >
-              <CircleNotch
-                size={15}
-                weight="light"
-                style={{ animation: "spin 1s linear infinite" }}
-              />
-              Loading conversation...
-            </div>
-          ) : messages.length === 0 ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 32,
-                color: COLORS.textDim,
-                fontSize: 13,
-                textAlign: "center",
-                lineHeight: 1.5,
-                fontFamily: '"General Sans", sans-serif',
-              }}
-            >
-              Ask your agent anything — it has access to your workspace, run
-              history, and policies.
-            </div>
-          ) : (
-            messages.map((msg) =>
-              msg.role === "user" ? (
-                <div key={msg.id} style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <div
-                    style={{
-                      maxWidth: "85%",
-                      padding: "10px 14px",
-                      borderRadius: 18,
-                      borderBottomRightRadius: 4,
-                      background: COLORS.surfaceHover,
-                      color: COLORS.text,
-                      fontSize: 14,
-                      lineHeight: 1.5,
-                      fontFamily: '"General Sans", sans-serif',
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              ) : (
-                <div key={msg.id} className="aw-md" style={{ width: "100%" }}>
-                  <Markdown>{msg.content}</Markdown>
-                </div>
-              ),
-            )
-          )}
-
-          {sending && mode === "blueprint" && reasoningText && (
-            <div style={{
-              padding: "4px 14px",
-              fontSize: 12,
-              fontStyle: "italic",
-              color: COLORS.textDim,
-              lineHeight: 1.5,
-              maxHeight: 48,
-              overflow: "hidden",
-              maskImage: "linear-gradient(to bottom, black 60%, transparent)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent)",
-              opacity: 0.7,
-            }}>
-              {reasoningText.trim().split("\n").slice(-2).join(" ")}
-            </div>
-          )}
-
-          {sending && mode === "blueprint" && toolStatus && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 14px",
-              fontSize: 12,
-              color: COLORS.textDim,
-            }}>
-              <span style={{ color: COLORS.accent, fontSize: 12 }}>&#10022;</span>
-              {toolStatus}
-            </div>
-          )}
-
-          {sending && !(mode === "blueprint" && (reasoningText || toolStatus)) && (
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: RADIUS.modal,
-                  background: COLORS.bg,
-                  border: `1px solid ${COLORS.border}`,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  color: COLORS.textDim,
-                  fontSize: 13,
-                }}
-              >
-                <CircleNotch
-                  size={13}
-                  weight="light"
-                  style={{ animation: "spin 1s linear infinite" }}
-                />
-                Thinking...
+      <Card style={{ padding: 16, position: "sticky", bottom: 16, backdropFilter: "blur(10px)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Go deeper</div>
+              <div style={{ fontSize: 12, color: COLORS.textDim }}>
+                Ask a follow-up about the selected card or the current run.
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div
-          style={{
-            padding: "12px 20px 20px",
-            borderTop: `1px solid ${COLORS.border}`,
-            flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              background: COLORS.bg,
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: RADIUS.modal,
-              padding: "10px 12px",
-              alignItems: "flex-end",
-            }}
-          >
+            {selected ? (
+              <Button size="sm" variant="ghost" onClick={() => onSelect(null)}>
+                Clear focus
+              </Button>
+            ) : null}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={mode === "blueprint" ? "What should this agent do?" : "Ask your agent anything..."}
-              rows={1}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder={selected ? `Ask about ${selected.title}...` : "Ask what this agent should do next..."}
+              rows={2}
               style={{
                 flex: 1,
-                background: "transparent",
-                border: "none",
-                color: COLORS.text,
-                fontSize: 14,
                 resize: "none",
-                outline: "none",
-                fontFamily: "inherit",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: RADIUS.modal,
+                background: COLORS.bg,
+                color: COLORS.text,
+                padding: "12px 14px",
+                fontSize: 14,
                 lineHeight: 1.5,
+                outline: "none",
               }}
             />
-            <button
-              onClick={() => handleSend()}
-              disabled={sending || !input.trim()}
-              style={{
-                background: input.trim() ? COLORS.accent : COLORS.surfaceHover,
-                border: "none",
-                borderRadius: RADIUS.button,
-                padding: "6px 10px",
-                cursor: input.trim() && !sending ? "pointer" : "default",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.15s ease",
-                flexShrink: 0,
-                opacity: sending ? 0.5 : 1,
+            <Button
+              onClick={() => {
+                const value = prompt.trim();
+                if (!value) return;
+                onAskDeeper?.(value, selected ? { eventId: selected.id, runId: selected.runId } : undefined);
+                setPrompt("");
               }}
+              style={{ minWidth: 120 }}
             >
-              <PaperPlaneTilt
-                size={16}
-                weight="light"
-                color={input.trim() ? COLORS.white : COLORS.textDim}
-              />
-            </button>
+              Ask
+            </Button>
           </div>
         </div>
-      </div>
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-
-        .aw-scroll::-webkit-scrollbar { width: 6px; }
-        .aw-scroll::-webkit-scrollbar-track { background: transparent; }
-        .aw-scroll::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
-        .aw-scroll::-webkit-scrollbar-thumb:hover { background: #352F3D; }
-        .aw-scroll { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
-
-      `}</style>
-    </>
+      </Card>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// OverviewPanel
-// ---------------------------------------------------------------------------
-
-const PROVIDER_NAMES: Record<string, string> = {
-  googleads: "Google Ads",
-  slack: "Slack",
-  meta: "Meta Ads",
-  ga4: "Google Analytics",
-  shopify: "Shopify",
-  stripe: "Stripe",
-  github: "GitHub",
-};
-
-// Data type → provider mapping (which provider supplies which data)
-const DATA_TYPE_PROVIDERS: Record<string, string> = {
-  search_terms: "googleads",
-  ad_metrics: "googleads",
-  budget_data: "googleads",
-  impression_share: "googleads",
-  quality_scores: "googleads",
-};
-
-function getRequiredProviders(consumes: string[]): string[] {
-  const providers = new Set<string>();
-  for (const dt of consumes) {
-    const provider = DATA_TYPE_PROVIDERS[dt];
-    if (provider) providers.add(provider);
-  }
-  return [...providers];
-}
-
-function OverviewPanel({
-  agent,
-  projectId,
-  availableSkills = [],
-  projectConnections = [],
-  onUpdateConfig,
+function ToolTrustRow({
+  label,
+  value,
+  tone,
 }: {
-  agent: AgentView;
-  projectId: string;
-  availableSkills?: Array<{ id: string; name: string; description: string; consumes?: string[] }>;
-  projectConnections?: Array<{ id: string; provider: string; status: string }>;
-  onUpdateConfig?: (updates: Record<string, unknown>) => void;
+  label: string;
+  value: number;
+  tone: "success" | "warning" | "danger" | "info";
 }) {
-  const [instructions, setInstructions] = useState(agent.description || agent.intent || "");
-  const [notifyOnComplete, setNotifyOnComplete] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set(agent.skills));
-  const [skillApprovals, setSkillApprovals] = useState<Record<string, boolean>>({});
-  const [approvalMode, setApprovalMode] = useState<"per-skill" | "all" | "never">(
-    agent.globalApprovalRequired ? "all" : "per-skill"
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ color: COLORS.textSecondary, fontSize: 13 }}>{label}</span>
+      <Badge color={tone === "success" ? "green" : tone === "warning" ? "yellow" : tone === "danger" ? "red" : "gray"}>
+        {value}
+      </Badge>
+    </div>
   );
-  const [approvalConditions, setApprovalConditions] = useState<string[]>([]);
-  const [channelInApp, setChannelInApp] = useState(true);
-  const [rules, setRules] = useState<string[]>(agent.policyRules);
-  const [connectingProviders, setConnectingProviders] = useState<Set<string>>(new Set());
-  const [localConnections, setLocalConnections] = useState<Array<{ id: string; provider: string; status: string }>>([]);
+}
 
-  const allConnections = [...(projectConnections ?? []), ...localConnections];
+function SettingsPanel({
+  agent,
+  skills,
+  connections,
+  requiredProviders,
+  onUpdateAgent,
+  isDraft,
+  onRunNow,
+}: {
+  agent: AgentLike;
+  skills: SkillLike[];
+  connections: ConnectionLike[];
+  requiredProviders: Array<{ provider: string; reason?: string }>;
+  onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
+  isDraft: boolean;
+  onRunNow?: () => void;
+}) {
+  const toolConfig = normalizeToolConfig(agent.toolConfig);
+  const notificationConfig = normalizeNotificationConfig(agent.notificationConfig);
+  const [name, setName] = useState(agent.name);
+  const [description, setDescription] = useState(agent.description ?? "");
+  const [instructions, setInstructions] = useState(agent.instructions ?? "");
+  const [schedule, setSchedule] = useState(agent.schedule ?? "manual");
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(agent.skills ?? []);
+  const [pendingToolConfig, setPendingToolConfig] = useState(toolConfig);
+  const [pendingNotificationConfig, setPendingNotificationConfig] = useState(notificationConfig);
+  const [saving, setSaving] = useState(false);
 
-  const scheduleLabels: Record<string, string> = {
-    hourly: "Every hour",
-    "6hours": "Every 6 hours",
-    daily: "Daily at 9am",
-    weekly: "Weekly on Monday",
-    manual: "Manual only",
+  useEffect(() => {
+    setName(agent.name);
+    setDescription(agent.description ?? "");
+    setInstructions(agent.instructions ?? "");
+    setSchedule(agent.schedule ?? "manual");
+    setSelectedSkills(agent.skills ?? []);
+    setPendingToolConfig(normalizeToolConfig(agent.toolConfig));
+    setPendingNotificationConfig(normalizeNotificationConfig(agent.notificationConfig));
+  }, [agent.id, agent.name, agent.description, agent.instructions, agent.schedule, agent.skills, agent.toolConfig, agent.notificationConfig]);
+
+  const toolEntries = Object.entries(pendingToolConfig.tools ?? {});
+  const autoCount = toolEntries.filter(([, tool]) => tool.enabled !== false && tool.approvalMode === "auto").length;
+  const approvalCount = toolEntries.filter(([, tool]) => tool.enabled !== false && tool.approvalMode === "approval").length;
+  const blockedCount = toolEntries.filter(([, tool]) => tool.approvalMode === "blocked").length;
+  const activeProviderSet = new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider));
+  const missingProviders = requiredProviders.filter((provider) => !activeProviderSet.has(provider.provider));
+
+  const persist = async (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
+    if (!onUpdateAgent) return;
+    setSaving(true);
+    try {
+      await onUpdateAgent(patch);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const [currentSchedule, setCurrentSchedule] = useState(agent.schedule);
-
-  useEffect(() => {
-    setInstructions(agent.description || agent.intent || "");
-  }, [agent.description, agent.intent]);
-
-  useEffect(() => {
-    setCurrentSchedule(agent.schedule);
-  }, [agent.schedule]);
-
-  useEffect(() => {
-    setActiveSkills(new Set(agent.skills));
-  }, [agent.skills]);
-
-  useEffect(() => {
-    setRules(agent.policyRules);
-  }, [agent.policyRules]);
-
   return (
-    <div>
-      {/* Identity */}
-      <SectionHeading>Identity</SectionHeading>
-      <SettingsCard>
-        <SettingsRow
-          icon="✦"
-          title="Instructions"
-          defaultExpanded={true}
-        >
-          <textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            onBlur={async () => {
-              if (instructions !== (agent.description || agent.intent || "") && onUpdateConfig) {
-                setSaving(true);
-                await onUpdateConfig({ description: instructions });
-                setSaving(false);
-              }
-            }}
-            placeholder="Describe what this agent should do..."
-            rows={6}
-            style={{
-              width: "100%",
-              background: COLORS.bg,
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 6,
-              color: COLORS.text,
-              fontSize: 13,
-              lineHeight: 1.7,
-              padding: "10px 12px",
-              outline: "none",
-              fontFamily: "inherit",
-              resize: "vertical",
-            }}
-          />
-          {saving && <span style={{ fontSize: 11, color: COLORS.textDim, marginTop: 4 }}>Saving...</span>}
-        </SettingsRow>
-        <SettingsRow icon="◷" title="Schedule" value={scheduleLabels[currentSchedule] ?? currentSchedule}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {Object.entries(scheduleLabels).map(([value, label]) => (
-              <button
-                key={value}
-                onClick={async () => {
-                  setCurrentSchedule(value);
-                  onUpdateConfig?.({ schedule: value });
-                }}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 99,
-                  border: `1px solid ${currentSchedule === value ? COLORS.accent : COLORS.border}`,
-                  background: currentSchedule === value ? COLORS.accentDim : "transparent",
-                  color: currentSchedule === value ? COLORS.accentLight : COLORS.textSecondary,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {label}
-              </button>
-            ))}
+    <div style={{ display: "grid", gap: 18 }}>
+      {isDraft ? (
+        <Card style={{ padding: 18, borderLeft: `3px solid ${COLORS.yellow}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0 }}>
+              <Badge color="yellow">Setup</Badge>
+              <h3 style={{ margin: "10px 0 6px", color: COLORS.text, fontSize: 16 }}>Draft agent</h3>
+              <p style={{ margin: 0, color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                Finish the instructions, tools, and required connections before launching.
+              </p>
+            </div>
+            {onRunNow ? (
+              <Button variant="secondary" onClick={onRunNow}>
+                Run check
+              </Button>
+            ) : null}
           </div>
-        </SettingsRow>
-      </SettingsCard>
-
-      {/* Skills */}
-      {(availableSkills.length > 0 || agent.skills.length > 0) && (
-        <>
-          <SectionHeading>Skills</SectionHeading>
-          <SettingsCard>
-            {availableSkills.map((skill, i) => {
-              const isActive = activeSkills.has(skill.id);
-              const needsApproval = skillApprovals[skill.id] ?? false;
-              return (
-                <SettingsRow
-                  key={skill.id}
-                  icon="◈"
-                  title={skill.name}
-                  description={skill.description}
-                  isLast={i === availableSkills.length - 1}
-                  trailing={
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const next = new Set(activeSkills);
-                        if (isActive) next.delete(skill.id);
-                        else next.add(skill.id);
-                        setActiveSkills(next);
-                        onUpdateConfig?.({ skills: [...next] });
-                      }}
-                      style={{
-                        width: 36,
-                        height: 20,
-                        borderRadius: 10,
-                        border: "none",
-                        background: isActive ? COLORS.accent : COLORS.border,
-                        cursor: "pointer",
-                        position: "relative",
-                        transition: "background 0.15s ease",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span style={{
-                        position: "absolute",
-                        top: 2,
-                        left: isActive ? 18 : 2,
-                        width: 16,
-                        height: 16,
-                        borderRadius: 8,
-                        background: COLORS.white,
-                        transition: "left 0.15s ease",
-                      }} />
-                    </button>
-                  }
-                >
-                  {isActive && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {/* Required connections for this skill */}
-                      {(() => {
-                        const requiredProviders = getRequiredProviders((skill as { consumes?: string[] }).consumes ?? []);
-                        if (requiredProviders.length === 0) return null;
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {requiredProviders.map((provider) => {
-                              const isConnected = allConnections.some(
-                                (pc) => pc.provider === provider && pc.status === "active"
-                              );
-                              const isConnecting = connectingProviders.has(provider);
-                              return (
-                                <div
-                                  key={provider}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    padding: "6px 10px",
-                                    borderRadius: 6,
-                                    background: isConnected ? COLORS.greenDim : COLORS.yellowDim,
-                                    border: `1px solid ${isConnected ? "transparent" : COLORS.yellow}`,
-                                  }}
-                                >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <span style={{ fontSize: 12, color: isConnected ? COLORS.green : COLORS.yellow }}>
-                                      {isConnected ? "●" : "⚠"}
-                                    </span>
-                                    <span style={{ fontSize: 12, color: COLORS.textSecondary }}>
-                                      {PROVIDER_NAMES[provider] ?? provider}
-                                    </span>
-                                  </div>
-                                  {isConnected ? (
-                                    <span style={{ fontSize: 11, color: COLORS.green, fontWeight: 500 }}>Connected</span>
-                                  ) : isConnecting ? (
-                                    <span style={{
-                                      fontSize: 11,
-                                      fontWeight: 500,
-                                      color: COLORS.accent,
-                                      animation: "aw-pulse 1.5s ease-in-out infinite",
-                                    }}>
-                                      Waiting for auth...
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={async () => {
-                                        // Open popup FIRST (synchronous, from user gesture) to avoid popup blocker
-                                        const popup = window.open("about:blank", `connect-${provider}`, "width=600,height=700,left=200,top=100");
-                                        // Write a loading page immediately so the popup isn't empty
-                                        if (popup) {
-                                          popup.document.write(`
-                                            <html><body style="font-family:system-ui;background:#100F14;color:#E8E9ED;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-                                              <div style="text-align:center">
-                                                <div style="font-size:32px;margin-bottom:16px;color:#6C5CE7">✦</div>
-                                                <p style="color:#8B8D98;font-size:14px;margin:0">Connecting to ${PROVIDER_NAMES[provider] ?? provider}...</p>
-                                              </div>
-                                            </body></html>`);
-                                        }
-                                        setConnectingProviders((prev) => new Set(prev).add(provider));
-                                        try {
-                                          const { initiateConnection } = await import("~/server/connections");
-                                          const result = await initiateConnection({
-                                            data: {
-                                              projectId,
-                                              provider,
-                                              callbackUrl: `${window.location.origin}/${projectId}/callback/composio?provider=${provider}&popup=true`,
-                                            },
-                                          });
-                                          const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
-                                          if (redirectUrl && popup) {
-                                            // Navigate the already-open popup to the OAuth URL
-                                            popup.location.href = redirectUrl;
-
-                                            const pollInterval = setInterval(async () => {
-                                              try {
-                                                const { checkConnection } = await import("~/server/connections");
-                                                const status = await checkConnection({ data: { projectId, provider } });
-                                                if ((status as { connected: boolean }).connected) {
-                                                  clearInterval(pollInterval);
-                                                  setConnectingProviders((prev) => {
-                                                    const next = new Set(prev);
-                                                    next.delete(provider);
-                                                    return next;
-                                                  });
-                                                  setLocalConnections((prev) => [...prev, { id: provider, provider, status: "active" }]);
-                                                  try { popup?.close(); } catch {}
-                                                }
-                                              } catch {}
-                                            }, 2000);
-
-                                            setTimeout(() => {
-                                              clearInterval(pollInterval);
-                                              setConnectingProviders((prev) => {
-                                                const next = new Set(prev);
-                                                next.delete(provider);
-                                                return next;
-                                              });
-                                            }, 60000);
-                                          }
-                                        } catch (err) {
-                                          console.error("Failed to initiate connection:", err);
-                                          // Show error in the popup instead of closing it
-                                          if (popup && !popup.closed) {
-                                            popup.document.body.innerHTML = `
-                                              <div style="font-family:system-ui;padding:40px;text-align:center;background:#100F14;color:#E8E9ED;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                                                <p style="color:#E07070;margin:0 0 12px">Connection failed</p>
-                                                <p style="color:#8B8D98;font-size:13px;margin:0 0 20px">${err instanceof Error ? err.message : String(err)}</p>
-                                                <button onclick="window.close()" style="background:#6C5CE7;color:white;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
-                                              </div>`;
-                                          }
-                                          setConnectingProviders((prev) => {
-                                            const next = new Set(prev);
-                                            next.delete(provider);
-                                            return next;
-                                          });
-                                        }
-                                      }}
-                                      style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        color: COLORS.yellow,
-                                        background: "none",
-                                        border: "none",
-                                        cursor: "pointer",
-                                        fontFamily: "inherit",
-                                        padding: 0,
-                                      }}
-                                    >
-                                      Connect →
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Require approval toggle */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Require approval</span>
-                        <button
-                          onClick={() => {
-                            setSkillApprovals((prev) => ({ ...prev, [skill.id]: !needsApproval }));
-                          }}
-                          style={{
-                            width: 36,
-                            height: 20,
-                            borderRadius: 10,
-                            border: "none",
-                            background: needsApproval ? COLORS.accent : COLORS.border,
-                            cursor: "pointer",
-                            position: "relative",
-                            transition: "background 0.15s ease",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <span style={{
-                            position: "absolute",
-                            top: 2,
-                            left: needsApproval ? 18 : 2,
-                            width: 16,
-                            height: 16,
-                            borderRadius: 8,
-                            background: COLORS.white,
-                            transition: "left 0.15s ease",
-                          }} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </SettingsRow>
-              );
-            })}
-          </SettingsCard>
-        </>
-      )}
-
-      {/* Policy */}
-      <SectionHeading>Policy</SectionHeading>
-      <SettingsCard>
-        {rules.map((rule, i) => (
-          <SettingsRow
-            key={i}
-            icon="◉"
-            title={rule}
-            description="Policy rule"
-            trailing={
-              <button
-                onClick={() => {
-                  const next = rules.filter((_, j) => j !== i);
-                  setRules(next);
-                  onUpdateConfig?.({ policyRules: next });
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: COLORS.textDim,
-                  cursor: "pointer",
-                  padding: 4,
-                  fontSize: 14,
-                  lineHeight: 1,
-                  transition: "color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
-              >
-                ×
-              </button>
-            }
-          />
-        ))}
-        <div style={{ padding: "8px 16px 12px 62px" }}>
-          <input
-            placeholder="Add policy rule..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
-                const value = (e.target as HTMLInputElement).value.trim();
-                const next = [...rules, value];
-                setRules(next);
-                onUpdateConfig?.({ policyRules: next });
-                (e.target as HTMLInputElement).value = "";
-              }
-            }}
-            style={{
-              width: "100%",
-              background: "none",
-              border: "none",
-              borderBottom: `1px solid ${COLORS.border}`,
-              color: COLORS.text,
-              fontSize: 13,
-              padding: "6px 0",
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-          />
-        </div>
-      </SettingsCard>
-
-      {/* Connections — clickable to connect */}
-      {(agent.connections?.length ?? 0) > 0 && (
-        <>
-          <SectionHeading>Connections</SectionHeading>
-          <SettingsCard>
-            {agent.connections.map((conn, i) => {
-              const isConnected = allConnections.some(
-                (pc) => pc.provider === conn.provider && pc.status === "active"
-              );
-              const isConnecting = connectingProviders.has(conn.provider);
-              return (
-                <SettingsRow
-                  key={conn.provider}
-                  icon={isConnected ? "●" : "⚠"}
-                  iconColor={isConnected ? COLORS.green : COLORS.yellow}
-                  title={PROVIDER_NAMES[conn.provider] ?? conn.provider}
-                  description={conn.reason}
-                  isLast={i === agent.connections.length - 1}
-                  onClick={!isConnected && !isConnecting ? async () => {
-                    setConnectingProviders((prev) => new Set(prev).add(conn.provider));
-                    try {
-                      const { initiateConnection } = await import("~/server/connections");
-                      const result = await initiateConnection({
-                        data: {
-                          projectId,
-                          provider: conn.provider,
-                          callbackUrl: `${window.location.origin}/${projectId}/callback/composio?provider=${conn.provider}&popup=true`,
-                        },
-                      });
-                      const redirectUrl = (result as { redirectUrl: string }).redirectUrl;
-                      if (redirectUrl) {
-                        const popup = window.open(redirectUrl, `connect-${conn.provider}`, "width=600,height=700,left=200,top=100");
-                        const pollInterval = setInterval(async () => {
-                          try {
-                            const { checkConnection } = await import("~/server/connections");
-                            const status = await checkConnection({ data: { projectId, provider: conn.provider } });
-                            if ((status as { connected: boolean }).connected) {
-                              clearInterval(pollInterval);
-                              setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
-                              setLocalConnections((prev) => [...prev, { id: conn.provider, provider: conn.provider, status: "active" }]);
-                              try { popup?.close(); } catch {}
-                            }
-                          } catch {}
-                        }, 2000);
-                        setTimeout(() => {
-                          clearInterval(pollInterval);
-                          setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
-                        }, 60000);
-                      }
-                    } catch (err) {
-                      console.error("Failed to initiate connection:", err);
-                      setConnectingProviders((prev) => { const next = new Set(prev); next.delete(conn.provider); return next; });
-                    }
-                  } : undefined}
-                  trailing={
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: isConnected ? COLORS.green : isConnecting ? COLORS.accent : COLORS.yellow,
-                    }}>
-                      {isConnected ? "Connected" : isConnecting ? "Connecting..." : "Not connected"}
-                    </span>
-                  }
-                />
-              );
-            })}
-          </SettingsCard>
-        </>
-      )}
-
-      {/* Notifications */}
-      <SectionHeading>Notifications</SectionHeading>
-      <SettingsCard>
-        {/* Global approval override */}
-        <SettingsRow
-          icon="⊘"
-          title="Require approval"
-          description="When should actions need your approval"
-          value={approvalMode === "all" ? "All actions" : approvalMode === "never" ? "Never" : "Per skill"}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {(["per-skill", "all", "never"] as const).map((mode) => {
-              const labels = {
-                "per-skill": "Per skill — respect each skill's setting",
-                "all": "All actions — always ask before acting",
-                "never": "Never — auto-approve everything",
-              };
-              return (
-                <button
-                  key={mode}
-                  onClick={() => {
-                    setApprovalMode(mode);
-                    onUpdateConfig?.({ globalApprovalRequired: mode === "all" });
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    border: `1px solid ${approvalMode === mode ? COLORS.accent : COLORS.border}`,
-                    background: approvalMode === mode ? COLORS.accentDim : "transparent",
-                    color: approvalMode === mode ? COLORS.text : COLORS.textSecondary,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    transition: "all 0.15s ease",
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                >
-                  <span style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 7,
-                    border: `2px solid ${approvalMode === mode ? COLORS.accent : COLORS.border}`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}>
-                    {approvalMode === mode && (
-                      <span style={{ width: 6, height: 6, borderRadius: 3, background: COLORS.accent }} />
-                    )}
-                  </span>
-                  {labels[mode]}
-                </button>
-              );
-            })}
-          </div>
-          {/* Custom conditions */}
-          {approvalMode === "per-skill" && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Additional conditions
-              </div>
-              {approvalConditions.map((condition, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: COLORS.textSecondary, flex: 1 }}>{condition}</span>
-                  <button
-                    onClick={() => setApprovalConditions((prev) => prev.filter((_, j) => j !== i))}
-                    style={{
-                      background: "none", border: "none", color: COLORS.textDim,
-                      cursor: "pointer", padding: 2, fontSize: 14, lineHeight: 1,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
-                  >×</button>
+          {missingProviders.length > 0 ? (
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              {missingProviders.map((provider) => (
+                <div key={provider.provider} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: RADIUS.button, background: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
+                  <span style={{ color: COLORS.textSecondary, fontSize: 13 }}>{humanize(provider.provider)}</span>
+                  <Badge color="yellow">Required</Badge>
                 </div>
               ))}
-              <input
-                placeholder="e.g. budget changes over $500..."
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
-                    const value = (e.target as HTMLInputElement).value.trim();
-                    setApprovalConditions((prev) => [...prev, value]);
-                    (e.target as HTMLInputElement).value = "";
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  background: "none",
-                  border: "none",
-                  borderBottom: `1px solid ${COLORS.border}`,
-                  color: COLORS.text,
-                  fontSize: 12,
-                  padding: "6px 0",
-                  outline: "none",
-                  fontFamily: "inherit",
-                }}
-              />
             </div>
-          )}
-        </SettingsRow>
+          ) : null}
+        </Card>
+      ) : null}
 
-        <SettingsRow
-          icon="◎"
-          title="Run complete"
-          description="Notify when a run finishes"
-          trailing={
-            <button
-              onClick={() => setNotifyOnComplete((v) => !v)}
-              style={{
-                width: 36, height: 20, borderRadius: 10, border: "none",
-                background: notifyOnComplete ? COLORS.accent : COLORS.border,
-                cursor: "pointer", position: "relative",
-                transition: "background 0.15s ease", flexShrink: 0,
-              }}
-            >
-              <span style={{
-                position: "absolute", top: 2,
-                left: notifyOnComplete ? 18 : 2,
-                width: 16, height: 16, borderRadius: 8,
-                background: COLORS.white, transition: "left 0.15s ease",
-              }} />
-            </button>
-          }
-        />
-
-        <SettingsRow
-          icon="◎"
-          title="Daily digest"
-          description="Summary of agent activity"
-          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
-          isLast={true}
-        />
-      </SettingsCard>
-
-      {/* Channels */}
-      <SectionHeading>Channels</SectionHeading>
-      <SettingsCard>
-        <SettingsRow
-          icon="◎"
-          title="In-app"
-          description="Notifications in Nochore"
-          trailing={
-            <button
-              onClick={() => setChannelInApp((v) => !v)}
-              style={{
-                width: 36, height: 20, borderRadius: 10, border: "none",
-                background: channelInApp ? COLORS.accent : COLORS.border,
-                cursor: "pointer", position: "relative",
-                transition: "background 0.15s ease", flexShrink: 0,
-              }}
-            >
-              <span style={{
-                position: "absolute", top: 2,
-                left: channelInApp ? 18 : 2,
-                width: 16, height: 16, borderRadius: 8,
-                background: COLORS.white, transition: "left 0.15s ease",
-              }} />
-            </button>
-          }
-        />
-        <SettingsRow
-          icon="◎"
-          title="Email"
-          description="Email notifications"
-          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
-        />
-        <SettingsRow
-          icon="◎"
-          title="Slack"
-          description="Slack notifications"
-          trailing={<span style={{ fontSize: 11, color: COLORS.textDim }}>Coming soon</span>}
-          isLast={true}
-        />
-      </SettingsCard>
-    </div>
-  );
-}
-
-
-// ---------------------------------------------------------------------------
-// AgentWorkspace — main export
-// ---------------------------------------------------------------------------
-
-export function AgentWorkspace({
-  agent,
-  project,
-  availableSkills = [],
-  projectConnections = [],
-  onBack,
-  onDeleteAgent,
-  onRunNow,
-  runs = [],
-  pendingActions = [],
-  onApprove,
-  onReject,
-}: AgentWorkspaceProps) {
-  const [chatOpen, setChatOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [runningNow, setRunningNow] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview");
-  const [blueprintDone, setBlueprintDone] = useState(false);
-  const [localOverrides, setLocalOverrides] = useState<Partial<AgentView> | null>(null);
-
-  const isNewAgent = !agent.description && !agent.intent && !blueprintDone;
-  const displayAgent = localOverrides ? { ...agent, ...localOverrides } : agent;
-
-  useEffect(() => {
-    if (isNewAgent) {
-      setChatOpen(true);
-    }
-  }, [isNewAgent]);
-
-  return (
-    <div style={{ position: "relative" }}>
-      <style>{`
-        textarea::-webkit-scrollbar { width: 5px; }
-        textarea::-webkit-scrollbar-track { background: transparent; }
-        textarea::-webkit-scrollbar-thumb { background: #2A2630; border-radius: 3px; }
-        textarea::-webkit-scrollbar-thumb:hover { background: #352F3D; }
-        textarea { scrollbar-width: thin; scrollbar-color: #2A2630 transparent; }
-        @keyframes aw-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-        /* Markdown styles for assistant messages */
-        .aw-md { color: ${COLORS.text}; font-size: 14px; line-height: 1.65; font-family: "General Sans", sans-serif; }
-        .aw-md p { margin: 0 0 8px 0; }
-        .aw-md p:last-child { margin-bottom: 0; }
-        .aw-md strong { color: ${COLORS.text}; font-weight: 600; }
-        .aw-md em { color: ${COLORS.textSecondary}; }
-        .aw-md h1, .aw-md h2, .aw-md h3 { color: ${COLORS.text}; font-family: "Satoshi", sans-serif; margin: 16px 0 8px 0; font-weight: 600; }
-        .aw-md h1 { font-size: 16px; }
-        .aw-md h2 { font-size: 15px; }
-        .aw-md h3 { font-size: 14px; }
-        .aw-md ul, .aw-md ol { margin: 4px 0 8px 0; padding-left: 20px; }
-        .aw-md li { margin-bottom: 4px; }
-        .aw-md li::marker { color: ${COLORS.textDim}; }
-        .aw-md code { background: rgba(255,255,255,0.06); color: ${COLORS.accentLight}; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: "JetBrains Mono", "Fira Code", monospace; }
-        .aw-md pre { background: rgba(0,0,0,0.3); border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 12px 14px; margin: 8px 0; overflow-x: auto; }
-        .aw-md pre code { background: none; padding: 0; color: ${COLORS.textSecondary}; font-size: 13px; }
-        .aw-md blockquote { border-left: 3px solid ${COLORS.accent}; margin: 8px 0; padding: 4px 12px; color: ${COLORS.textSecondary}; }
-        .aw-md a { color: ${COLORS.accent}; text-decoration: none; }
-        .aw-md a:hover { text-decoration: underline; }
-        .aw-md hr { border: none; border-top: 1px solid ${COLORS.border}; margin: 12px 0; }
-      `}</style>
-      {/* ------------------------------------------------------------------ */}
-      {/* Header                                                               */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          marginBottom: 0,
-        }}
-      >
-        {/* Back */}
-        <button
-          onClick={onBack}
-          style={{
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            color: COLORS.textSecondary,
-            padding: 6,
-            borderRadius: RADIUS.button,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "all 0.15s ease",
-            flexShrink: 0,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = COLORS.surfaceHover;
-            e.currentTarget.style.color = COLORS.text;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = COLORS.textSecondary;
-          }}
-        >
-          <ArrowLeft size={18} weight="light" />
-        </button>
-
-        {/* Agent name */}
-        <h1
-          style={{
-            fontSize: 20,
-            fontWeight: 700,
-            color: COLORS.text,
-            margin: 0,
-            fontFamily: '"Satoshi", sans-serif',
-            lineHeight: 1.2,
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          {displayAgent.name}
-        </h1>
-
-        {/* Run Now */}
-        {onRunNow && !isNewAgent && (
-          <button
-            onClick={async () => {
-              setRunningNow(true);
-              setActiveTab("activity");
-              try {
-                await onRunNow();
-              } finally {
-                setRunningNow(false);
-              }
-            }}
-            disabled={runningNow}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 14px",
-              background: runningNow ? COLORS.surface : COLORS.accentDim,
-              border: `1px solid ${runningNow ? COLORS.border : COLORS.accent}`,
-              borderRadius: RADIUS.button,
-              color: runningNow ? COLORS.textDim : COLORS.accent,
-              fontSize: 13,
-              fontWeight: 600,
-              fontFamily: "inherit",
-              cursor: runningNow ? "default" : "pointer",
-              transition: "all 0.15s ease",
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              if (!runningNow) {
-                e.currentTarget.style.background = COLORS.accent;
-                e.currentTarget.style.color = "#fff";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!runningNow) {
-                e.currentTarget.style.background = COLORS.accentDim;
-                e.currentTarget.style.color = COLORS.accent;
-              }
-            }}
-          >
-            {runningNow ? (
-              <CircleNotch size={14} weight="bold" style={{ animation: "spin 1s linear infinite" }} />
-            ) : (
-              <Play size={14} weight="fill" />
-            )}
-            {runningNow ? "Running..." : "Run now"}
-          </button>
-        )}
-
-        {/* More menu */}
-        <div style={{ position: "relative" }}>
-          <IconButton
-            active={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-            label="More"
-          >
-            <DotsThree size={18} weight="bold" />
-          </IconButton>
-          {menuOpen && (
-            <>
-              <div
-                onClick={() => setMenuOpen(false)}
-                style={{ position: "fixed", inset: 0, zIndex: 39 }}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(300px, 1fr)", gap: 18, alignItems: "start" }}>
+        <div style={{ display: "grid", gap: 18 }}>
+          <SettingsCard>
+            <SectionHeading>Identity</SectionHeading>
+            <SettingsRow icon="✦" title="Name" description="How the workspace refers to this agent." defaultExpanded>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                onBlur={() => void persist({ name })}
+                style={fieldStyle}
               />
-              <div style={{
-                position: "absolute",
-                top: "100%",
-                right: 0,
-                marginTop: 4,
-                background: COLORS.surface,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 6,
-                padding: "4px 0",
-                minWidth: 180,
-                zIndex: 40,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
-              }}>
-                <button
-                  onClick={() => {
-                    if (confirm("Delete this agent and all its data?")) {
-                      onDeleteAgent?.();
-                    }
-                    setMenuOpen(false);
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "8px 16px",
-                    background: "none",
-                    border: "none",
-                    color: COLORS.red,
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    textAlign: "left",
-                    transition: "background 0.1s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surfaceHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                >
-                  Delete agent
-                </button>
+            </SettingsRow>
+            <SettingsRow icon="◌" title="Description" description="A concise summary of the agent's job." defaultExpanded>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                onBlur={() => void persist({ description })}
+                rows={4}
+                style={{ ...fieldStyle, minHeight: 120, resize: "vertical" }}
+              />
+            </SettingsRow>
+            <SettingsRow icon="◷" title="Schedule" value={humanize(schedule)} defaultExpanded>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => {
+                      setSchedule(value);
+                      void persist({ schedule: value });
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 999,
+                      border: `1px solid ${schedule === value ? COLORS.accent : COLORS.border}`,
+                      background: schedule === value ? COLORS.accentDim : COLORS.bg,
+                      color: schedule === value ? COLORS.accentLight : COLORS.textSecondary,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {humanize(value)}
+                  </button>
+                ))}
               </div>
-            </>
-          )}
+            </SettingsRow>
+          </SettingsCard>
+
+          <SettingsCard>
+            <SectionHeading>Instructions</SectionHeading>
+            <div style={{ padding: 16 }}>
+              <textarea
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+                onBlur={() => void persist({ instructions })}
+                placeholder="Tell the agent what to optimize for, what to avoid, and how to think."
+                rows={12}
+                style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
+              />
+              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ color: COLORS.textDim, fontSize: 12 }}>
+                  {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
+                </span>
+                <Button variant="secondary" size="sm" onClick={() => void persist({ instructions, description, name })}>
+                  Save instructions
+                </Button>
+              </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard>
+            <SectionHeading>Skills</SectionHeading>
+            {skills.length === 0 ? (
+              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>No skills selected yet.</div>
+            ) : (
+              skills.map((skill, index) => {
+                const isEnabled = selectedSkills.includes(skill.id);
+                return (
+                  <SettingsRow
+                    key={skill.id}
+                    icon="◈"
+                    title={skill.name}
+                    description={skill.description}
+                    isLast={index === skills.length - 1}
+                    trailing={
+                      <button
+                        onClick={() => {
+                          const next = isEnabled
+                            ? selectedSkills.filter((id) => id !== skill.id)
+                            : [...selectedSkills, skill.id];
+                          setSelectedSkills(next);
+                          void persist({ skills: next });
+                        }}
+                        style={{
+                          width: 40,
+                          height: 22,
+                          borderRadius: 999,
+                          border: "none",
+                          background: isEnabled ? COLORS.accent : COLORS.border,
+                          position: "relative",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <span style={{ position: "absolute", inset: 3, width: 16, height: 16, borderRadius: 999, background: COLORS.white, left: isEnabled ? 19 : 3, transition: "left 0.15s ease" }} />
+                      </button>
+                    }
+                  />
+                );
+              })
+            )}
+          </SettingsCard>
         </div>
 
-        {/* Chat icon */}
-        <IconButton
-          active={chatOpen}
-          onClick={() => setChatOpen(true)}
-          label="Chat"
-        >
-          <ChatCircle size={18} weight="light" />
-        </IconButton>
+        <div style={{ display: "grid", gap: 18 }}>
+          <SettingsCard>
+            <SectionHeading>Tool Trust</SectionHeading>
+            <div style={{ padding: 16, display: "grid", gap: 10 }}>
+              <ToolTrustRow label="Auto" value={autoCount} tone="success" />
+              <ToolTrustRow label="Approval" value={approvalCount} tone="warning" />
+              <ToolTrustRow label="Blocked" value={blockedCount} tone="danger" />
+              <ToolTrustRow label="Required providers" value={requiredProviders.length} tone="info" />
+            </div>
+          </SettingsCard>
+
+          <SettingsCard>
+            <SectionHeading>Per-tool settings</SectionHeading>
+            {toolEntries.length === 0 ? (
+              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>
+                No tool settings yet. They will appear once the server provides the tool catalog.
+              </div>
+            ) : (
+              toolEntries.map(([key, tool], index) => (
+                <SettingsRow
+                  key={key}
+                  icon={tool.mode === "write" ? "↗" : "↘"}
+                  title={tool.title ?? humanize(key)}
+                  description={tool.description}
+                  value={tool.approvalMode ? humanize(tool.approvalMode) : "Auto"}
+                  isLast={index === toolEntries.length - 1}
+                  defaultExpanded
+                >
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {(["auto", "approval", "blocked"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => {
+                          const next = {
+                            ...pendingToolConfig,
+                            tools: {
+                              ...(pendingToolConfig.tools ?? {}),
+                              [key]: {
+                                ...tool,
+                                approvalMode: mode,
+                                enabled: mode !== "blocked",
+                                toolName: tool.toolName ?? key,
+                              },
+                            },
+                          };
+                          setPendingToolConfig(next);
+                          void persist({ toolConfig: next });
+                        }}
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: 999,
+                          border: `1px solid ${tool.approvalMode === mode ? COLORS.accent : COLORS.border}`,
+                          background: tool.approvalMode === mode ? COLORS.accentDim : COLORS.bg,
+                          color: tool.approvalMode === mode ? COLORS.accentLight : COLORS.textSecondary,
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {humanize(mode)}
+                      </button>
+                    ))}
+                  </div>
+                </SettingsRow>
+              ))
+            )}
+          </SettingsCard>
+
+          <SettingsCard>
+            <SectionHeading>Connections</SectionHeading>
+            {requiredProviders.length === 0 && connections.length === 0 ? (
+              <div style={{ padding: 16, color: COLORS.textDim, fontSize: 13 }}>
+                No required providers yet.
+              </div>
+            ) : (
+              <div style={{ display: "grid" }}>
+                {requiredProviders.map((provider, index) => {
+                  const connection = connections.find((item) => item.provider === provider.provider);
+                  return (
+                    <SettingsRow
+                      key={provider.provider}
+                      icon={connection?.status === "active" ? "●" : "○"}
+                      title={humanize(provider.provider)}
+                      description={provider.reason ?? "Required for this agent."}
+                      value={connection?.status ?? "missing"}
+                      isLast={index === requiredProviders.length - 1}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </SettingsCard>
+
+          <SettingsCard>
+            <SectionHeading>Notifications</SectionHeading>
+            <SettingsRow
+              icon="◎"
+              title="In-app"
+              description="Show events in Nochore."
+              trailing={<Toggle checked={pendingNotificationConfig.inApp !== false} onChange={(checked) => { const next = { ...pendingNotificationConfig, inApp: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+            <SettingsRow
+              icon="✉"
+              title="Email"
+              description="Send email summaries."
+              trailing={<Toggle checked={pendingNotificationConfig.email === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, email: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+            <SettingsRow
+              icon="▣"
+              title="Slack"
+              description="Notify a Slack channel."
+              isLast
+              trailing={<Toggle checked={pendingNotificationConfig.slack === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, slack: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+            />
+          </SettingsCard>
+
+          <Card style={{ padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <Badge color={isDraft ? "yellow" : "green"}>{isDraft ? "Draft" : "Live"}</Badge>
+              <div style={{ fontSize: 15, fontWeight: 650, color: COLORS.text }}>Living dossier</div>
+            </div>
+            <div style={{ display: "grid", gap: 8, color: COLORS.textSecondary, fontSize: 13, lineHeight: 1.6 }}>
+              <div>Instructions: {instructions.trim() || "Not written yet."}</div>
+              <div>Skills: {selectedSkills.length ? selectedSkills.join(", ") : "None selected."}</div>
+              <div>Schedule: {humanize(schedule)}</div>
+              <div>Notifications: {pendingNotificationConfig.inApp !== false ? "In-app" : "Muted"}{pendingNotificationConfig.email ? ", email" : ""}{pendingNotificationConfig.slack ? ", Slack" : ""}</div>
+            </div>
+          </Card>
+        </div>
       </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Tab bar                                                              */}
-      {/* ------------------------------------------------------------------ */}
-      <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 24, marginTop: 16 }}>
-        {(["overview", "activity"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: `2px solid ${activeTab === tab ? COLORS.accent : "transparent"}`,
-              color: activeTab === tab ? COLORS.text : COLORS.textSecondary,
-              fontSize: 14,
-              fontWeight: activeTab === tab ? 600 : 400,
-              padding: "10px 16px",
-              cursor: "pointer",
-              fontFamily: '"Satoshi", sans-serif',
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => { if (activeTab !== tab) e.currentTarget.style.color = COLORS.text; }}
-            onMouseLeave={(e) => { if (activeTab !== tab) e.currentTarget.style.color = COLORS.textSecondary; }}
-          >
-            {tab === "overview" ? "Overview" : "Activity"}
-          </button>
-        ))}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Main content — overview or activity                                  */}
-      {/* ------------------------------------------------------------------ */}
-      {activeTab === "overview" ? (
-        <OverviewPanel
-          agent={displayAgent}
-          projectId={project.id}
-          availableSkills={availableSkills}
-          projectConnections={projectConnections}
-          onUpdateConfig={async (updates) => {
-            const { updateAgentConfig } = await import("~/server/agents");
-            await updateAgentConfig({
-              data: {
-                agentId: agent.id,
-                projectId: project.id,
-                ...updates,
-              },
-            });
-          }}
-        />
-      ) : (
-        <ActivityFeed
-          runs={runs}
-          pendingActions={pendingActions}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Chat drawer                                                          */}
-      {/* ------------------------------------------------------------------ */}
-      {chatOpen && (
-        <ChatDrawer
-          agentId={agent.id}
-          projectId={project.id}
-          agentName={displayAgent.name}
-          mode={isNewAgent ? "blueprint" : "chat"}
-          availableSkills={availableSkills}
-          onBlueprintComplete={(data) => {
-            setBlueprintDone(true);
-            if (data) {
-              setLocalOverrides({
-                name: data.name,
-                description: data.description,
-                skills: data.skills ?? [],
-                schedule: data.schedule ?? "manual",
-                connections: data.connections ?? [],
-              });
-            }
-          }}
-          onClose={() => setChatOpen(false)}
-        />
-      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// IconButton — small ghost icon button with active state
-// ---------------------------------------------------------------------------
-
-function IconButton({
-  children,
-  onClick,
-  active,
-  label,
+function Toggle({
+  checked,
+  onChange,
 }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  active?: boolean;
-  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
 }) {
   return (
     <button
-      onClick={onClick}
-      aria-label={label}
+      onClick={() => onChange(!checked)}
       style={{
-        background: active ? COLORS.accentDim : "transparent",
-        border: active ? `1px solid ${COLORS.accentLight}` : `1px solid transparent`,
+        width: 42,
+        height: 24,
+        border: "none",
+        borderRadius: 999,
+        background: checked ? COLORS.accent : COLORS.border,
+        position: "relative",
         cursor: "pointer",
-        color: active ? COLORS.accentLight : COLORS.textSecondary,
-        padding: 7,
-        borderRadius: RADIUS.button,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "all 0.15s ease",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = COLORS.surfaceHover;
-          e.currentTarget.style.color = COLORS.text;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = COLORS.textSecondary;
-        }
       }}
     >
-      {children}
+      <span
+        style={{
+          position: "absolute",
+          top: 4,
+          left: checked ? 22 : 4,
+          width: 16,
+          height: 16,
+          borderRadius: 999,
+          background: COLORS.white,
+          transition: "left 0.15s ease",
+        }}
+      />
     </button>
+  );
+}
+
+const fieldStyle: CSSProperties = {
+  width: "100%",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: RADIUS.modal,
+  background: COLORS.bg,
+  color: COLORS.text,
+  padding: "12px 14px",
+  fontSize: 14,
+  lineHeight: 1.55,
+  outline: "none",
+  fontFamily: "inherit",
+};
+
+export function AgentWorkspace(props: AgentWorkspaceProps) {
+  const {
+    agent,
+    project,
+    onBack,
+    onDeleteAgent,
+    onRunNow,
+    onApprove,
+    onReject,
+    onUpdateAgent,
+    onAskDeeper,
+    timelineEvents = [],
+    approvals = [],
+    runs = [],
+    pendingActions = [],
+    requiredProviders = [],
+    isDraft: isDraftProp,
+    activeRun,
+    onLiveRunComplete,
+  } = props;
+
+  const availableSkills = props.availableSkills ?? props.skills ?? [];
+  const projectConnections = props.projectConnections ?? [];
+  const isDraft = isDraftProp ?? (agent.status?.toLowerCase() === "draft");
+  const [tab, setTab] = useState<"timeline" | "settings">("timeline");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<TimelineItem | null>(null);
+
+  useEffect(() => {
+    setSelectedItem(null);
+  }, [agent.id]);
+
+  const timelineItems = useMemo(
+    () =>
+      toTimelineItems({
+        timelineEvents,
+        approvals,
+        runs,
+        pendingActions,
+      }),
+    [timelineEvents, approvals, runs, pendingActions],
+  );
+
+  const mergedRequiredProviders = useMemo(() => {
+    const config = normalizeToolConfig(agent.toolConfig);
+    const providers = new Map<string, { provider: string; reason?: string }>();
+    for (const entry of config.requiredProviders ?? []) {
+      providers.set(entry.provider, entry);
+    }
+    for (const entry of requiredProviders) {
+      providers.set(entry.provider, entry);
+    }
+    return [...providers.values()];
+  }, [agent.toolConfig, requiredProviders]);
+
+  const activeConnections = projectConnections.filter((connection) => connection.status === "active");
+
+  const handleSave = async (updates: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
+    await onUpdateAgent?.(updates);
+  };
+
+  return (
+    <div style={{ position: "relative", minHeight: "100vh" }}>
+      <style>{`
+        .aw-shell { color: ${COLORS.text}; }
+        .aw-shell textarea::-webkit-scrollbar { width: 6px; }
+        .aw-shell textarea::-webkit-scrollbar-track { background: transparent; }
+        .aw-shell textarea::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 999px; }
+        .aw-shell textarea { scrollbar-width: thin; scrollbar-color: ${COLORS.border} transparent; }
+      `}</style>
+
+      <div
+        className="aw-shell"
+        style={{
+          background: `radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 32%), linear-gradient(180deg, ${COLORS.bg} 0%, ${COLORS.bg} 100%)`,
+          padding: "28px clamp(20px, 3vw, 40px) 40px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 16, minWidth: 0 }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: "transparent",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: RADIUS.button,
+                cursor: "pointer",
+                color: COLORS.textSecondary,
+                width: 36,
+                height: 36,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+                <Badge color="accent">{project.icon ?? "◌"} {project.name}</Badge>
+                <Badge color={isDraft ? "yellow" : agent.status === "paused" ? "gray" : "green"}>
+                  {humanize(agent.status ?? (isDraft ? "draft" : "live"))}
+                </Badge>
+              </div>
+              <h1 style={{ margin: 0, fontSize: "clamp(24px, 3vw, 36px)", color: COLORS.text, lineHeight: 1.1 }}>
+                {agent.name}
+              </h1>
+              <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, maxWidth: 780, lineHeight: 1.6 }}>
+                {agent.description || agent.instructions || "No description yet."}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {onRunNow ? (
+              <Button onClick={onRunNow}>
+                <Play size={13} weight="bold" />
+                Run now
+              </Button>
+            ) : null}
+            <div style={{ position: "relative" }}>
+              <Button variant="ghost" onClick={() => setMoreOpen((value) => !value)}>
+                <DotsThree size={18} />
+                More
+              </Button>
+              {moreOpen ? (
+                <>
+                  <button
+                    aria-label="Close menu"
+                    onClick={() => setMoreOpen(false)}
+                    style={{ position: "fixed", inset: 0, border: "none", background: "transparent" }}
+                  />
+                  <div style={{ position: "absolute", right: 0, marginTop: 8, minWidth: 180, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 6, zIndex: 20 }}>
+                    {onDeleteAgent ? (
+                      <button
+                        onClick={() => {
+                          setMoreOpen(false);
+                          onDeleteAgent();
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          background: "transparent",
+                          border: "none",
+                          color: COLORS.red,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          borderRadius: 8,
+                        }}
+                      >
+                        Delete agent
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
+          {(["timeline", "settings"] as const).map((item) => (
+            <button
+              key={item}
+              onClick={() => setTab(item)}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: "12px 4px",
+                marginBottom: -1,
+                cursor: "pointer",
+                color: tab === item ? COLORS.text : COLORS.textDim,
+                borderBottom: `2px solid ${tab === item ? COLORS.accent : "transparent"}`,
+                fontWeight: 600,
+                fontSize: 14,
+              }}
+            >
+              {item === "timeline" ? "Timeline" : "Settings"}
+            </button>
+          ))}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, color: COLORS.textDim, fontSize: 12 }}>
+            <span>{activeConnections.length} connected</span>
+            <span>•</span>
+            <span>{mergedRequiredProviders.length} required</span>
+          </div>
+        </div>
+
+        {tab === "timeline" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
+            {activeRun && (
+              <LiveRunView
+                triggerRunId={activeRun.triggerRunId}
+                accessToken={activeRun.accessToken}
+                runId={activeRun.runId}
+                onComplete={onLiveRunComplete}
+                onApprove={onApprove ? (id, reason) => { void onApprove(id); } : undefined}
+                onReject={onReject ? (id, reason) => { void onReject(id); } : undefined}
+              />
+            )}
+            <TimelinePanel
+              items={timelineItems}
+              selected={selectedItem}
+              onSelect={setSelectedItem}
+              onApprove={(approvalId) => {
+                void onApprove?.(approvalId);
+              }}
+              onReject={(approvalId) => {
+                void onReject?.(approvalId);
+              }}
+              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              onAskDeeper={(prompt, context) => {
+                onAskDeeper?.(prompt, context);
+              }}
+            />
+          </div>
+        ) : (
+          <SettingsPanel
+            agent={agent}
+            skills={availableSkills}
+            connections={projectConnections}
+            requiredProviders={mergedRequiredProviders}
+            onUpdateAgent={handleSave}
+            isDraft={isDraft}
+            onRunNow={onRunNow ? () => void onRunNow() : undefined}
+          />
+        )}
+      </div>
+    </div>
   );
 }

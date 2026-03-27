@@ -1,4 +1,1 @@
-// Skill system — registration, lookup, and execution
-
-export { SkillRegistry } from "./registry";
-export { executeSkill } from "./executor";
+export { listPromptSkills, getPromptSkillById, type PromptSkill } from "./prompt-skills";

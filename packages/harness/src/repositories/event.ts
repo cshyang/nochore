@@ -1,80 +1,80 @@
-import { eq, and, gte, inArray, asc } from "drizzle-orm";
-import { agentEvents } from "../db/schema";
-import type { AgentEvent, EventFilter } from "../types/memory";
+import { asc, desc, eq } from "drizzle-orm";
+import { runEvents } from "../db/schema";
 import type { createDb } from "../db/client";
+import { RunEventSchema, type RunEvent, type RunEventType } from "../types";
 
 type Db = ReturnType<typeof createDb>;
 
-export class EventRepository {
+export interface CreateRunEventInput {
+  runId: string;
+  agentId: string;
+  timestamp: Date;
+  type: RunEventType;
+  payload: Record<string, unknown>;
+}
+
+export class RunEventRepository {
   constructor(private db: Db) {}
 
-  /**
-   * Append an event, generating an id. Returns the generated id.
-   */
-  async append(event: Omit<AgentEvent, "id">): Promise<string> {
+  async append(input: CreateRunEventInput): Promise<string> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(agentEvents)
-      .values({
-        id,
-        runId: event.runId,
-        agentId: event.agentId,
-        timestamp: event.timestamp.getTime(),
-        type: event.type,
-        data: JSON.stringify(event.data),
-      })
-      .run();
+    this.db.insert(runEvents).values({
+      id,
+      runId: input.runId,
+      agentId: input.agentId,
+      timestamp: input.timestamp.getTime(),
+      type: input.type,
+      payload: JSON.stringify(input.payload),
+    }).run();
     return id;
   }
 
-  /**
-   * Query events matching the given filter. Results ordered by timestamp ASC.
-   */
-  async query(filter: EventFilter): Promise<AgentEvent[]> {
-    const conditions = [];
+  async appendMany(inputs: CreateRunEventInput[]): Promise<void> {
+    if (inputs.length === 0) return;
+    this.db.insert(runEvents).values(
+      inputs.map((input) => ({
+        id: crypto.randomUUID(),
+        runId: input.runId,
+        agentId: input.agentId,
+        timestamp: input.timestamp.getTime(),
+        type: input.type,
+        payload: JSON.stringify(input.payload),
+      })),
+    ).run();
+  }
 
-    if (filter.agentId) {
-      conditions.push(eq(agentEvents.agentId, filter.agentId));
-    }
-    if (filter.runId) {
-      conditions.push(eq(agentEvents.runId, filter.runId));
-    }
-    if (filter.type) {
-      if (Array.isArray(filter.type)) {
-        conditions.push(inArray(agentEvents.type, filter.type));
-      } else {
-        conditions.push(eq(agentEvents.type, filter.type));
-      }
-    }
-    if (filter.since) {
-      conditions.push(gte(agentEvents.timestamp, filter.since.getTime()));
-    }
+  async listByRun(runId: string): Promise<RunEvent[]> {
+    return this.db
+      .select()
+      .from(runEvents)
+      .where(eq(runEvents.runId, runId))
+      .orderBy(asc(runEvents.timestamp))
+      .all()
+      .map(toRunEvent);
+  }
 
+  async listByAgent(agentId: string, limit?: number): Promise<RunEvent[]> {
     let query = this.db
       .select()
-      .from(agentEvents)
-      .orderBy(asc(agentEvents.timestamp));
+      .from(runEvents)
+      .where(eq(runEvents.agentId, agentId))
+      .orderBy(desc(runEvents.timestamp));
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as typeof query;
+    if (typeof limit === "number") {
+      query = query.limit(limit) as typeof query;
     }
 
-    if (filter.limit) {
-      query = query.limit(filter.limit) as typeof query;
-    }
-
-    const rows = query.all();
-    return rows.map(toAgentEvent);
+    return query.all().map(toRunEvent);
   }
 }
 
-function toAgentEvent(row: typeof agentEvents.$inferSelect): AgentEvent {
-  return {
+function toRunEvent(row: typeof runEvents.$inferSelect): RunEvent {
+  return RunEventSchema.parse({
     id: row.id,
     runId: row.runId,
     agentId: row.agentId,
     timestamp: new Date(row.timestamp),
-    type: row.type as AgentEvent["type"],
-    data: JSON.parse(row.data) as Record<string, unknown>,
-  };
+    type: row.type,
+    payload: JSON.parse(row.payload),
+  });
 }

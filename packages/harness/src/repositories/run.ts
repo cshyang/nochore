@@ -1,100 +1,102 @@
-import { eq, desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { runs } from "../db/schema";
-import type { RunResult } from "../types/run";
 import type { createDb } from "../db/client";
+import {
+  RunStatusSchema,
+  RunSummarySchema,
+  type RunRecord,
+  type RunStatus,
+  type RunSummary,
+  type RunTriggerType,
+} from "../types";
 
 type Db = ReturnType<typeof createDb>;
 
-/** Input for creating a new run (id is generated). */
 export interface CreateRunInput {
+  id?: string;
   agentId: string;
-  triggerType: string;
+  triggerType: RunTriggerType;
   startedAt: Date;
-}
-
-/** A hydrated run record with Date objects and parsed JSON. */
-export interface Run {
-  id: string;
-  agentId: string;
-  triggerType: string;
-  startedAt: Date;
-  completedAt?: Date;
-  result?: RunResult;
+  status?: RunStatus;
+  triggerRunId?: string;
 }
 
 export class RunRepository {
   constructor(private db: Db) {}
 
-  /**
-   * Create a new run. Returns the generated id.
-   */
   async create(input: CreateRunInput): Promise<string> {
-    const id = crypto.randomUUID();
-    this.db
-      .insert(runs)
-      .values({
-        id,
-        agentId: input.agentId,
-        triggerType: input.triggerType,
-        startedAt: input.startedAt.getTime(),
-      })
-      .run();
+    const id = input.id ?? crypto.randomUUID();
+    this.db.insert(runs).values({
+      id,
+      agentId: input.agentId,
+      triggerType: input.triggerType,
+      status: input.status ?? "queued",
+      startedAt: input.startedAt.getTime(),
+      triggerRunId: input.triggerRunId ?? null,
+    }).run();
     return id;
   }
 
-  /**
-   * Get a run by id. Returns null if not found.
-   */
-  async getById(id: string): Promise<Run | null> {
+  async setTriggerRunId(id: string, triggerRunId: string): Promise<void> {
+    this.db.update(runs).set({ triggerRunId }).where(eq(runs.id, id)).run();
+  }
+
+  async markRunning(id: string): Promise<void> {
+    this.db.update(runs).set({ status: "running", error: null }).where(eq(runs.id, id)).run();
+  }
+
+  async markWaitingForApproval(id: string): Promise<void> {
+    this.db.update(runs).set({ status: "waiting_for_approval" }).where(eq(runs.id, id)).run();
+  }
+
+  async complete(id: string, completedAt: Date, summary: RunSummary): Promise<void> {
+    this.db.update(runs).set({
+      status: "completed",
+      completedAt: completedAt.getTime(),
+      error: null,
+      summary: JSON.stringify(RunSummarySchema.parse(summary)),
+    }).where(eq(runs.id, id)).run();
+  }
+
+  async fail(id: string, completedAt: Date, error: string, summary?: RunSummary): Promise<void> {
+    this.db.update(runs).set({
+      status: "failed",
+      completedAt: completedAt.getTime(),
+      error,
+      summary: summary ? JSON.stringify(RunSummarySchema.parse(summary)) : null,
+    }).where(eq(runs.id, id)).run();
+  }
+
+  async getById(id: string): Promise<RunRecord | null> {
     const row = this.db.select().from(runs).where(eq(runs.id, id)).get();
-    return row ? toRun(row) : null;
+    return row ? toRunRecord(row) : null;
   }
 
-  /**
-   * Mark a run as completed with a result.
-   */
-  async complete(
-    id: string,
-    completedAt: Date,
-    result: RunResult
-  ): Promise<void> {
-    this.db
-      .update(runs)
-      .set({
-        completedAt: completedAt.getTime(),
-        result: JSON.stringify(result),
-      })
-      .where(eq(runs.id, id))
-      .run();
-  }
-
-  /**
-   * Get runs for an agent, ordered by startedAt descending (most recent first).
-   */
-  async getByAgent(agentId: string, limit?: number): Promise<Run[]> {
+  async getByAgent(agentId: string, limit?: number): Promise<RunRecord[]> {
     let query = this.db
       .select()
       .from(runs)
       .where(eq(runs.agentId, agentId))
       .orderBy(desc(runs.startedAt));
 
-    if (limit) {
+    if (typeof limit === "number") {
       query = query.limit(limit) as typeof query;
     }
 
-    const rows = query.all();
-    return rows.map(toRun);
+    return query.all().map(toRunRecord);
   }
 }
 
-function toRun(row: typeof runs.$inferSelect): Run {
+function toRunRecord(row: typeof runs.$inferSelect): RunRecord {
   return {
     id: row.id,
     agentId: row.agentId,
-    triggerType: row.triggerType,
+    triggerType: row.triggerType as RunRecord["triggerType"],
+    status: RunStatusSchema.parse(row.status),
     startedAt: new Date(row.startedAt),
-    completedAt:
-      row.completedAt != null ? new Date(row.completedAt) : undefined,
-    result: row.result ? (JSON.parse(row.result) as RunResult) : undefined,
+    completedAt: row.completedAt != null ? new Date(row.completedAt) : undefined,
+    error: row.error ?? undefined,
+    summary: row.summary ? RunSummarySchema.parse(JSON.parse(row.summary)) : undefined,
+    triggerRunId: row.triggerRunId ?? undefined,
   };
 }

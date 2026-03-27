@@ -1,59 +1,49 @@
-/**
- * Chat server functions.
- *
- * Bridges the frontend AgentChat component to the harness chat handler.
- * Uses StubConnectionManager until Composio integration is wired.
- */
-
 import { createServerFn } from "@tanstack/react-start";
-import { handleChat } from "../../../../packages/harness/src/chat/handler";
-import { StubConnectionManager } from "../../../../packages/harness/src/connections/stub";
-import { getProjectDeps, getAgentDeps, getAgentRow } from "./deps";
+import { getAgentRow, getProjectDeps } from "./deps";
+import { startAgentRun } from "./orchestration";
 import { jsonSafe } from "./serializable";
 
-// ---------------------------------------------------------------------------
-// sendChat — send a message to an agent and get a response
-// ---------------------------------------------------------------------------
-
 export const sendChat = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: { agentId: string; projectId: string; message: string }) => input,
-  )
+  .inputValidator((input: { agentId: string; projectId: string; message: string }) => input)
   .handler(async ({ data: { agentId, projectId, message } }) => {
-    // Load agent config from DB
-    const agent = getAgentRow(projectId, agentId);
+    const agent = await getAgentRow(projectId, agentId);
     if (!agent) {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    const agentDeps = getAgentDeps(projectId, agent.config);
-
-    // Stub connection manager until Composio integration is complete
-    const connectionManager = new StubConnectionManager({ data: {} });
-
-    const result = await handleChat({
+    const { runId, triggerRunId } = await startAgentRun({
       agentId,
-      config: agent.config,
-      message,
-      deps: {
-        ...agentDeps,
-        connectionManager,
+      projectId,
+      trigger: {
+        type: "chat",
+        timestamp: new Date(),
+        metadata: { message },
       },
     });
 
-    return jsonSafe(result);
+    return jsonSafe({
+      response: "Queued a background run for this request.",
+      startedRunId: runId,
+      triggerRunId,
+      toolActivitySummary: [],
+    });
   });
 
-// ---------------------------------------------------------------------------
-// getChatHistory — load chat history for an agent
-// ---------------------------------------------------------------------------
-
 export const getChatHistory = createServerFn({ method: "GET" })
-  .inputValidator(
-    (input: { agentId: string; projectId: string; limit?: number }) => input,
-  )
+  .inputValidator((input: { agentId: string; projectId: string; limit?: number }) => input)
   .handler(async ({ data: { agentId, projectId, limit } }) => {
-    const { chatSessionStore } = getProjectDeps(projectId);
-    const messages = await chatSessionStore.loadHistory(agentId, limit ?? 50);
-    return jsonSafe(messages);
+    const { runRepository } = getProjectDeps(projectId);
+    const runs = await runRepository.getByAgent(agentId, limit ?? 10);
+
+    return jsonSafe(
+      runs.map((run) => ({
+        id: run.id,
+        role: "assistant" as const,
+        content:
+          run.status === "failed"
+            ? run.error ?? "The run failed."
+            : `Run ${run.status} via ${run.triggerType}.`,
+        createdAt: run.completedAt?.toISOString() ?? run.startedAt.toISOString(),
+      })),
+    );
   });

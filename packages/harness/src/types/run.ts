@@ -1,73 +1,81 @@
 import { z } from "zod";
-import { ActionProposalSchema } from "./action";
-import type { AgentConfig } from "./agent-config";
-import type { MemoryStore } from "./memory";
 
 // ---------------------------------------------------------------------------
-// TriggerEvent — the event that initiated a run
+// Run status & trigger
 // ---------------------------------------------------------------------------
 
-export const TriggerEventSchema = z.object({
-  type: z.enum(["cron", "webhook", "manual", "chat"]),
+export const RunStatusSchema = z.enum([
+  "queued",
+  "running",
+  "waiting_for_approval",
+  "completed",
+  "failed",
+]);
+export type RunStatus = z.infer<typeof RunStatusSchema>;
+
+export const RunTriggerTypeSchema = z.enum(["cron", "manual", "chat", "webhook"]);
+export type RunTriggerType = z.infer<typeof RunTriggerTypeSchema>;
+
+export const RunTriggerSchema = z.object({
+  type: RunTriggerTypeSchema,
   timestamp: z.date(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
-
-export type TriggerEvent = z.infer<typeof TriggerEventSchema>;
+export type RunTrigger = z.infer<typeof RunTriggerSchema>;
 
 // ---------------------------------------------------------------------------
-// StepOutput — result of a single pipeline step
+// Run summary (stored as JSON in runs.summary)
 // ---------------------------------------------------------------------------
 
-export const LlmUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
+export const RunSummarySchema = z.object({
+  status: z.enum(["completed", "failed"]),
+  headline: z.string(),
+  details: z.array(z.string()),
+  finalText: z.string().optional(),
 });
-
-export type LlmUsage = z.infer<typeof LlmUsageSchema>;
-
-export const StepOutputSchema = z.object({
-  step: z.enum([
-    "scope",
-    "fetch",
-    "analyze",
-    "plan",
-    "policy",
-    "execute",
-    "memory",
-  ]),
-  duration: z.number(),
-  data: z.unknown(),
-  llmUsage: LlmUsageSchema.optional(),
-});
-
-export type StepOutput = z.infer<typeof StepOutputSchema>;
+export type RunSummary = z.infer<typeof RunSummarySchema>;
 
 // ---------------------------------------------------------------------------
-// RunResult — outcome of a completed agent run
+// Run record (hydrated from DB row)
 // ---------------------------------------------------------------------------
 
-export const RunResultSchema = z.object({
+export interface RunRecord {
+  id: string;
+  agentId: string;
+  triggerType: RunTriggerType;
+  status: RunStatus;
+  startedAt: Date;
+  completedAt?: Date;
+  error?: string;
+  summary?: RunSummary;
+  triggerRunId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Run events
+// ---------------------------------------------------------------------------
+
+export const RunEventTypeSchema = z.enum([
+  "run_started",
+  "prompt_built",
+  "tool_called",
+  "tool_approval_requested",
+  "tool_approval_resolved",
+  "tool_executed",
+  "finding_recorded",
+  "notification_sent",
+  "lesson_distilled",
+  "run_completed",
+  "run_failed",
+]);
+export type RunEventType = z.infer<typeof RunEventTypeSchema>;
+
+export const RunEventSchema = z.object({
+  id: z.string(),
   runId: z.string(),
   agentId: z.string(),
-  duration: z.number(),
-  steps: z.array(StepOutputSchema),
-  proposals: z.array(ActionProposalSchema),
-  eventsLogged: z.number(),
+  timestamp: z.date(),
+  type: RunEventTypeSchema,
+  payload: z.record(z.string(), z.unknown()),
 });
-
-export type RunResult = z.infer<typeof RunResultSchema>;
-
-// ---------------------------------------------------------------------------
-// RunContext — runtime context passed into the pipeline (not a Zod schema)
-// ---------------------------------------------------------------------------
-
-export interface RunContext {
-  runId: string;
-  agentId: string;
-  config: AgentConfig;
-  trigger: TriggerEvent;
-  memory: MemoryStore;
-  startedAt: Date;
-}
+export type RunEvent = z.infer<typeof RunEventSchema>;

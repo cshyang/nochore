@@ -1,35 +1,145 @@
-// ---------------------------------------------------------------------------
-// AgentView — computed from DB (agents + runs + lessons + pending_actions)
-// ---------------------------------------------------------------------------
-
-// TODO: simplify — schedule on/off replaces draft/live lifecycle
 export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
+export type AgentOperationalStatus = "running" | "attention" | "idle" | "error";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting_for_approval"
+  | "completed"
+  | "failed";
+export type ApprovalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "blocked"
+  | "expired";
+export type RunEventType =
+  | "run_started"
+  | "prompt_built"
+  | "tool_called"
+  | "tool_approval_requested"
+  | "tool_approval_resolved"
+  | "tool_executed"
+  | "finding_recorded"
+  | "notification_sent"
+  | "lesson_distilled"
+  | "run_completed"
+  | "run_failed";
 
-export interface AgentView {
+export interface ProviderRequirementView {
+  provider: string;
+  reason: string;
+  status?: string;
+  active?: boolean;
+}
+
+export interface ToolConfigEntryView {
+  toolName: string;
+  slug: string;
+  provider: string;
+  title: string;
+  description: string;
+  mode: "read" | "write";
+  enabled: boolean;
+  approvalMode: "auto" | "approval" | "blocked";
+  cooldownMinutes?: number;
+  budgetThreshold?: number;
+}
+
+export interface ToolConfigView {
+  requiredProviders: ProviderRequirementView[];
+  tools: Record<string, ToolConfigEntryView>;
+}
+
+export interface NotificationConfigView {
+  inApp: boolean;
+  email: boolean;
+  slack: boolean;
+}
+
+export interface RunSummaryView {
+  status: "completed" | "failed";
+  headline: string;
+  details: string[];
+  finalText?: string;
+}
+
+export interface RunView {
+  id: string;
+  agentId: string;
+  triggerType: string;
+  status: RunStatus;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+  summary?: RunSummaryView;
+}
+
+export interface RunEventView {
+  id: string;
+  runId: string;
+  agentId: string;
+  timestamp: string;
+  type: RunEventType;
+  payload: Record<string, unknown>;
+}
+
+export interface ApprovalView {
+  id: string;
+  runId: string;
+  agentId: string;
+  approvalId: string;
+  waitTokenId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  status: ApprovalStatus;
+  decisionReason?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface SkillView {
   id: string;
   name: string;
   description: string;
-  intent: string;
-  skills: string[]; // skill IDs from config
-  schedule: string; // "hourly" | "6hours" | "daily" | "weekly" | "manual"
-  policyRules: string[];
-  globalApprovalRequired: boolean;
-  scopeStrategy: "static" | "llm";
-  lifecycleStatus: LifecycleStatus; // draft → live → paused → archived
-  status: "running" | "attention" | "idle" | "error"; // computed operational status
+}
+
+export interface ConnectionView {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface AgentView {
+  id: string;
+  projectId?: string;
+  name: string;
+  description: string;
+  instructions: string;
+  skills: string[];
+  schedule: string;
+  lifecycleStatus: LifecycleStatus;
+  status: AgentOperationalStatus;
   lastRunAt: number | null;
-  lastRunRelative: string | null; // "2h ago", "Never"
+  lastRunRelative: string | null;
   nextRunAt: number | null;
   pendingCount: number;
   lessonCount: number;
   runCount: number;
-  connections: Array<{ provider: string; reason: string }>;
+  connections: ProviderRequirementView[];
+  toolConfig?: ToolConfigView;
+  notificationConfig?: NotificationConfigView;
   createdAt: number;
-}
+  updatedAt?: number;
+  requiredProviders?: ProviderRequirementView[];
 
-// ---------------------------------------------------------------------------
-// ProjectView — computed from DB (projects + agents + connections)
-// ---------------------------------------------------------------------------
+  // Transitional optional fields retained while route/component migration lands.
+  intent?: string;
+  policyRules?: string[];
+  globalApprovalRequired?: boolean;
+  scopeStrategy?: "static" | "llm";
+}
 
 export interface ProjectView {
   id: string;
@@ -41,10 +151,6 @@ export interface ProjectView {
   attentionCount: number;
   createdAt: number;
 }
-
-// ---------------------------------------------------------------------------
-// Relative time helper — shared between server and potential client use
-// ---------------------------------------------------------------------------
 
 export function relativeTime(timestamp: number): string {
   const now = Date.now();

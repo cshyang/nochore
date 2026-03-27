@@ -15,144 +15,95 @@
 ### The Anti-Pattern (What We're Avoiding)
 Most platforms dump you into a blank canvas or a form with 30 fields. The user has to know what they want before they can ask for it. That's backwards — most users know their *problem*, not their *solution*.
 
-### The Experience
+### The Experience: Two-Panel Co-Creation
 
-**Step 1: Describe the Job (Intent)**
+Setup is a full-screen overlay with two panels — conversation on the left, emerging configuration on the right. The user describes their intent in natural language; the AI scaffolds a complete agent blueprint that the user reviews and adjusts.
 
-The setup starts with a single open-ended prompt — a chat bubble, not a form:
-
-```
-┌─────────────────────────────────────────────────┐
-│                                                  │
-│  What do you want your agent to help with?       │
-│                                                  │
-│  ┌─────────────────────────────────────────┐    │
-│  │ I want to monitor our Google Ads and     │    │
-│  │ make sure we're not wasting budget on    │    │
-│  │ bad search terms                         │    │
-│  └─────────────────────────────────────────┘    │
-│                                                  │
-│  Or start from a template:                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────┐    │
-│  │ Ad Spend  │ │ E-comm   │ │ Social Media │    │
-│  │ Manager   │ │ Monitor  │ │ Scheduler    │    │
-│  └──────────┘ └──────────┘ └──────────────┘    │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-The platform uses the LLM to parse intent and asks ONE follow-up question at most:
+This mirrors the AutoResearch pattern: the human writes the strategy (`program.md`), the system handles execution. In Nochore, the user defines intent and constraints; the AI picks skills, connections, guardrails, and schedule.
 
 ```
-"Got it — you want to manage ad spend efficiency, focusing on
- search term waste. Should I also watch for budget allocation
- issues across campaigns, or just search terms for now?"
+┌─────────────────────────────────────────────────────────────┐
+│ ✦ Nochore        Creating agent for Acme Corp           ✕  │
+├──────────────────────┬──────────────────────────────────────┤
+│                      │                                      │
+│  LEFT PANEL (40%)    │  RIGHT PANEL (60%)                   │
+│  Conversational      │  Agent Configuration                 │
+│  Chat                │  (Linear-style scrollable form)      │
+│                      │                                      │
+│  ✦ What should this  │  ┌─ IDENTITY ──────────────────────┐│
+│    agent keep an     │  │ Google Ads Optimizer             ││
+│    eye on?           │  │ "Analyzes search terms to..."   ││
+│                      │  │                                  ││
+│  ┌────────────────┐  │  │ Focus areas: ROAS, waste        ││
+│  │ Optimize my    │  │  │ Constraints: Stay within budget ││
+│  │ google ads     │  │  └──────────────────────────────────┘│
+│  └────────────────┘  │                                      │
+│                      │  ┌─ SKILLS ──────────── 1 selected ─┐│
+│  ✦ Here's your      │  │ ☑ Search Term Analysis           ││
+│    blueprint for     │  │   └ Requires: Google Ads, GA4   ││
+│    Google Ads        │  │ ☐ Budget Monitor                 ││
+│    Optimizer.        │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌─ GUARDRAILS ─────────────────────┐│
+│                      │  │ "Add negative keywords"          ││
+│                      │  │  [Auto] [Approve] [Block]        ││
+│                      │  │ + Add custom guardrail...        ││
+│                      │  │ ☐ Require approval for ALL       ││
+│                      │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌─ NOTIFICATIONS ──────────────────┐│
+│                      │  │ ● In-app  ○ Email  ○ Slack      ││
+│                      │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌─ TRIGGER ────────────────────────┐│
+│  ┌────────────────┐  │  │ [Hourly][6h][▣Daily][Week][Man] ││
+│  │Refine...       │  │  │ ○ Webhook (coming soon)         ││
+│  └────────────────┘  │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌──────────────────────────────────┐│
+│                      │  │       [ Launch agent → ]         ││
+│                      │  └──────────────────────────────────┘│
+├──────────────────────┴──────────────────────────────────────┤
 ```
 
-This is critical: **the platform demonstrates understanding before asking for more.**
+### The Left Panel: Conversational Intent
 
-**Step 2: Suggested Configuration (Skills + Tools)**
+The chat starts with a single open-ended prompt and optional template chips:
 
-Based on intent, the platform suggests a complete configuration. The user doesn't pick from a catalog — they review a recommendation:
+- User types intent → AI streams reasoning (visible as thinking labels) → generates full blueprint
+- After blueprint lands, the chat becomes a refinement channel ("make it hourly", "remove the budget skill")
+- The AI can ask ONE clarifying question at most before generating
 
-```
-┌─────────────────────────────────────────────────┐
-│                                                  │
-│  Here's what I'd set up for you:                │
-│                                                  │
-│  SKILLS                                          │
-│  ┌──────────────────────────────────────────┐   │
-│  │ ✅ Search Term Analysis                   │   │
-│  │    Detects wasteful terms, suggests       │   │
-│  │    negatives                              │   │
-│  │                                           │   │
-│  │ ✅ Budget Allocation                      │   │
-│  │    Spots over/under-spending across       │   │
-│  │    campaigns                              │   │
-│  │                                           │   │
-│  │ ○  Trend Forecasting (optional)           │   │
-│  │    Predicts next-week performance         │   │
-│  └──────────────────────────────────────────┘   │
-│                                                  │
-│  CONNECTIONS                                     │
-│  ┌──────────────────────────────────────────┐   │
-│  │ 🔌 Google Ads    [Connect →]             │   │
-│  │ 🔌 Slack         [Connect →] (for alerts)│   │
-│  └──────────────────────────────────────────┘   │
-│                                                  │
-│  Looks good? You can adjust after setup too.    │
-│                                                  │
-│        [Adjust]        [Looks good →]           │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
+Key principle: **the platform demonstrates understanding before asking for more.**
 
-Key design choices:
-- Skills are pre-selected based on intent (not a blank marketplace browse)
-- Optional skills are shown but not checked — progressive disclosure
-- Connections show *why* they're needed ("for alerts")
-- "Adjust" is secondary; "Looks good" is primary — trust the defaults
+### The Right Panel: Five Configuration Sections
 
-**Step 3: Set the Rules (Policy)**
+The right panel uses a Linear-style scrollable form — all sections visible, no accordion collapse. Each section has a title, summary, and inline controls.
 
-This is where we differentiate. Instead of a settings page, we frame policies as *the agent asking for its boundaries*:
+**1. Identity** — Name (editable), summary (editable), and structured instructions:
+- Focus areas (what to watch for)
+- Constraints (what to avoid or respect)
 
-```
-┌─────────────────────────────────────────────────┐
-│                                                  │
-│  Before I start, a few ground rules:            │
-│                                                  │
-│  When I find wasteful search terms...           │
-│  ◉ Add negative keywords automatically          │
-│  ○ Show me first, I'll decide                   │
-│  ○ Add them, but notify me after                │
-│                                                  │
-│  For budget changes...                           │
-│  ○ Adjust automatically (within limits)         │
-│  ◉ Always ask me first                          │
-│  ○ Never touch budgets                          │
-│                                                  │
-│  ┌─ Advanced ──────────────────────────────┐    │
-│  │ Max budget change per day:  $ [100    ] │    │
-│  │ Notify me via:   ◉ Slack  ○ Email      │    │
-│  │ Active hours:    9am - 6pm EST          │    │
-│  └─────────────────────────────────────────┘    │
-│                                                  │
-│        [← Back]          [Start agent →]        │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
+Instructions are the user's `program.md` — the strategy file that guides the agent's behavior. They're structured but not restrictive: guided fields, not a blank textarea or a rigid form.
 
-Key design choices:
-- Policies are phrased as *decisions about autonomy*, not settings
-- The defaults are conservative (ask first for high-impact actions)
-- Advanced settings are collapsed — most users never open them
-- The language is first-person from the agent ("When I find...")
+**2. Skills** — Toggleable rows with descriptions. Each skill shows its required data connections inline ("Requires: Google Ads, GA4"). Skills drive the connection requirements — there's no separate connections section for data sources.
 
-**Step 4: Agent Card (Summary)**
+**3. Guardrails** — AI-suggested rules with three levels per rule (Auto / Approve first / Block). Users can add custom guardrails in natural language ("Never exceed daily budget by more than 10%"). Global "Require approval for ALL actions" toggle at the bottom.
 
-After setup, the user sees their agent as a persistent "card":
+Guardrails are instruction-based, not rigid rules. The AI generates defaults during blueprint creation based on selected skills and connections. Users refine via the form or the chat.
 
-```
-┌─────────────────────────────────────────────────┐
-│  🟢 Ad Spend Guardian                           │
-│  "Monitor Google Ads for search term waste      │
-│   and budget inefficiencies"                    │
-│                                                  │
-│  Skills: Search Terms · Budget Allocation       │
-│  Tools:  Google Ads · Slack                     │
-│  Policy: Auto-add negatives · Ask for budgets   │
-│  Schedule: Checks every 6 hours                 │
-│                                                  │
-│  Last run: 2 minutes ago — all clear            │
-│  Memory: 0 lessons learned (just getting started)│
-│                                                  │
-│  [Talk to agent]  [View history]  [Settings]    │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
+**4. Notifications** — How the agent reaches the human for approval or updates. In-app (always on, default). Email and Slack shown as future options. This is separated from Guardrails because policies define WHAT needs human input, notifications define HOW the human is reached.
 
-The agent card is the anchor of the experience. It's always visible. It's how the user relates to their agent.
+**5. Trigger** — When the agent runs. Scheduled presets (hourly / 6h / daily / weekly). Manual option. Webhook/event-driven shown as "coming soon."
+
+### Key Design Choices
+
+- **All sections visible** — scrollable form, not wizard steps or accordion. Users see the full agent config at a glance and can edit any section in any order.
+- **AI scaffolds everything** — the user doesn't build from scratch. The AI picks skills, derives connections, generates guardrails, and suggests a schedule. The user reviews and adjusts.
+- **Connections are contextualized** — no standalone connections section. Data connections appear under the skills that need them. Action connections (Slack, email) appear under Notifications.
+- **Chat and config coexist** — the user can adjust via direct manipulation (clicking toggles, editing fields) OR via chat ("remove the budget skill", "make it weekly"). Both work.
+- **Instructions = program.md** — the user defines strategy and constraints in structured natural language. The agent follows these during execution. This is the human's interface to the agent's behavior.
+- **Defaults are opinionated** — the AI picks good defaults. The primary action is "Launch agent", not "configure more." Trust the defaults, adjust later.
 
 ---
 

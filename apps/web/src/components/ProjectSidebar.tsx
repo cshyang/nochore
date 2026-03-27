@@ -21,11 +21,14 @@ export function ProjectSidebar({
   onGoHome,
   onNewAgent,
 }: ProjectSidebarProps) {
+  const draftAgents = project.agents.filter(
+    (a) => a.lifecycleStatus === "draft",
+  );
   const attentionAgents = project.agents.filter(
-    (a) => a.status === "attention",
+    (a) => a.lifecycleStatus !== "draft" && a.status === "attention",
   );
   const activeAgents = project.agents.filter(
-    (a) => a.status === "running" || a.status === "idle",
+    (a) => a.lifecycleStatus !== "draft" && (a.status === "running" || a.status === "idle"),
   );
 
   return (
@@ -147,6 +150,33 @@ export function ProjectSidebar({
             ))}
           </div>
         )}
+
+        {/* Draft agents — dimmed with "Draft" badge */}
+        {draftAgents.length > 0 && (
+          <div style={{ padding: "8px 0" }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: COLORS.textDim,
+                textTransform: "uppercase",
+                letterSpacing: 0.6,
+                padding: "4px 16px 6px",
+              }}
+            >
+              Drafts
+            </div>
+            {draftAgents.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                isActive={agent.id === activeAgentId}
+                onSelect={() => onSelectAgent(agent.id)}
+                isDraft
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bottom actions */}
@@ -178,13 +208,15 @@ function AgentRow({
   agent,
   isActive,
   onSelect,
+  isDraft,
 }: {
   agent: AgentView;
   isActive: boolean;
   onSelect: () => void;
+  isDraft?: boolean;
 }) {
   const agentColor = getAgentColor(agent.id);
-  const isAttention = agent.status === "attention";
+  const isAttention = !isDraft && agent.status === "attention";
 
   return (
     <div
@@ -233,14 +265,20 @@ function AgentRow({
           style={{
             fontSize: 13,
             fontWeight: isActive ? 600 : 400,
-            color: isActive ? COLORS.text : COLORS.textSecondary,
+            color: isDraft ? COLORS.textDim : isActive ? COLORS.text : COLORS.textSecondary,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            fontStyle: isDraft ? "italic" : "normal",
           }}
         >
           {agent.name}
         </span>
+        {isDraft && (
+          <span style={{ fontSize: 10, color: COLORS.textDim, marginLeft: "auto", flexShrink: 0, padding: "1px 6px", borderRadius: 99, border: `1px solid ${COLORS.border}` }}>
+            Draft
+          </span>
+        )}
       </div>
       {isAttention && agent.pendingCount > 0 && (
         <div

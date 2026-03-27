@@ -1,120 +1,102 @@
-import { eq, and } from "drizzle-orm";
-import { pendingActions } from "../db/schema";
-import type { ActionProposal } from "../types/action";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { approvals } from "../db/schema";
 import type { createDb } from "../db/client";
+import {
+  ApprovalRecordSchema,
+  ApprovalStatusSchema,
+  type ApprovalRecord,
+  type ApprovalStatus,
+} from "../types";
 
 type Db = ReturnType<typeof createDb>;
 
-/** Status values for pending actions. */
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
-
-/** Input for queuing a new pending action (id is generated). */
-export interface QueueActionInput {
+export interface CreateApprovalInput {
   runId: string;
   agentId: string;
-  proposal: ActionProposal;
-}
-
-/** A hydrated pending action record. */
-export interface PendingAction {
-  id: string;
-  runId: string;
-  agentId: string;
-  proposal: ActionProposal;
-  status: ApprovalStatus;
+  approvalId: string;
+  waitTokenId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
   createdAt: Date;
-  resolvedAt?: Date;
-  resolvedReason?: string;
 }
 
 export class ApprovalRepository {
   constructor(private db: Db) {}
 
-  /**
-   * Queue a pending action with status="pending". Returns the generated id.
-   */
-  async queue(input: QueueActionInput): Promise<string> {
+  async create(input: CreateApprovalInput): Promise<string> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(pendingActions)
-      .values({
-        id,
-        runId: input.runId,
-        agentId: input.agentId,
-        proposal: JSON.stringify(input.proposal),
-        status: "pending",
-        createdAt: Date.now(),
-      })
-      .run();
+    this.db.insert(approvals).values({
+      id,
+      runId: input.runId,
+      agentId: input.agentId,
+      approvalId: input.approvalId,
+      waitTokenId: input.waitTokenId,
+      toolName: input.toolName,
+      toolInput: JSON.stringify(input.toolInput),
+      status: "pending",
+      createdAt: input.createdAt.getTime(),
+    }).run();
     return id;
   }
 
-  /**
-   * Get a pending action by id. Returns null if not found.
-   */
-  async getById(id: string): Promise<PendingAction | null> {
+  async getById(id: string): Promise<ApprovalRecord | null> {
+    const row = this.db.select().from(approvals).where(eq(approvals.id, id)).get();
+    return row ? toApprovalRecord(row) : null;
+  }
+
+  async getByApprovalId(approvalId: string): Promise<ApprovalRecord | null> {
     const row = this.db
       .select()
-      .from(pendingActions)
-      .where(eq(pendingActions.id, id))
+      .from(approvals)
+      .where(eq(approvals.approvalId, approvalId))
       .get();
-    return row ? toPendingAction(row) : null;
+    return row ? toApprovalRecord(row) : null;
   }
 
-  /**
-   * Resolve a pending action: update status, resolvedAt, and resolvedReason.
-   */
-  async resolve(
-    id: string,
-    decision: "approved" | "rejected" | "expired",
-    reason: string
-  ): Promise<void> {
-    this.db
-      .update(pendingActions)
-      .set({
-        status: decision,
-        resolvedAt: Date.now(),
-        resolvedReason: reason,
-      })
-      .where(eq(pendingActions.id, id))
-      .run();
-  }
-
-  /**
-   * Get actions for an agent, optionally filtered by status.
-   */
-  async getByAgentAndStatus(
+  async listByAgent(
     agentId: string,
-    status?: ApprovalStatus
-  ): Promise<PendingAction[]> {
-    const conditions = [eq(pendingActions.agentId, agentId)];
-
-    if (status) {
-      conditions.push(eq(pendingActions.status, status));
+    statuses?: ApprovalStatus[],
+  ): Promise<ApprovalRecord[]> {
+    const conditions = [eq(approvals.agentId, agentId)];
+    if (statuses && statuses.length > 0) {
+      conditions.push(inArray(approvals.status, statuses));
     }
 
-    const rows = this.db
+    return this.db
       .select()
-      .from(pendingActions)
+      .from(approvals)
       .where(and(...conditions))
-      .all();
+      .orderBy(desc(approvals.createdAt))
+      .all()
+      .map(toApprovalRecord);
+  }
 
-    return rows.map(toPendingAction);
+  async markResolved(
+    id: string,
+    status: Exclude<ApprovalStatus, "pending">,
+    decisionReason: string,
+    resolvedAt: Date,
+  ): Promise<void> {
+    this.db.update(approvals).set({
+      status: ApprovalStatusSchema.parse(status),
+      decisionReason,
+      resolvedAt: resolvedAt.getTime(),
+    }).where(eq(approvals.id, id)).run();
   }
 }
 
-function toPendingAction(
-  row: typeof pendingActions.$inferSelect
-): PendingAction {
-  return {
+function toApprovalRecord(row: typeof approvals.$inferSelect): ApprovalRecord {
+  return ApprovalRecordSchema.parse({
     id: row.id,
     runId: row.runId,
     agentId: row.agentId,
-    proposal: JSON.parse(row.proposal) as ActionProposal,
-    status: row.status as ApprovalStatus,
+    approvalId: row.approvalId,
+    waitTokenId: row.waitTokenId,
+    toolName: row.toolName,
+    toolInput: JSON.parse(row.toolInput),
+    status: row.status,
+    decisionReason: row.decisionReason ?? undefined,
     createdAt: new Date(row.createdAt),
-    resolvedAt:
-      row.resolvedAt != null ? new Date(row.resolvedAt) : undefined,
-    resolvedReason: row.resolvedReason ?? undefined,
-  };
+    resolvedAt: row.resolvedAt != null ? new Date(row.resolvedAt) : undefined,
+  });
 }

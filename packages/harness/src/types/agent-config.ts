@@ -1,61 +1,77 @@
 import { z } from "zod";
-import {
-  OperationalConstraintSchema,
-  type OperationalConstraint,
-} from "./policy";
 
 // ---------------------------------------------------------------------------
-// TriggerConfig — how / when an agent run is initiated
+// Tool configuration
 // ---------------------------------------------------------------------------
 
-export const TriggerConfigSchema = z.object({
-  type: z.enum(["cron", "webhook", "manual"]),
-  config: z.record(z.string(), z.unknown()),
-  /** Optional override of which skills run for this trigger. */
-  skills: z.array(z.string()).optional(),
+export const ToolApprovalModeSchema = z.enum(["auto", "approval", "blocked"]);
+export type ToolApprovalMode = z.infer<typeof ToolApprovalModeSchema>;
+
+export const ToolModeSchema = z.enum(["read", "write"]);
+export type ToolMode = z.infer<typeof ToolModeSchema>;
+
+export const ToolConfigEntrySchema = z.object({
+  toolName: z.string(),
+  slug: z.string(),
+  provider: z.string(),
+  title: z.string(),
+  description: z.string(),
+  mode: ToolModeSchema,
+  enabled: z.boolean(),
+  approvalMode: ToolApprovalModeSchema,
+  cooldownMinutes: z.number().optional(),
+  budgetThreshold: z.number().optional(),
 });
+export type ToolConfigEntry = z.infer<typeof ToolConfigEntrySchema>;
 
-export type TriggerConfig = z.infer<typeof TriggerConfigSchema>;
-
-// ---------------------------------------------------------------------------
-// PolicyOverride — per-action decision overrides
-// ---------------------------------------------------------------------------
-
-export const PolicyOverrideSchema = z.object({
-  pattern: z.string(),
-  decision: z.enum(["always_approve", "always_ask", "always_block"]),
+export const ProviderRequirementSchema = z.object({
+  provider: z.string(),
+  reason: z.string().optional(),
 });
+export type ProviderRequirement = z.infer<typeof ProviderRequirementSchema>;
 
-export type PolicyOverride = z.infer<typeof PolicyOverrideSchema>;
-
-// Re-export OperationalConstraint from policy for convenience
-export { OperationalConstraintSchema, type OperationalConstraint };
+export const ToolConfigSchema = z.object({
+  requiredProviders: z.array(ProviderRequirementSchema),
+  tools: z.record(z.string(), ToolConfigEntrySchema),
+});
+export type ToolConfig = z.infer<typeof ToolConfigSchema>;
 
 // ---------------------------------------------------------------------------
-// AgentConfig — full agent configuration
+// Notification configuration
+// ---------------------------------------------------------------------------
+
+export const NotificationConfigSchema = z.object({
+  inApp: z.boolean(),
+  email: z.boolean(),
+  slack: z.boolean(),
+});
+export type NotificationConfig = z.infer<typeof NotificationConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Agent schedule & status
+// ---------------------------------------------------------------------------
+
+export const AgentScheduleSchema = z.enum([
+  "hourly",
+  "6hours",
+  "daily",
+  "weekly",
+  "manual",
+]);
+export type AgentSchedule = z.infer<typeof AgentScheduleSchema>;
+
+export const AgentStatusSchema = z.enum(["draft", "live"]);
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+
+// ---------------------------------------------------------------------------
+// Agent config (the configurable subset — AgentRecord extends this)
 // ---------------------------------------------------------------------------
 
 export const AgentConfigSchema = z.object({
-  id: z.string(),
-  projectId: z.string(),
-  name: z.string(),
-  description: z.string(),
-  intent: z.string(),
-  /** Filesystem path to agent workspace directory (contains AGENT.md, KNOWLEDGE.md, etc.) */
-  workspacePath: z.string(),
+  instructions: z.string(),
   skills: z.array(z.string()),
-  skillKnowledge: z.record(z.string(), z.string()),
-  triggers: z.array(TriggerConfigSchema),
-  policyRules: z.array(z.string()),
-  policyOverrides: z.array(PolicyOverrideSchema),
-  globalApprovalRequired: z.boolean(),
-  operationalConstraints: z.array(OperationalConstraintSchema),
-  connectionIds: z.array(z.string()),
-  memoryEnabled: z.boolean(),
-  lessonDistillationInterval: z.number(),
-  scopeStrategy: z.enum(["static", "llm"]),
-  model: z.string().optional(),
-  thinkingLevel: z.enum(["off", "low", "medium", "high"]).optional(),
+  toolConfig: ToolConfigSchema,
+  notificationConfig: NotificationConfigSchema,
+  schedule: AgentScheduleSchema,
 });
-
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

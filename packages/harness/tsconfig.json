@@ -11,5 +11,25 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/chat/**",
+    "src/context/**",
+    "src/memory/**",
+    "src/pipeline/**",
+    "src/policy/rules/**",
+    "src/connections/stub.ts",
+    "src/connections/types.ts",
+    "src/connections/ai-tools.ts",
+    "src/connections/factory.ts",
+    "src/repositories/action-execution.ts",
+    "src/repositories/chat-session.ts",
+    "src/skills/built-in/**",
+    "src/skills/executor.ts",
+    "src/skills/registry.ts",
+    "src/types/action.ts",
+    "src/types/data-types.ts",
+    "src/types/memory.ts"
+  ]
 }

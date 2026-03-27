@@ -1,245 +1,128 @@
-/**
- * Agent CRUD server functions.
- *
- * Provides list, get, and create operations for agents within a project.
- * Returns AgentView (computed from DB joins) for list/get operations.
- */
-
 import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { tasks, runs as triggerRuns } from "@trigger.dev/sdk/v3";
+import { buildDefaultToolConfig } from "../../../../packages/harness/src/connections";
+import { agents, approvals, connections, lessons, runEvents, runs } from "../../../../packages/harness/src/db/schema";
+import { initializeWorkspace } from "../../../../packages/harness/src/workspace";
+import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
+import type {
+  AgentConfig,
+  NotificationConfig,
+  ToolConfig,
+} from "../../../../packages/harness/src/types";
+import { buildAgentView } from "./models";
 import { getProjectDeps } from "./deps";
-import { buildAgentView } from "./projects";
-import {
-  agents,
-  runs,
-  agentEvents,
-  lessons,
-  pendingActions,
-  chatMessages,
-} from "../../../../packages/harness/src/db/schema";
-import { initializeWorkspace } from "../../../../packages/harness/src/workspace/templates";
 import { jsonSafe } from "./serializable";
-import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
-import type { agentRunTask } from "../../../../services/worker/src/triggers/agent-run";
-
-// ---------------------------------------------------------------------------
-// createBlankAgent — create an untitled agent and return its id
-// ---------------------------------------------------------------------------
+import { startAgentRun } from "./orchestration";
 
 export const createBlankAgent = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string }) => input)
   .handler(async ({ data: { projectId } }) => {
     const agentId = crypto.randomUUID().slice(0, 12);
-    const { db } = getProjectDeps(projectId);
-    const now = Date.now();
-    const config = {
+    await createAgentRecord({
+      agentId,
+      projectId,
       name: "Untitled Agent",
       description: "",
-      intent: "",
+      instructions: "",
       skills: [],
-      triggers: [],
-      policyRules: [],
-      globalApprovalRequired: false,
-      scopeStrategy: "static",
-    };
-    db.insert(agents)
-      .values({
-        id: agentId,
-        projectId,
-        config: JSON.stringify(config),
-        status: "live",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+      toolConfig: buildDefaultToolConfig([]),
+      notificationConfig: {
+        inApp: true,
+        email: false,
+        slack: false,
+      },
+      schedule: "manual",
+      status: "draft",
+    });
     return jsonSafe({ id: agentId });
   });
-
-// ---------------------------------------------------------------------------
-// listAgents — all agents for a project, as AgentView[]
-// ---------------------------------------------------------------------------
 
 export const listAgents = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
   .handler(async ({ data: { projectId } }) => {
-    const { db } = getProjectDeps(projectId);
-    const rows = db
-      .select()
-      .from(agents)
-      .where(eq(agents.projectId, projectId))
-      .all();
-    return jsonSafe(rows.map((row) => buildAgentView(row, db)));
+    const view = await loadProjectAgentViews(projectId);
+    return jsonSafe(view);
   });
-
-// ---------------------------------------------------------------------------
-// getAgent — single agent by id, as AgentView
-// ---------------------------------------------------------------------------
 
 export const getAgent = createServerFn({ method: "GET" })
   .inputValidator((input: { agentId: string; projectId: string }) => input)
   .handler(async ({ data: { agentId, projectId } }) => {
-    const { db } = getProjectDeps(projectId);
-    const row = db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId))
-      .get();
-    if (!row) return jsonSafe(null);
-    return jsonSafe(buildAgentView(row, db));
+    const view = await loadAgentView(projectId, agentId);
+    return jsonSafe(view);
   });
-
-// ---------------------------------------------------------------------------
-// createAgent — create a new agent in a project
-// ---------------------------------------------------------------------------
 
 export const createAgent = createServerFn({ method: "POST" })
   .inputValidator(
     (input: {
       projectId: string;
       name: string;
-      description: string;
-      intent: string;
-      skills: string[];
-      scopeStrategy: "static" | "llm";
-      policyRules: string[];
-      globalApprovalRequired: boolean;
-      schedule?: string;
+      description?: string;
+      instructions?: string;
+      skills?: string[];
+      toolConfig?: ToolConfig;
+      requiredProviders?: Array<{ provider: string; reason: string }>;
+      notificationConfig?: NotificationConfig;
+      schedule?: AgentConfig["schedule"];
+      status?: "draft" | "live";
     }) => input,
   )
   .handler(async ({ data }) => {
-    const agentId = crypto.randomUUID().slice(0, 8);
-    const workspacePath = `data/projects/${data.projectId}/agents/${agentId}`;
-
-    // Map schedule string to cron expression
-    const cronMap: Record<string, string> = {
-      hourly: "0 * * * *",
-      "6hours": "0 */6 * * *",
-      daily: "0 9 * * *",
-      weekly: "0 9 * * 1",
-      manual: "",
-    };
-    const cronExpr = cronMap[data.schedule ?? "daily"] ?? "0 9 * * *";
-
-    const config: AgentConfig = {
-      id: agentId,
+    const agentId = crypto.randomUUID().slice(0, 12);
+    await createAgentRecord({
+      agentId,
       projectId: data.projectId,
       name: data.name,
-      description: data.description,
-      intent: data.intent,
-      workspacePath,
-      skills: data.skills,
-      skillKnowledge: {},
-      triggers: cronExpr
-        ? [{ type: "cron", config: { cron: cronExpr } }]
-        : [{ type: "manual", config: {} }],
-      policyRules: data.policyRules,
-      policyOverrides: [],
-      globalApprovalRequired: data.globalApprovalRequired,
-      operationalConstraints: [],
-      connectionIds: [],
-      memoryEnabled: true,
-      lessonDistillationInterval: 5,
-      scopeStrategy: data.scopeStrategy ?? "static",
-    };
-
-    // Insert agent record
-    const { db } = getProjectDeps(data.projectId);
-    const now = Date.now();
-    db.insert(agents)
-      .values({
-        id: agentId,
-        projectId: data.projectId,
-        config: JSON.stringify(config),
-        status: "live",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-
-    // Initialize workspace
-    await initializeWorkspace(workspacePath, data.name, data.intent);
-
+      description: data.description ?? "",
+      instructions: data.instructions ?? "",
+      skills: data.skills ?? [],
+      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
+      notificationConfig: data.notificationConfig ?? {
+        inApp: true,
+        email: false,
+        slack: false,
+      },
+      schedule: data.schedule ?? "manual",
+      status: data.status ?? "live",
+    });
     return jsonSafe({ id: agentId });
   });
-
-// ---------------------------------------------------------------------------
-// createDraftAgent — create an agent in draft status (from blueprint)
-// ---------------------------------------------------------------------------
 
 export const createDraftAgent = createServerFn({ method: "POST" })
   .inputValidator(
     (input: {
       projectId: string;
       name: string;
-      description: string;
-      intent: string;
-      skills: string[];
-      scopeStrategy: "static" | "llm";
-      policyRules: string[];
-      globalApprovalRequired: boolean;
-      schedule?: string;
+      description?: string;
+      instructions?: string;
+      skills?: string[];
+      toolConfig?: ToolConfig;
+      requiredProviders?: Array<{ provider: string; reason: string }>;
+      notificationConfig?: NotificationConfig;
+      schedule?: AgentConfig["schedule"];
     }) => input,
   )
   .handler(async ({ data }) => {
-    const agentId = crypto.randomUUID().slice(0, 8);
-    const workspacePath = `data/projects/${data.projectId}/agents/${agentId}`;
-
-    const cronMap: Record<string, string> = {
-      hourly: "0 * * * *",
-      "6hours": "0 */6 * * *",
-      daily: "0 9 * * *",
-      weekly: "0 9 * * 1",
-      manual: "",
-    };
-    const cronExpr = cronMap[data.schedule ?? "daily"] ?? "0 9 * * *";
-
-    const config: AgentConfig = {
-      id: agentId,
+    const agentId = crypto.randomUUID().slice(0, 12);
+    await createAgentRecord({
+      agentId,
       projectId: data.projectId,
       name: data.name,
-      description: data.description,
-      intent: data.intent,
-      workspacePath,
-      skills: data.skills,
-      skillKnowledge: {},
-      triggers: cronExpr
-        ? [{ type: "cron", config: { cron: cronExpr } }]
-        : [{ type: "manual", config: {} }],
-      policyRules: data.policyRules,
-      policyOverrides: [],
-      globalApprovalRequired: data.globalApprovalRequired,
-      operationalConstraints: [],
-      connectionIds: [],
-      memoryEnabled: true,
-      lessonDistillationInterval: 5,
-      scopeStrategy: data.scopeStrategy ?? "static",
-    };
-
-    const { db } = getProjectDeps(data.projectId);
-    const now = Date.now();
-    db.insert(agents)
-      .values({
-        id: agentId,
-        projectId: data.projectId,
-        config: JSON.stringify(config),
-        status: "draft",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-
-    // Initialize workspace (even for drafts — needed for workspace files)
-    await initializeWorkspace(workspacePath, data.name, data.intent);
-
+      description: data.description ?? "",
+      instructions: data.instructions ?? "",
+      skills: data.skills ?? [],
+      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
+      notificationConfig: data.notificationConfig ?? {
+        inApp: true,
+        email: false,
+        slack: false,
+      },
+      schedule: data.schedule ?? "manual",
+      status: "draft",
+    });
     return jsonSafe({ id: agentId });
   });
-
-// ---------------------------------------------------------------------------
-// updateDraftAgent — save blueprint edits to an existing draft
-// ---------------------------------------------------------------------------
 
 export const updateDraftAgent = createServerFn({ method: "POST" })
   .inputValidator(
@@ -248,101 +131,28 @@ export const updateDraftAgent = createServerFn({ method: "POST" })
       projectId: string;
       name?: string;
       description?: string;
+      instructions?: string;
       skills?: string[];
-      policyRules?: string[];
-      globalApprovalRequired?: boolean;
-      schedule?: string;
+      toolConfig?: ToolConfig;
+      requiredProviders?: Array<{ provider: string; reason: string }>;
+      notificationConfig?: NotificationConfig;
+      schedule?: AgentConfig["schedule"];
+      status?: "draft" | "live";
     }) => input,
   )
   .handler(async ({ data }) => {
-    const { db } = getProjectDeps(data.projectId);
-    const row = db.select().from(agents).where(eq(agents.id, data.agentId)).get();
-    if (!row) throw new Error("Agent not found");
-
-    const config = JSON.parse(row.config) as AgentConfig;
-
-    // Apply partial updates
-    if (data.name !== undefined) config.name = data.name;
-    if (data.description !== undefined) config.description = data.description;
-    if (data.skills !== undefined) config.skills = data.skills;
-    if (data.policyRules !== undefined) config.policyRules = data.policyRules;
-    if (data.globalApprovalRequired !== undefined) config.globalApprovalRequired = data.globalApprovalRequired;
-    if (data.schedule !== undefined) {
-      const cronMap: Record<string, string> = {
-        hourly: "0 * * * *", "6hours": "0 */6 * * *",
-        daily: "0 9 * * *", weekly: "0 9 * * 1", manual: "",
-      };
-      const cronExpr = cronMap[data.schedule] ?? "0 9 * * *";
-      config.triggers = cronExpr
-        ? [{ type: "cron", config: { cron: cronExpr } }]
-        : [{ type: "manual", config: {} }];
-    }
-
-    db.update(agents)
-      .set({ config: JSON.stringify(config), updatedAt: Date.now() })
-      .where(eq(agents.id, data.agentId))
-      .run();
-
+    await updateAgentRecord(data.projectId, data.agentId, {
+      name: data.name,
+      description: data.description,
+      instructions: data.instructions,
+      skills: data.skills,
+      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
+      notificationConfig: data.notificationConfig,
+      schedule: data.schedule,
+      status: data.status,
+    });
     return jsonSafe({ updated: true });
   });
-
-// ---------------------------------------------------------------------------
-// launchAgent — transition draft → live
-// ---------------------------------------------------------------------------
-
-export const launchAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: { agentId: string; projectId: string }) => input,
-  )
-  .handler(async ({ data: { agentId, projectId } }) => {
-    const { db } = getProjectDeps(projectId);
-
-    db.update(agents)
-      .set({ status: "live", updatedAt: Date.now() })
-      .where(eq(agents.id, agentId))
-      .run();
-
-    // Trigger first run via trigger.dev and wait for completion
-    const handle = await tasks.trigger<typeof agentRunTask>("agent-run", {
-      agentId,
-      projectId,
-      trigger: { type: "manual", metadata: { source: "launch" } },
-    });
-
-    const completed = await triggerRuns.poll(handle, { pollIntervalMs: 1000 });
-
-    return jsonSafe({ launched: true, runId: handle.id, ok: completed.isSuccess });
-  });
-
-// ---------------------------------------------------------------------------
-// triggerManualRun — kick off a pipeline run for an agent on demand
-// ---------------------------------------------------------------------------
-
-export const triggerManualRun = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: { agentId: string; projectId: string }) => input,
-  )
-  .handler(async ({ data: { agentId, projectId } }) => {
-    const handle = await tasks.trigger<typeof agentRunTask>("agent-run", {
-      agentId,
-      projectId,
-      trigger: { type: "manual", metadata: { source: "run_now" } },
-    });
-
-    // Wait for the pipeline to complete before returning
-    const completed = await triggerRuns.poll(handle, { pollIntervalMs: 1000 });
-
-    return jsonSafe({
-      triggered: true,
-      runId: handle.id,
-      status: completed.status,
-      ok: completed.isSuccess,
-    });
-  });
-
-// ---------------------------------------------------------------------------
-// updateAgentConfig — save blueprint results to an existing agent
-// ---------------------------------------------------------------------------
 
 export const updateAgentConfig = createServerFn({ method: "POST" })
   .inputValidator(
@@ -351,75 +161,195 @@ export const updateAgentConfig = createServerFn({ method: "POST" })
       projectId: string;
       name?: string;
       description?: string;
+      instructions?: string;
       skills?: string[];
-      policyRules?: string[];
-      globalApprovalRequired?: boolean;
-      schedule?: string;
-      connections?: Array<{ provider: string; reason: string }>;
+      toolConfig?: ToolConfig;
+      requiredProviders?: Array<{ provider: string; reason: string }>;
+      notificationConfig?: NotificationConfig;
+      schedule?: AgentConfig["schedule"];
+      status?: "draft" | "live";
     }) => input,
   )
   .handler(async ({ data }) => {
-    const { db } = getProjectDeps(data.projectId);
-    const row = db.select().from(agents).where(eq(agents.id, data.agentId)).get();
-    if (!row) throw new Error("Agent not found");
-
-    const config = JSON.parse(row.config) as AgentConfig & { connections?: Array<{ provider: string; reason: string }> };
-    if (data.name !== undefined) config.name = data.name;
-    if (data.description !== undefined) config.description = data.description;
-    if (data.skills !== undefined) config.skills = data.skills;
-    if (data.policyRules !== undefined) config.policyRules = data.policyRules;
-    if (data.globalApprovalRequired !== undefined) config.globalApprovalRequired = data.globalApprovalRequired;
-    if (data.connections !== undefined) config.connections = data.connections;
-    if (data.schedule !== undefined) {
-      config.triggers = data.schedule === "manual"
-        ? [{ type: "manual", config: {} }]
-        : [{ type: "cron", config: { cron: scheduleToCron(data.schedule) } }];
-    }
-
-    db.update(agents)
-      .set({ config: JSON.stringify(config), updatedAt: Date.now() })
-      .where(eq(agents.id, data.agentId))
-      .run();
-
+    await updateAgentRecord(data.projectId, data.agentId, {
+      name: data.name,
+      description: data.description,
+      instructions: data.instructions,
+      skills: data.skills,
+      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
+      notificationConfig: data.notificationConfig,
+      schedule: data.schedule,
+      status: data.status,
+    });
     return jsonSafe({ updated: true });
   });
 
-function scheduleToCron(schedule: string): string {
-  switch (schedule) {
-    case "hourly": return "0 */1 * * *";
-    case "6hours": return "0 */6 * * *";
-    case "daily": return "0 9 * * *";
-    case "weekly": return "0 9 * * 1";
-    default: return "0 9 * * *";
-  }
-}
+export const launchAgent = createServerFn({ method: "POST" })
+  .inputValidator((input: { agentId: string; projectId: string }) => input)
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const { agentRepository, db } = getProjectDeps(projectId);
+    const agent = await agentRepository.getById(agentId);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
 
-// ---------------------------------------------------------------------------
-// deleteAgent — remove an agent and all related data
-// ---------------------------------------------------------------------------
+    const activeProviders = new Set(
+      db
+        .select()
+        .from(connections)
+        .where(eq(connections.projectId, projectId))
+        .all()
+        .filter((connection) => connection.status === "active")
+        .map((connection) => connection.provider),
+    );
+    const missingProviders = agent.toolConfig.requiredProviders.filter(
+      (provider) => !activeProviders.has(provider.provider),
+    );
+    if (missingProviders.length > 0) {
+      throw new Error(
+        `Missing required connections: ${missingProviders.map((provider) => provider.provider).join(", ")}`,
+      );
+    }
+
+    await agentRepository.update(agentId, { status: "live" });
+    const { runId, triggerRunId } = await startAgentRun({
+      agentId,
+      projectId,
+      trigger: {
+        type: "manual",
+        timestamp: new Date(),
+        metadata: { source: "launch" },
+      },
+    });
+
+    return jsonSafe({ launched: true, runId, triggerRunId, queued: true });
+  });
+
+export const triggerManualRun = createServerFn({ method: "POST" })
+  .inputValidator((input: { agentId: string; projectId: string }) => input)
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const { runId, triggerRunId } = await startAgentRun({
+      agentId,
+      projectId,
+      trigger: {
+        type: "manual",
+        timestamp: new Date(),
+        metadata: { source: "run_now" },
+      },
+    });
+
+    return jsonSafe({ triggered: true, runId, triggerRunId, status: "queued", ok: true });
+  });
 
 export const deleteAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: { agentId: string; projectId: string }) => input,
-  )
+  .inputValidator((input: { agentId: string; projectId: string }) => input)
   .handler(async ({ data: { agentId, projectId } }) => {
     const { db } = getProjectDeps(projectId);
-
-    // Delete related rows (no FK cascades in SQLite schema)
-    db.delete(chatMessages).where(eq(chatMessages.agentId, agentId)).run();
-    db.delete(pendingActions).where(eq(pendingActions.agentId, agentId)).run();
+    db.delete(approvals).where(eq(approvals.agentId, agentId)).run();
+    db.delete(runEvents).where(eq(runEvents.agentId, agentId)).run();
     db.delete(lessons).where(eq(lessons.agentId, agentId)).run();
-    db.delete(agentEvents).where(eq(agentEvents.agentId, agentId)).run();
     db.delete(runs).where(eq(runs.agentId, agentId)).run();
     db.delete(agents).where(eq(agents.id, agentId)).run();
 
-    // Remove workspace directory
-    const workspacePath = `data/projects/${projectId}/agents/${agentId}`;
     try {
-      rmSync(workspacePath, { recursive: true, force: true });
+      rmSync(getAgentWorkspacePath(projectId, agentId), { recursive: true, force: true });
     } catch {
-      // Directory may not exist
+      // Workspace may not exist yet.
     }
 
     return jsonSafe({ deleted: true });
   });
+
+async function createAgentRecord(input: {
+  agentId: string;
+  projectId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  skills: string[];
+  toolConfig: ToolConfig;
+  notificationConfig: NotificationConfig;
+  schedule: AgentConfig["schedule"];
+  status: "draft" | "live";
+}) {
+  const { agentRepository } = getProjectDeps(input.projectId);
+  await agentRepository.create({
+    id: input.agentId,
+    projectId: input.projectId,
+    name: input.name,
+    description: input.description,
+    instructions: input.instructions,
+    skills: input.skills,
+    toolConfig: input.toolConfig,
+    notificationConfig: input.notificationConfig,
+    schedule: input.schedule,
+    status: input.status,
+  });
+  await initializeWorkspace(getAgentWorkspacePath(input.projectId, input.agentId));
+}
+
+async function updateAgentRecord(
+  projectId: string,
+  agentId: string,
+  updates: Partial<{
+    name: string;
+    description: string;
+    instructions: string;
+    skills: string[];
+    toolConfig: ToolConfig;
+    notificationConfig: NotificationConfig;
+    schedule: AgentConfig["schedule"];
+    status: "draft" | "live";
+  }>,
+) {
+  const { agentRepository } = getProjectDeps(projectId);
+  await agentRepository.update(agentId, updates);
+}
+
+function resolveToolConfig(
+  toolConfig: ToolConfig | undefined,
+  requiredProviders: Array<{ provider: string; reason: string }> | undefined,
+): ToolConfig {
+  if (toolConfig) {
+    return toolConfig;
+  }
+
+  return buildDefaultToolConfig(
+    requiredProviders?.map((provider) => provider.provider) ?? [],
+    requiredProviders ?? [],
+  );
+}
+
+async function loadProjectAgentViews(projectId: string) {
+  const { agentRepository, runRepository, approvalRepository, lessonRepository, db } = getProjectDeps(projectId);
+  const agents = await agentRepository.listByProject(projectId);
+  return Promise.all(
+    agents.map(async (agent) =>
+      buildAgentView({
+        agent,
+        db,
+        runs: await runRepository.getByAgent(agent.id),
+        approvals: await approvalRepository.listByAgent(agent.id),
+        lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
+        activeConnections: agent.toolConfig.requiredProviders,
+      }),
+    ),
+  );
+}
+
+async function loadAgentView(projectId: string, agentId: string) {
+  const { agentRepository, runRepository, approvalRepository, lessonRepository, db } = getProjectDeps(projectId);
+  const agent = await agentRepository.getById(agentId);
+  if (!agent) {
+    return null;
+  }
+
+  return buildAgentView({
+    agent,
+    db,
+    runs: await runRepository.getByAgent(agent.id),
+    approvals: await approvalRepository.listByAgent(agent.id),
+    lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
+    activeConnections: agent.toolConfig.requiredProviders,
+  });
+}

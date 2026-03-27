@@ -1,7 +1,9 @@
 export { WorkspaceStore, type WorkspaceIdentity } from "./store";
+export { defaultKnowledgeMd, initializeWorkspace } from "./templates";
 export {
-  defaultAgentMd,
-  defaultPolicyMd,
-  defaultKnowledgeMd,
-  initializeWorkspace,
-} from "./templates";
+  getAgentWorkspacePath,
+  getProjectDbPath,
+  getProjectDirectory,
+  getRepoRoot,
+  getWebDataRoot,
+} from "./paths";

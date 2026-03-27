@@ -11,6 +11,11 @@
       "sourceType": "github",
       "computedHash": "62b9568daf7bb5cbf649e55becec5739439e50c892b269c25dfe007d6a3cb54d"
     },
+    "ai-sdk": {
+      "source": "vercel/ai",
+      "sourceType": "github",
+      "computedHash": "58ce68f628890c3925aea2b5435a649251ac182057541045c68fc19a27aaa0ec"
+    },
     "animate": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",
@@ -40,6 +45,11 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "computedHash": "0f475462ac11fe51f8f216a67ad61aef05a09379ce5ab8681103d7a26316fe3a"
+    },
+    "composio": {
+      "source": "composiohq/skills",
+      "sourceType": "github",
+      "computedHash": "11b975f122ecbf455b437e4e42ebf8f30fad84220894c3d52549eefea92a7795"
     },
     "critique": {
       "source": "pbakaus/impeccable",
@@ -110,6 +120,36 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "computedHash": "31756fe090814f06b81a4fe5220f69f8d7885f9f4a0ad10de240c6c6082fe743"
+    },
+    "trigger-agents": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "e3e1d05b7589aba63215ce17a002217547f918da16984099bf924cdc4d8a8a61"
+    },
+    "trigger-config": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "c7422cc5945fb6f0ffc4bea6588bd8c4822ac93c9dbeefb0072a338a7ae2cd06"
+    },
+    "trigger-cost-savings": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "4d41360e1f7544c1c28c4e097e72243bd8b88a9c8d91a37974a75f683c1bace1"
+    },
+    "trigger-realtime": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "0642d7abbd2036e6258ee7fa1050c43e9120faaaf331f79c25aaa7f40bf4cf40"
+    },
+    "trigger-setup": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "e6bea732fe6c8da34bd23e57d28351cc55e648039d28a10960306a06c68a6139"
+    },
+    "trigger-tasks": {
+      "source": "triggerdotdev/skills",
+      "sourceType": "github",
+      "computedHash": "1f65ede75b8118f3b301ac41836b447808a6e188dbce44e2ed8cc161fb6a8b25"
     },
     "typeset": {
       "source": "pbakaus/impeccable",

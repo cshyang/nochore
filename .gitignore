@@ -49,3 +49,4 @@ legacy/logs/*
 .windsurf/
 
 .trigger
+.ant-colony/

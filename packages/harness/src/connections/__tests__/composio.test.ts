@@ -140,14 +140,14 @@ describe("ComposioConnectionManager", () => {
   // execute
   // -----------------------------------------------------------------------
   describe("execute", () => {
-    it("calls composio.tools.execute with resolved slug", async () => {
-      const result = await manager.execute("get_search_terms", "google_ads", {
+    it("calls composio.tools.execute with registry-backed slug", async () => {
+      const result = await manager.execute("pause_ad", "google_ads", {
         customerId: "123",
       });
 
       expect(mockComposio.tools.execute).toHaveBeenCalledOnce();
       expect(mockComposio.tools.execute).toHaveBeenCalledWith(
-        "GOOGLEADS_GET_SEARCH_TERMS",
+        "GOOGLEADS_PAUSE_AD",
         {
           arguments: { customerId: "123" },
           userId: testUserId,
@@ -160,7 +160,7 @@ describe("ComposioConnectionManager", () => {
     });
 
     it("returns output from successful execution", async () => {
-      const result = await manager.execute("get_data", "meta_ads", {});
+      const result = await manager.execute("pause_campaign", "meta_ads", {});
 
       expect(result.status).toBe("executed");
       expect(result.output).toEqual({
@@ -176,7 +176,7 @@ describe("ComposioConnectionManager", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const errorManager = new ComposioConnectionManager(errorComposio as any, testUserId, testMappings);
 
-      const result = await errorManager.execute("get_data", "google_ads", {});
+      const result = await errorManager.execute("pause_ad", "google_ads", {});
 
       expect(result.status).toBe("failed");
       expect(result.error).toBe("API rate limit exceeded");
@@ -186,6 +186,13 @@ describe("ComposioConnectionManager", () => {
     it("sets proposalId to empty string (caller fills it in)", async () => {
       const result = await manager.execute("pause_ad", "google_ads", {});
       expect(result.proposalId).toBe("");
+    });
+
+    it("fails unknown actions instead of guessing a slug", async () => {
+      const result = await manager.execute("unknown_action", "google_ads", {});
+      expect(result.status).toBe("failed");
+      expect(result.error).toMatch(/unregistered action capability/i);
+      expect(mockComposio.tools.execute).not.toHaveBeenCalled();
     });
   });
 
@@ -214,7 +221,7 @@ describe("ComposioConnectionManager", () => {
     it("returns a health entry with composio provider", async () => {
       const health = await manager.getHealth();
       expect(health).toHaveLength(1);
-      expect(health[0]!.connectionId).toBe(`composio-${testUserId}`);
+      expect(health[0]!.connectionId).toBe(`composio-${testUserId}-composio`);
       expect(health[0]!.provider).toBe("composio");
       expect(health[0]!.status).toBe("active");
       expect(health[0]!.lastChecked).toBeInstanceOf(Date);
@@ -222,25 +229,19 @@ describe("ComposioConnectionManager", () => {
   });
 
   // -----------------------------------------------------------------------
-  // resolveToolSlug (tested indirectly via execute)
+  // explicit action capability mapping (tested indirectly via execute)
   // -----------------------------------------------------------------------
-  describe("resolveToolSlug convention", () => {
-    it("google_ads + get_search_terms → GOOGLEADS_GET_SEARCH_TERMS", async () => {
-      await manager.execute("get_search_terms", "google_ads", {});
+  describe("action capability registry", () => {
+    it("google_ads + pause_ad → GOOGLEADS_PAUSE_AD", async () => {
+      await manager.execute("pause_ad", "google_ads", {});
       const slug = mockComposio.tools.execute.mock.calls[0]![0];
-      expect(slug).toBe("GOOGLEADS_GET_SEARCH_TERMS");
+      expect(slug).toBe("GOOGLEADS_PAUSE_AD");
     });
 
     it("meta_ads + pause_campaign → METAADS_PAUSE_CAMPAIGN", async () => {
       await manager.execute("pause_campaign", "meta_ads", {});
       const slug = mockComposio.tools.execute.mock.calls[0]![0];
       expect(slug).toBe("METAADS_PAUSE_CAMPAIGN");
-    });
-
-    it("search_console + get_queries → SEARCHCONSOLE_GET_QUERIES", async () => {
-      await manager.execute("get_queries", "search_console", {});
-      const slug = mockComposio.tools.execute.mock.calls[0]![0];
-      expect(slug).toBe("SEARCHCONSOLE_GET_QUERIES");
     });
   });
 });

@@ -172,6 +172,18 @@ Small, focused agents with clear responsibilities beat one mega-agent trying to 
 
 When precision matters, agents delegate to deterministic tools rather than reasoning through the answer. The agent decides "calculate tax on this invoice" and calls a tax tool — it doesn't try to do arithmetic via LLM. Reasoning is fuzzy; execution is precise.
 
+### 7. Constraints Enable Autonomy
+
+The more tightly you constrain an agent's action space and evaluation criteria, the more autonomous it can safely operate. This is counterintuitive — constraints feel restrictive, but they're what make trust possible.
+
+In Nochore:
+- **Skills bound the action space** — the agent can only reason about what its skills know
+- **Policy is always deterministic** — no LLM evaluates guardrails, ever
+- **Tools are typed and declared** — the agent can't discover new capabilities at runtime
+- **Instructions define the arena** — the human sets strategy, the agent executes within bounds
+
+Design implication: when a user configures guardrails during setup, they're not restricting their agent — they're enabling it to act more independently. Karpathy's AutoResearch demonstrates this at the extreme: by locking the evaluation harness outside the agent's reach and bounding it to a single editable file with a clear metric, the agent runs hundreds of experiments overnight without supervision.
+
 ---
 
 ## The Two Audiences
@@ -374,6 +386,30 @@ Relay.app is the closest comparable in the market. Studying their UX reveals pat
 **Memory and learning.** Each Relay workflow run is stateless — run #47 knows nothing about run #46. Our agents compound in value through the memory system: experiments tried, outcomes observed, lessons learned.
 
 **Policy engine vs. binary approval.** Relay's "Human-in-the-loop" is a toggle: on or off. Our policy engine evaluates conditions: "Refund under $100? Auto-approve. Over $100? Ask the user with full reasoning." This is the difference between a gatkeeper and a judge.
+
+---
+
+## Competitive Learnings: Karpathy's AutoResearch
+
+AutoResearch (March 2026, 49K+ GitHub stars) is an autonomous experiment loop where an AI agent iterates on ML training code overnight. While domain-specific (LLM training), its architecture captures universal agent design principles relevant to Nochore.
+
+### Key Architecture: Three Files
+
+- **`program.md`** — Human-written strategy file. Research directions, constraints, qualitative criteria. The human iterates this; the agent follows it.
+- **`train.py`** — The ONLY file the agent can edit. The bounded action space.
+- **`prepare.py`** — LOCKED. Evaluation harness. Agent cannot modify it — prevents gaming the metric.
+
+### What We Learn
+
+**The human designs the arena, not the execution.** "Human writes program.md (the strategy). Agent writes train.py (the code). You sleep." This maps to Nochore's Instructions — the user defines what the agent should care about and what constraints to follow. The agent handles execution within those bounds.
+
+**Irreducible requirements for autonomous agents.** Three things must be present: (1) a clear metric, (2) automated measurement the agent can't influence, (3) a bounded action space. Remove any one and autonomous operation fails. In Nochore: the metric is the agent's intent, the measurement is the deterministic policy engine, and the action space is bounded by skills + tools.
+
+**Reversibility as a trust mechanism.** AutoResearch uses git commit/revert — improvements advance the branch, failures reset. In Nochore: the policy gate evaluates proposed actions before execution, and auto-handled actions always have an "Undo" option.
+
+### Where Nochore Differs
+
+AutoResearch is a **closed-loop optimization** — single metric, single artifact, fully reversible. Nochore agents operate in **open-loop business environments** — multiple metrics, external side effects (sending Slack messages, adjusting budgets), not always reversible. This is why Nochore needs the policy/guardrail layer that AutoResearch can skip. When you can't define "better" as a single number, you need human judgment at decision points.
 
 ---
 

@@ -1,13 +1,13 @@
-export type { ConnectionManager, ConnectionHealth } from "./types";
 export {
-  StubConnectionManager,
-  type StubConnectionManagerConfig,
-  type ExecutionLogEntry,
-} from "./stub";
+  buildDefaultToolConfig,
+  getToolCapabilitiesForProviders,
+  getToolCapability,
+  type ToolCapabilityDefinition,
+} from "./capabilities";
 export {
-  ComposioConnectionManager,
+  buildAgentToolSet,
   createComposioClient,
-  getComposioToolsForChat,
-  DEFAULT_DATA_TYPE_MAPPINGS,
-  type ComposioToolMapping,
+  executeComposioTool,
+  getComposioUserId,
+  sendNotificationTool,
 } from "./composio";

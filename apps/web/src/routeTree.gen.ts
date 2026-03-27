@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProjectIdRouteImport } from './routes/$projectId'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectIdIndexRouteImport } from './routes/$projectId.index'
+import { Route as ApiBlueprintRouteImport } from './routes/api.blueprint'
 import { Route as ProjectIdCallbackComposioRouteImport } from './routes/$projectId.callback.composio'
 import { Route as ProjectIdAgentsNewRouteImport } from './routes/$projectId.agents.new'
 import { Route as ProjectIdAgentsAgentIdRouteImport } from './routes/$projectId.agents.$agentId'
@@ -30,6 +31,11 @@ const ProjectIdIndexRoute = ProjectIdIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProjectIdRoute,
+} as any)
+const ApiBlueprintRoute = ApiBlueprintRouteImport.update({
+  id: '/api/blueprint',
+  path: '/api/blueprint',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectIdCallbackComposioRoute =
   ProjectIdCallbackComposioRouteImport.update({
@@ -51,6 +57,7 @@ const ProjectIdAgentsAgentIdRoute = ProjectIdAgentsAgentIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/blueprint': typeof ApiBlueprintRoute
   '/$projectId/': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/blueprint': typeof ApiBlueprintRoute
   '/$projectId': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/blueprint': typeof ApiBlueprintRoute
   '/$projectId/': typeof ProjectIdIndexRoute
   '/$projectId/agents/$agentId': typeof ProjectIdAgentsAgentIdRoute
   '/$projectId/agents/new': typeof ProjectIdAgentsNewRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$projectId'
+    | '/api/blueprint'
     | '/$projectId/'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
@@ -84,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/blueprint'
     | '/$projectId'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
@@ -92,6 +103,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$projectId'
+    | '/api/blueprint'
     | '/$projectId/'
     | '/$projectId/agents/$agentId'
     | '/$projectId/agents/new'
@@ -101,6 +113,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProjectIdRoute: typeof ProjectIdRouteWithChildren
+  ApiBlueprintRoute: typeof ApiBlueprintRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -125,6 +138,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$projectId/'
       preLoaderRoute: typeof ProjectIdIndexRouteImport
       parentRoute: typeof ProjectIdRoute
+    }
+    '/api/blueprint': {
+      id: '/api/blueprint'
+      path: '/api/blueprint'
+      fullPath: '/api/blueprint'
+      preLoaderRoute: typeof ApiBlueprintRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/$projectId/callback/composio': {
       id: '/$projectId/callback/composio'
@@ -171,6 +191,7 @@ const ProjectIdRouteWithChildren = ProjectIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProjectIdRoute: ProjectIdRouteWithChildren,
+  ApiBlueprintRoute: ApiBlueprintRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

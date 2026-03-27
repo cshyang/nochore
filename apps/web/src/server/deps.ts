@@ -1,76 +1,54 @@
-/**
- * Shared dependency factory for server functions.
- *
- * Caches DB connections per project and provides ready-to-use repository
- * instances. Every server function calls getProjectDeps() or getAgentDeps()
- * rather than constructing its own instances.
- */
-
 import { eq } from "drizzle-orm";
 import { createDb } from "../../../../packages/harness/src/db/client";
-import { agents } from "../../../../packages/harness/src/db/schema";
-import { SqliteMemoryStore } from "../../../../packages/harness/src/memory/store";
-import { RunRepository } from "../../../../packages/harness/src/repositories/run";
+import { agents, connections, projects } from "../../../../packages/harness/src/db/schema";
+import { AgentRepository } from "../../../../packages/harness/src/repositories/agent";
 import { ApprovalRepository } from "../../../../packages/harness/src/repositories/approval";
-import { ChatSessionStore } from "../../../../packages/harness/src/repositories/chat-session";
-import { SkillRegistry } from "../../../../packages/harness/src/skills/registry";
-import { WorkspaceStore } from "../../../../packages/harness/src/workspace/store";
-import { ContextAssembler } from "../../../../packages/harness/src/context/assembler";
-import { searchTermsSkill } from "../../../../packages/harness/src/skills/built-in/search-terms";
-import type { AgentConfig } from "../../../../packages/harness/src/types/agent-config";
-
-// ---------------------------------------------------------------------------
-// DB cache — one connection per project, reused across requests
-// ---------------------------------------------------------------------------
+import { LessonRepository } from "../../../../packages/harness/src/repositories/lesson";
+import { RunEventRepository } from "../../../../packages/harness/src/repositories/event";
+import { RunRepository } from "../../../../packages/harness/src/repositories/run";
+import { listPromptSkills } from "../../../../packages/harness/src/skills";
+import { WorkspaceStore } from "../../../../packages/harness/src/workspace";
+import { getAgentWorkspacePath, getProjectDbPath } from "../../../../packages/harness/src/workspace";
+import type { AgentConfig } from "../../../../packages/harness/src/types";
+import { buildAgentView, buildProjectView } from "./models";
 
 const dbCache = new Map<string, ReturnType<typeof createDb>>();
 
-function getDb(projectId: string) {
-  if (!dbCache.has(projectId)) {
-    dbCache.set(projectId, createDb(`data/projects/${projectId}/nochore.db`));
-  }
-  return dbCache.get(projectId)!;
+export interface ProjectDeps {
+  db: ReturnType<typeof createDb>;
+  agentRepository: AgentRepository;
+  runRepository: RunRepository;
+  runEventRepository: RunEventRepository;
+  approvalRepository: ApprovalRepository;
+  lessonRepository: LessonRepository;
 }
 
-// ---------------------------------------------------------------------------
-// Project-level dependencies (DB + repositories)
-// ---------------------------------------------------------------------------
-
-export function getProjectDeps(projectId: string) {
+export function getProjectDeps(projectId: string): ProjectDeps {
   const db = getDb(projectId);
   return {
     db,
-    memoryStore: new SqliteMemoryStore(db),
+    agentRepository: new AgentRepository(db),
     runRepository: new RunRepository(db),
+    runEventRepository: new RunEventRepository(db),
     approvalRepository: new ApprovalRepository(db),
-    chatSessionStore: new ChatSessionStore(db),
+    lessonRepository: new LessonRepository(db),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Agent-level dependencies (project deps + workspace + skills + context)
-// ---------------------------------------------------------------------------
-
-export function getAgentDeps(projectId: string, config: AgentConfig) {
-  const base = getProjectDeps(projectId);
-  const skillRegistry = new SkillRegistry();
-  skillRegistry.register(searchTermsSkill);
-
-  const workspaceStore = new WorkspaceStore(config.workspacePath);
-  const contextAssembler = new ContextAssembler(
-    workspaceStore,
-    base.memoryStore,
-  );
-
-  return { ...base, skillRegistry, workspaceStore, contextAssembler };
+export function clearProjectDeps(projectId: string): void {
+  dbCache.delete(projectId);
 }
 
-// ---------------------------------------------------------------------------
-// Agent query helpers — keep drizzle-orm usage contained in this module
-// ---------------------------------------------------------------------------
+export function getAgentDeps(projectId: string, agentId: string) {
+  const projectDeps = getProjectDeps(projectId);
+  return {
+    ...projectDeps,
+    workspaceStore: new WorkspaceStore(getAgentWorkspacePath(projectId, agentId)),
+    skills: listPromptSkills(),
+  };
+}
 
-/** Agent record with parsed config and Date fields. */
-export interface AgentRecord {
+export interface AgentRow {
   id: string;
   projectId: string;
   config: AgentConfig;
@@ -78,37 +56,101 @@ export interface AgentRecord {
   updatedAt: Date;
 }
 
-/** List all agents in a project. */
-export function listAgentRows(projectId: string): AgentRecord[] {
+export function listAgentRows(projectId: string): AgentRow[] {
   const { db } = getProjectDeps(projectId);
-  const rows = db
+  return db
     .select()
     .from(agents)
     .where(eq(agents.projectId, projectId))
-    .all();
-  return rows.map(toAgentRecord);
+    .all()
+    .map(toAgentRow);
 }
 
-/** Get a single agent by id. Returns null if not found. */
-export function getAgentRow(
-  projectId: string,
-  agentId: string,
-): AgentRecord | null {
+export function getAgentRow(projectId: string, agentId: string): AgentRow | null {
   const { db } = getProjectDeps(projectId);
-  const row = db
-    .select()
-    .from(agents)
-    .where(eq(agents.id, agentId))
-    .get();
-  return row ? toAgentRecord(row) : null;
+  const row = db.select().from(agents).where(eq(agents.id, agentId)).get();
+  return row ? toAgentRow(row) : null;
 }
 
-function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
+export function listProjectConnections(projectId: string) {
+  const { db } = getProjectDeps(projectId);
+  return db
+    .select()
+    .from(connections)
+    .where(eq(connections.projectId, projectId))
+    .all();
+}
+
+export function getProjectRow(projectId: string) {
+  const { db } = getProjectDeps(projectId);
+  return db.select().from(projects).where(eq(projects.id, projectId)).get();
+}
+
+export async function getProjectView(projectId: string) {
+  const project = getProjectRow(projectId);
+  if (!project) {
+    return null;
+  }
+
+  const { db, agentRepository, runRepository, runEventRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
+  const agentRows = await agentRepository.listByProject(projectId);
+  const agents = await Promise.all(
+    agentRows.map(async (agent) =>
+      buildAgentView({
+        agent,
+        db,
+        runs: await runRepository.getByAgent(agent.id),
+        approvals: await approvalRepository.listByAgent(agent.id),
+        lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
+        activeConnections: agent.toolConfig.requiredProviders,
+      }),
+    ),
+  );
+
+  const activeConnectionCount = db
+    .select()
+    .from(connections)
+    .where(eq(connections.projectId, projectId))
+    .all()
+    .filter((connection) => connection.status === "active").length;
+
+  return buildProjectView({
+    project,
+    agents,
+    activeConnectionCount,
+  });
+}
+
+function getDb(projectId: string) {
+  if (!dbCache.has(projectId)) {
+    dbCache.set(projectId, createDb(getProjectDbPath(projectId)));
+  }
+  return dbCache.get(projectId)!;
+}
+
+function toAgentRow(row: typeof agents.$inferSelect): AgentRow {
   return {
     id: row.id,
     projectId: row.projectId,
-    config: JSON.parse(row.config) as AgentConfig,
+    config: {
+      instructions: row.instructions,
+      skills: parseSkills(row.skills),
+      toolConfig: JSON.parse(row.toolConfig || "{}") as AgentConfig["toolConfig"],
+      notificationConfig: JSON.parse(row.notificationConfig || "{}") as AgentConfig["notificationConfig"],
+      schedule: row.schedule as AgentConfig["schedule"],
+    } as AgentConfig,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
   };
+}
+
+function parseSkills(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
 }

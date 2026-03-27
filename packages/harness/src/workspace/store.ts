@@ -6,8 +6,8 @@ import * as path from "path";
 // ---------------------------------------------------------------------------
 
 export interface WorkspaceIdentity {
-  agentMd: string | null;
   knowledgeMd: string | null;
+  agentMd: string | null;
   policyMd: string | null;
 }
 
@@ -16,7 +16,7 @@ export interface WorkspaceIdentity {
 // ---------------------------------------------------------------------------
 
 /** Directories the agent is allowed to write to. */
-const WRITABLE_DIRS = ["scratchpad", "reports"];
+const WRITABLE_DIRS = ["scratchpad"];
 
 // ---------------------------------------------------------------------------
 // WorkspaceStore — controlled filesystem access for agent workspaces
@@ -54,7 +54,7 @@ export class WorkspaceStore {
   }
 
   /**
-   * Write files ONLY to scratchpad/ or reports/ subdirectories.
+   * Write files ONLY to scratchpad/ subdirectories.
    * Throws if the path targets any other location.
    * Creates parent directories as needed.
    */
@@ -94,16 +94,15 @@ export class WorkspaceStore {
   }
 
   /**
-   * Load the three identity files (AGENT.md, KNOWLEDGE.md, POLICY.md).
-   * Missing files are represented as null.
+   * Load the durable identity files kept in the simplified workspace.
    */
   async loadIdentity(): Promise<WorkspaceIdentity> {
-    const [agentMd, knowledgeMd, policyMd] = await Promise.all([
-      this.readFile("AGENT.md"),
-      this.readFile("KNOWLEDGE.md"),
-      this.readFile("POLICY.md"),
-    ]);
-    return { agentMd, knowledgeMd, policyMd };
+    const knowledgeMd = await this.readFile("KNOWLEDGE.md");
+    return {
+      knowledgeMd,
+      agentMd: null,
+      policyMd: null,
+    };
   }
 
   // -----------------------------------------------------------------------

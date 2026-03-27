@@ -1,19 +1,9 @@
 import type { ExecutionResult } from "../types/action";
 import type { ConnectionHealth, ConnectionManager } from "./types";
 
-// ---------------------------------------------------------------------------
-// StubConnectionManager — test double for pipeline steps
-//
-// Allows tests to configure mock data and execution results without real
-// API calls. Also records every execute() call for assertion.
-// ---------------------------------------------------------------------------
-
 export interface StubConnectionManagerConfig {
-  /** Map of dataTypeId to mock data returned by fetch(). */
   data?: Record<string, unknown>;
-  /** Map of action name to execution result returned by execute(). */
   executionResults?: Record<string, ExecutionResult>;
-  /** Fallback result when no specific result is configured for an action. */
   defaultExecutionResult?: ExecutionResult;
 }
 
@@ -79,7 +69,6 @@ export class StubConnectionManager implements ConnectionManager {
     ];
   }
 
-  /** Test helper: get a defensive copy of the execution log. */
   getExecutionLog(): ExecutionLogEntry[] {
     return [...this.executionLog];
   }

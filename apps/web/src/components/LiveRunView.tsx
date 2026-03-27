@@ -1,0 +1,392 @@
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRealtimeRun } from "@trigger.dev/react-hooks";
+import {
+  ArrowRight,
+  Check,
+  CircleNotch,
+  Lightning,
+  Warning,
+  X,
+} from "@phosphor-icons/react";
+import { Button } from "~/components/Button";
+import { Badge } from "~/components/Badge";
+import { COLORS, RADIUS } from "~/lib/colors";
+
+type LiveEvent = {
+  id: string;
+  type: string;
+  summary: string;
+  timestamp: number;
+};
+
+type RunMetadata = {
+  events?: LiveEvent[];
+  status?: "running" | "waiting_for_approval" | "completed" | "failed";
+  cycle?: number;
+};
+
+interface LiveRunViewProps {
+  triggerRunId: string;
+  accessToken: string;
+  runId: string;
+  onComplete?: () => void;
+  onApprove?: (actionId: string, reason: string) => Promise<void>;
+  onReject?: (actionId: string, reason: string) => Promise<void>;
+}
+
+const EVENT_BORDER_COLORS: Record<string, string> = {
+  tool_called: "#4A9EFF",
+  tool_executed: "#4A9EFF",
+  finding_recorded: "#2ECC71",
+  tool_approval_requested: "#F1C40F",
+  tool_approval_resolved: "#F1C40F",
+  run_completed: "#2ECC71",
+  run_failed: "#E74C3C",
+};
+
+const DEFAULT_BORDER_COLOR = "#6B7280";
+
+function getBorderColor(type: string): string {
+  return EVENT_BORDER_COLORS[type] ?? DEFAULT_BORDER_COLOR;
+}
+
+function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red" | "gray" {
+  if (type === "tool_called" || type === "tool_executed") return "blue";
+  if (type === "finding_recorded" || type === "run_completed") return "green";
+  if (type === "tool_approval_requested" || type === "tool_approval_resolved") return "yellow";
+  if (type === "run_failed") return "red";
+  return "gray";
+}
+
+function getEventIcon(type: string) {
+  if (type === "tool_called" || type === "tool_executed") return Lightning;
+  if (type === "finding_recorded" || type === "run_completed") return Check;
+  if (type === "run_failed") return Warning;
+  if (type.includes("approval")) return ArrowRight;
+  return ArrowRight;
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  if (diff < 1000) return "just now";
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function humanizeType(type: string): string {
+  return type
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const pulseKeyframes = `
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+`;
+
+export function LiveRunView({
+  triggerRunId,
+  accessToken,
+  runId,
+  onComplete,
+  onApprove,
+  onReject,
+}: LiveRunViewProps) {
+  const { run, error } = useRealtimeRun(triggerRunId, {
+    accessToken,
+  });
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const completeFiredRef = useRef(false);
+  const [approvalStates, setApprovalStates] = useState<Record<string, "approving" | "rejecting">>({});
+  const [, setTick] = useState(0);
+
+  const meta = (run?.metadata ?? {}) as RunMetadata;
+  const events = meta.events ?? [];
+  const status = meta.status ?? "running";
+  const cycle = meta.cycle;
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events.length]);
+
+  useEffect(() => {
+    if ((status === "completed" || status === "failed") && !completeFiredRef.current) {
+      completeFiredRef.current = true;
+      const timer = setTimeout(() => onComplete?.(), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status, onComplete]);
+
+  useEffect(() => {
+    if (status !== "running" && status !== "waiting_for_approval") return;
+    const interval = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(interval);
+  }, [status]);
+
+  const handleApprove = useCallback(
+    async (eventId: string) => {
+      if (!onApprove) return;
+      setApprovalStates((prev) => ({ ...prev, [eventId]: "approving" }));
+      try {
+        await onApprove(eventId, "Approved from live view");
+      } finally {
+        setApprovalStates((prev) => {
+          const next = { ...prev };
+          delete next[eventId];
+          return next;
+        });
+      }
+    },
+    [onApprove],
+  );
+
+  const handleReject = useCallback(
+    async (eventId: string) => {
+      if (!onReject) return;
+      setApprovalStates((prev) => ({ ...prev, [eventId]: "rejecting" }));
+      try {
+        await onReject(eventId, "Rejected from live view");
+      } finally {
+        setApprovalStates((prev) => {
+          const next = { ...prev };
+          delete next[eventId];
+          return next;
+        });
+      }
+    },
+    [onReject],
+  );
+
+  if (error) {
+    return (
+      <div style={containerStyle}>
+        <div style={errorBannerStyle}>
+          <Warning size={16} weight="bold" />
+          <span>Failed to connect to run stream: {error.message}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!run) {
+    return (
+      <div style={containerStyle}>
+        <div style={connectingStyle}>
+          <CircleNotch size={18} weight="bold" style={{ animation: "live-pulse 1s ease-in-out infinite" }} />
+          <span>Connecting to run...</span>
+          <style>{pulseKeyframes}</style>
+        </div>
+      </div>
+    );
+  }
+
+  const isActive = status === "running" || status === "waiting_for_approval";
+  const isFinished = status === "completed" || status === "failed";
+
+  return (
+    <div style={containerStyle}>
+      <style>{pulseKeyframes}</style>
+
+      <div style={headerStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {isActive && (
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: COLORS.accent,
+                animation: "live-pulse 1.5s ease-in-out infinite",
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>
+            {isActive ? "Live" : isFinished ? (status === "completed" ? "Completed" : "Failed") : "Run"}
+          </span>
+          {status === "waiting_for_approval" && (
+            <Badge color="yellow">Waiting for approval</Badge>
+          )}
+          {cycle != null && isActive && (
+            <span style={{ fontSize: 12, color: COLORS.textDim }}>
+              Cycle {cycle + 1}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 12, color: COLORS.textDim, fontFamily: "monospace" }}>
+          {runId.slice(0, 12)}
+        </span>
+      </div>
+
+      {isFinished && (
+        <div
+          style={{
+            padding: "10px 14px",
+            background: status === "completed" ? "rgba(46, 204, 113, 0.08)" : "rgba(231, 76, 60, 0.08)",
+            borderLeft: `3px solid ${status === "completed" ? "#2ECC71" : "#E74C3C"}`,
+            borderRadius: RADIUS.sharp,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: status === "completed" ? "#2ECC71" : "#E74C3C",
+            marginBottom: 4,
+          }}
+        >
+          {status === "completed" ? <Check size={14} weight="bold" /> : <Warning size={14} weight="bold" />}
+          {status === "completed" ? "Run completed successfully" : "Run failed"}
+        </div>
+      )}
+
+      <div ref={scrollRef} style={scrollAreaStyle}>
+        {events.length === 0 && (
+          <div style={{ padding: 20, textAlign: "center", color: COLORS.textDim, fontSize: 13 }}>
+            Waiting for first event...
+          </div>
+        )}
+
+        {events.map((event) => {
+          const Icon = getEventIcon(event.type);
+          const isApproval = event.type === "tool_approval_requested";
+          const approvalState = approvalStates[event.id];
+
+          return (
+            <div key={event.id} style={eventCardStyle(event.type)}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+                  <Icon
+                    size={14}
+                    weight="bold"
+                    style={{ color: getBorderColor(event.type), marginTop: 2, flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <Badge color={getBadgeColor(event.type)}>
+                        {humanizeType(event.type)}
+                      </Badge>
+                      <span style={{ fontSize: 11, color: COLORS.textDim }}>
+                        {formatRelativeTime(event.timestamp)}
+                      </span>
+                    </div>
+                    <p style={eventSummaryStyle}>{event.summary}</p>
+                  </div>
+                </div>
+              </div>
+
+              {isApproval && (onApprove || onReject) && (
+                <div style={{ marginTop: 10, display: "flex", gap: 8, paddingLeft: 24 }}>
+                  {onApprove && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(event.id)}
+                      style={{ opacity: approvalState ? 0.6 : 1 }}
+                    >
+                      {approvalState === "approving" ? (
+                        <CircleNotch size={13} weight="bold" style={{ animation: "live-pulse 1s ease-in-out infinite" }} />
+                      ) : (
+                        <Check size={13} weight="bold" />
+                      )}
+                      Approve
+                    </Button>
+                  )}
+                  {onReject && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleReject(event.id)}
+                      style={{ opacity: approvalState ? 0.6 : 1 }}
+                    >
+                      {approvalState === "rejecting" ? (
+                        <CircleNotch size={13} weight="bold" style={{ animation: "live-pulse 1s ease-in-out infinite" }} />
+                      ) : (
+                        <X size={13} weight="bold" />
+                      )}
+                      Reject
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const containerStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  background: COLORS.bg,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: RADIUS.sharp,
+  overflow: "hidden",
+  height: "100%",
+};
+
+const headerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "12px 16px",
+  borderBottom: `1px solid ${COLORS.border}`,
+  background: COLORS.surface,
+  flexShrink: 0,
+};
+
+const scrollAreaStyle: CSSProperties = {
+  flex: 1,
+  overflowY: "auto",
+  padding: 12,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const connectingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 10,
+  padding: 40,
+  color: COLORS.textSecondary,
+  fontSize: 14,
+};
+
+const errorBannerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "14px 16px",
+  color: COLORS.red,
+  fontSize: 13,
+};
+
+function eventCardStyle(type: string): CSSProperties {
+  return {
+    padding: "10px 14px",
+    background: COLORS.surface,
+    border: `1px solid ${COLORS.border}`,
+    borderLeft: `3px solid ${getBorderColor(type)}`,
+    borderRadius: RADIUS.sharp,
+    transition: "border-color 0.15s ease",
+  };
+}
+
+const eventSummaryStyle: CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: COLORS.textSecondary,
+};

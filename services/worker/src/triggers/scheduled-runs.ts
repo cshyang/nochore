@@ -30,15 +30,13 @@ export const scheduledAgentRun = schedules.task({
       throw new Error("Schedule missing externalId (agentId)");
     }
 
-    // Extract projectId from schedule metadata
     const projectId =
-      (payload.metadata as Record<string, string> | undefined)?.projectId ??
-      "";
+      (payload as unknown as { metadata?: Record<string, string> }).metadata
+        ?.projectId ?? "";
     if (!projectId) {
       throw new Error("Schedule missing projectId in metadata");
     }
 
-    // Trigger the agent run task
     await agentRunTask.triggerAndWait({
       agentId,
       projectId,
