@@ -116,12 +116,12 @@ export function SettingsRow({
             width: 32,
             height: 32,
             borderRadius: RADIUS.lg,
-            background: COLORS.surfaceHover,
+            background: COLORS.accentDim,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            color: iconColor ?? COLORS.textSecondary,
+            color: iconColor ?? COLORS.accent,
           }}
         >
           {icon}
