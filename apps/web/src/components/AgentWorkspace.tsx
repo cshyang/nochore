@@ -145,6 +145,7 @@ export interface AgentWorkspaceProps {
   pendingActions?: ApprovalLike[];
   isDraft?: boolean;
   onConnect?: (provider: string) => void;
+  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean }>;
   activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
   onLiveRunComplete?: () => void;
   runError?: string | null;
@@ -561,6 +562,7 @@ function SettingsPanel({
   requiredProviders,
   onUpdateAgent,
   onConnect,
+  toolkits = [],
   isDraft,
   onRunNow,
   section = "objective",
@@ -571,6 +573,7 @@ function SettingsPanel({
   requiredProviders: Array<{ provider: string; reason?: string }>;
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: (provider: string) => void;
+  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean }>;
   isDraft: boolean;
   onRunNow?: () => void;
   section?: "objective" | "tools";
@@ -791,23 +794,32 @@ function SettingsPanel({
         <div style={{ display: "grid", gap: 18 }}>
           <SectionHeading>Connections</SectionHeading>
           <div style={{ display: "grid", gap: 6 }}>
-            {POPULAR_PROVIDERS.map((provider) => {
+            {(toolkits.length > 0 ? toolkits : POPULAR_PROVIDERS).map((provider) => {
+              const logo = "logo" in provider ? provider.logo : null;
+              const fallback = POPULAR_PROVIDERS.find((p) => p.id === provider.id);
               const conn = connections.find((c) => c.provider === provider.id);
-              const isConnected = conn?.status === "active";
+              const isConnected = ("isConnected" in provider && provider.isConnected) || conn?.status === "active";
               return (
                 <SettingsCard key={provider.id}>
                   <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
+                      {logo ? (
+                        <img src={logo} alt="" style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, objectFit: "contain" }} />
+                      ) : (
+                        <span style={{ fontSize: 20, flexShrink: 0 }}>{fallback?.icon ?? "🔌"}</span>
+                      )}
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{provider.name}</div>
-                        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description}</div>
+                        {"description" in provider && provider.description ? (
+                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description as string}</div>
+                        ) : null}
                       </div>
                     </div>
                     {isConnected ? (
                       <Badge color="green">Connected</Badge>
                     ) : (
                       <button
+                        className="btn"
                         onClick={() => onConnect?.(provider.id)}
                         disabled={!onConnect}
                         style={{
@@ -964,6 +976,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onUpdateAgent,
     onAskDeeper,
     onConnect,
+    toolkits = [],
     timelineEvents = [],
     approvals = [],
     runs = [],
@@ -1105,6 +1118,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                   <div style={{ position: "absolute", right: 0, marginTop: 8, minWidth: 180, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 6, zIndex: 20 }}>
                     {onDeleteAgent ? (
                       <button
+                        className="btn"
                         onClick={() => {
                           setMoreOpen(false);
                           onDeleteAgent();
@@ -1227,6 +1241,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               requiredProviders={mergedRequiredProviders}
               onUpdateAgent={handleSave}
               onConnect={onConnect}
+              toolkits={toolkits}
               isDraft={isDraft}
               onRunNow={onRunNow ? () => void onRunNow() : undefined}
               section="tools"
