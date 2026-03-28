@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowLeft, BookOpen, ChatCircle, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, RocketLaunch, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
+import { ArrowLeft, BookOpen, ChatCircle, Check, CircleNotch, DotsThree, Info, Play, RocketLaunch, WarningCircle, X } from "@phosphor-icons/react";
 import { LiveRunView } from "~/components/LiveRunView";
+import { RunRail } from "~/components/RunRail";
+import { RunReport } from "~/components/RunReport";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
@@ -40,23 +42,6 @@ type ConnectionLike = {
   provider: string;
   status: string;
   reason?: string;
-};
-
-type TimelineEventLike = {
-  id: string;
-  type?: string;
-  title?: string;
-  summary?: string;
-  description?: string;
-  status?: string;
-  timestamp?: string | number | Date;
-  runId?: string;
-  approvalId?: string;
-  actionId?: string;
-  toolName?: string;
-  tags?: string[];
-  details?: string[];
-  tone?: "info" | "success" | "warning" | "danger";
 };
 
 type ApprovalLike = {
@@ -139,50 +124,15 @@ export interface AgentWorkspaceProps {
   skills?: SkillLike[];
   projectConnections?: ConnectionLike[];
   requiredProviders?: Array<{ provider: string; reason?: string }>;
-  timelineEvents?: TimelineEventLike[];
   approvals?: ApprovalLike[];
   runs?: RunLike[];
   pendingActions?: ApprovalLike[];
   isDraft?: boolean;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
-  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean; connectedAccountId: string | null }>;
   activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
   onLiveRunComplete?: () => void;
   runError?: string | null;
-}
-
-type TimelineItem = {
-  id: string;
-  type: string;
-  title: string;
-  summary: string;
-  timestamp: Date;
-  tone: "info" | "success" | "warning" | "danger";
-  tags: string[];
-  runId?: string;
-  approvalId?: string;
-  actionId?: string;
-  details?: string[];
-  toolName?: string;
-  raw?: TimelineEventLike | RunLike | ApprovalLike;
-};
-
-function toDate(value: string | number | Date | undefined): Date {
-  if (value instanceof Date) return value;
-  if (typeof value === "number") return new Date(value);
-  if (typeof value === "string") return new Date(value);
-  return new Date();
-}
-
-function formatTimeAgo(value: Date): string {
-  const diff = Date.now() - value.getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function humanize(value: string): string {
@@ -190,43 +140,6 @@ function humanize(value: string): string {
     .replace(/_/g, " ")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function getStatusTone(status?: string): TimelineItem["tone"] {
-  switch ((status ?? "").toLowerCase()) {
-    case "completed":
-    case "approved":
-    case "executed":
-    case "active":
-    case "live":
-      return "success";
-    case "failed":
-    case "rejected":
-    case "blocked":
-    case "warning":
-      return "danger";
-    case "pending":
-    case "queued":
-    case "running":
-    case "waiting_for_approval":
-      return "warning";
-    default:
-      return "info";
-  }
-}
-
-function toneColor(tone: TimelineItem["tone"]): string {
-  switch (tone) {
-    case "success":
-      return COLORS.green;
-    case "warning":
-      return COLORS.orange;
-    case "danger":
-      return COLORS.red;
-    case "info":
-    default:
-      return COLORS.accent;
-  }
 }
 
 function normalizeToolConfig(value: unknown): ToolConfigLike {
@@ -260,248 +173,6 @@ function normalizeNotificationConfig(value: unknown): NotificationConfigLike {
     email: record.email === true,
     slack: record.slack === true,
   };
-}
-
-function toTimelineItems(params: {
-  timelineEvents: TimelineEventLike[];
-  approvals: ApprovalLike[];
-  runs: RunLike[];
-  pendingActions: ApprovalLike[];
-}): TimelineItem[] {
-  const approvalItems = params.approvals.map((approval) => {
-    const timestamp = toDate(approval.createdAt);
-    return {
-      id: `approval-${approval.id}`,
-      type: "approval",
-      title: approval.toolName ? humanize(approval.toolName) : "Approval requested",
-      summary: approval.decisionReason ?? "Waiting on a decision.",
-      timestamp,
-      tone: getStatusTone(approval.status),
-      tags: [
-        approval.status ? humanize(approval.status) : "pending",
-        approval.runId ? "Run attached" : "No run",
-      ],
-      runId: approval.runId,
-      approvalId: approval.approvalId ?? approval.id,
-      actionId: approval.id,
-      toolName: approval.toolName,
-      raw: approval,
-    } satisfies TimelineItem;
-  });
-
-  const pendingItems = params.pendingActions.map((approval) => ({
-    id: `pending-${approval.id}`,
-    type: "approval",
-    title: approval.toolName ? humanize(approval.toolName) : "Approval requested",
-    summary: approval.decisionReason ?? "Waiting on a decision.",
-    timestamp: toDate(approval.createdAt),
-    tone: getStatusTone(approval.status),
-    tags: [approval.status ? humanize(approval.status) : "pending"],
-    runId: approval.runId,
-    approvalId: approval.approvalId ?? approval.id,
-    actionId: approval.id,
-    toolName: approval.toolName,
-    raw: approval,
-  } satisfies TimelineItem));
-
-  const runItems = params.runs.map((run) => {
-    const status = (run.status ?? "").toLowerCase();
-    const tone = getStatusTone(status);
-    const startedAt = toDate(run.startedAt);
-
-    // Find the best summary from run events
-    const events = (run as any).events as Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> }> | undefined;
-    const findingEvent = events?.find((e) => e.type === "finding_recorded");
-    const findingText = findingEvent?.payload?.text as string | undefined;
-
-    const baseTitle =
-      status === "failed"
-        ? "Run failed"
-        : status === "running"
-          ? "Run in progress"
-          : status === "queued"
-            ? "Run queued"
-            : "Run completed";
-    const summary =
-      run.error ??
-      (findingText ? findingText.slice(0, 300) : null) ??
-      (run.result?.proposals?.length
-        ? `${run.result.proposals.length} proposal${run.result.proposals.length === 1 ? "" : "s"} surfaced`
-        : `Triggered by ${run.triggerType ?? "manual"}.`);
-
-    return {
-      id: `run-${run.id}`,
-      type: `run:${status || "unknown"}`,
-      title: baseTitle,
-      summary,
-      timestamp: startedAt,
-      tone,
-      tags: [
-        run.triggerType ? humanize(run.triggerType) : "Run",
-        run.status ? humanize(run.status) : "Unknown",
-      ],
-      runId: run.id,
-      details: run.result?.details,
-      raw: run,
-    } satisfies TimelineItem;
-  });
-
-  // Extract individual events from runs into timeline items
-  const runEventItems: TimelineItem[] = [];
-  for (const run of params.runs) {
-    const events = (run as any).events as Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> }> | undefined;
-    if (!events || events.length === 0) continue;
-    // Only surface events the user cares about: findings, tool activity, approvals
-    const visibleTypes = new Set(["finding_recorded", "tool_called", "tool_executed", "tool_approval_requested", "tool_approval_resolved"]);
-    for (const event of events) {
-      if (!visibleTypes.has(event.type)) continue;
-      const tone = event.type === "finding_recorded" || event.type === "lesson_distilled" ? "success" as const
-        : event.type.includes("approval") ? "warning" as const
-        : event.type === "tool_executed" ? "info" as const
-        : "info" as const;
-      const title = event.type === "finding_recorded" ? "Finding"
-        : event.type === "tool_called" ? `Calling ${humanize((event.payload?.toolName as string) ?? "tool")}`
-        : event.type === "tool_executed" ? `${humanize((event.payload?.toolName as string) ?? "tool")} completed`
-        : event.type === "tool_approval_requested" ? `Approval needed: ${humanize((event.payload?.toolName as string) ?? "tool")}`
-        : event.type === "tool_approval_resolved" ? `${humanize((event.payload?.toolName as string) ?? "tool")} ${(event.payload?.status as string) ?? "resolved"}`
-        : event.type === "prompt_built" ? "Prompt assembled"
-        : event.type === "lesson_distilled" ? "Lesson learned"
-        : humanize(event.type);
-      const summary = event.type === "finding_recorded" ? ((event.payload?.text as string) ?? "").slice(0, 300)
-        : event.type === "tool_called" || event.type === "tool_executed" ? humanize((event.payload?.toolName as string) ?? "")
-        : event.type === "prompt_built" ? `${(event.payload?.selectedSkills as string[])?.length ?? 0} skills loaded`
-        : "";
-      runEventItems.push({
-        id: `event-${event.id}`,
-        type: event.type,
-        title,
-        summary,
-        timestamp: toDate(event.timestamp),
-        tone,
-        tags: [humanize(event.type)],
-        runId: run.id,
-        raw: event,
-      });
-    }
-  }
-
-  const eventItems = params.timelineEvents.map((event) => ({
-    id: event.id,
-    type: event.type ?? "event",
-    title: event.title ?? humanize(event.type ?? "event"),
-    summary: event.summary ?? event.description ?? "",
-    timestamp: toDate(event.timestamp),
-    tone: event.tone ?? getStatusTone(event.status),
-    tags: event.tags ?? [event.type ? humanize(event.type) : "Event"],
-    runId: event.runId,
-    approvalId: event.approvalId,
-    actionId: event.actionId,
-    details: event.details,
-    toolName: event.toolName,
-    raw: event,
-  } satisfies TimelineItem));
-
-  return [...eventItems, ...approvalItems, ...pendingItems, ...runItems, ...runEventItems]
-    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-    .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
-}
-
-function iconForTone(tone: TimelineItem["tone"]) {
-  switch (tone) {
-    case "success":
-      return CheckCircle;
-    case "warning":
-      return WarningCircle;
-    case "danger":
-      return X;
-    default:
-      return Info;
-  }
-}
-
-function TimelineCard({
-  item,
-  onApprove,
-  onReject,
-  onSelect,
-}: {
-  item: TimelineItem;
-  onApprove?: (approvalId: string) => void;
-  onReject?: (approvalId: string) => void;
-  onSelect?: (item: TimelineItem) => void;
-}) {
-  const Icon = iconForTone(item.tone);
-  return (
-    <Card
-      style={{
-        padding: 18,
-        borderLeft: `3px solid ${toneColor(item.tone)}`,
-        borderRadius: RADIUS.sm,
-        background: COLORS.surface,
-      }}
-      onClick={() => onSelect?.(item)}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <Badge color={item.tone === "danger" ? "red" : item.tone === "warning" ? "orange" : item.tone === "success" ? "green" : "accent"}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Icon size={12} weight="bold" />
-                {item.type.includes("approval") ? "Approval" : item.type.startsWith("run") ? "Run" : "Timeline"}
-              </span>
-            </Badge>
-            <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>{formatTimeAgo(item.timestamp)}</span>
-          </div>
-          <h3 style={{ margin: 0, fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text, lineHeight: TYPE.leading.snug, fontFamily: TYPE.display }}>
-            {item.title}
-          </h3>
-          <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, fontSize: TYPE.scale.base, lineHeight: TYPE.leading.normal, fontFamily: TYPE.body }}>
-            {item.summary}
-          </p>
-          {item.details?.length ? (
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-              {item.details.map((detail) => (
-                <div key={detail} style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs, lineHeight: TYPE.leading.snug }}>
-                  • {detail}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
-          <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>{item.timestamp.toLocaleString()}</span>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {item.tags.map((tag) => (
-              <span
-                key={tag}
-                style={{
-                  fontSize: TYPE.scale.xs,
-                  padding: "4px 8px",
-                  borderRadius: RADIUS.pill,
-                  background: COLORS.surface,
-                  color: COLORS.textSecondary,
-                  border: `1px solid ${COLORS.border}`,
-                }}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-      {item.approvalId ? (
-        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Button size="sm" onClick={() => onApprove?.(item.approvalId!)}>
-            <Check size={13} weight="bold" />
-            Approve
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => onReject?.(item.approvalId!)}>
-            Reject
-          </Button>
-        </div>
-      ) : null}
-    </Card>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -687,101 +358,22 @@ function DraftChecklist({
   );
 }
 
-function TimelinePanel({
-  items,
-  onApprove,
-  onReject,
-  onRunNow,
-  selected,
-  onSelect,
-}: {
-  items: TimelineItem[];
-  onApprove?: (approvalId: string) => void;
-  onReject?: (approvalId: string) => void;
-  onRunNow?: () => void;
-  selected: TimelineItem | null;
-  onSelect: (item: TimelineItem | null) => void;
-}) {
 
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <Card style={{ padding: 20 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: 680 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <Badge color="accent">
-                <Sparkle size={12} weight="bold" />
-                Timeline surface
-              </Badge>
-              {selected ? (
-                <Badge color="accent">Focused on {selected.title}</Badge>
-              ) : null}
-            </div>
-            <h2 style={{ margin: 0, fontSize: TYPE.scale.md, fontFamily: TYPE.display, fontWeight: TYPE.weight.semibold, color: COLORS.text, lineHeight: TYPE.leading.snug }}>
-              Event-driven work, approvals, and outcomes in one place.
-            </h2>
-            <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, maxWidth: 600, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
-              Review what the agent found, approve or reject requested actions, and ask for more context without leaving the timeline.
-            </p>
-          </div>
-          {onRunNow ? (
-            <Button onClick={onRunNow}>
-              <Play size={13} weight="bold" />
-              Run now
-            </Button>
-          ) : null}
-        </div>
-      </Card>
-
-      {items.length === 0 ? (
-        <Card style={{ padding: "32px 24px" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: RADIUS.lg,
-              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
-            }}>
-              <Play size={20} weight="bold" color={COLORS.accent} />
-            </div>
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
-              No runs yet
-            </div>
-            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal, marginBottom: 20 }}>
-              When the agent runs, its findings, actions, and approval requests will appear here as a timeline you can review and act on.
-            </div>
-            {onRunNow ? (
-              <Button onClick={onRunNow}>
-                <Play size={13} weight="bold" />
-                Start first run
-              </Button>
-            ) : null}
-          </div>
-        </Card>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {items.map((item) => (
-            <TimelineCard
-              key={item.id}
-              item={item}
-              onApprove={onApprove}
-              onReject={onReject}
-              onSelect={(next) => onSelect(next)}
-            />
-          ))}
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-const POPULAR_PROVIDERS = [
-  { id: "gmail", name: "Gmail", icon: "✉️", description: "Send emails and read inbox" },
-  { id: "outlook", name: "Outlook", icon: "📧", description: "Microsoft email and calendar" },
-  { id: "slack", name: "Slack", icon: "💬", description: "Send messages and notifications" },
-  { id: "telegram", name: "Telegram", icon: "✈️", description: "Send messages via Telegram bot" },
-  { id: "whatsapp", name: "WhatsApp", icon: "📱", description: "Send WhatsApp messages" },
-] as const;
+const PROVIDER_DISPLAY: Record<string, { name: string; icon: string }> = {
+  googleads: { name: "Google Ads", icon: "📊" },
+  meta: { name: "Meta Ads", icon: "📘" },
+  ga4: { name: "Google Analytics", icon: "📈" },
+  googlesearchconsole: { name: "Search Console", icon: "🔍" },
+  tiktok: { name: "TikTok Ads", icon: "🎵" },
+  shopify: { name: "Shopify", icon: "🛍️" },
+  stripe: { name: "Stripe", icon: "💳" },
+  github: { name: "GitHub", icon: "🐙" },
+  gmail: { name: "Gmail", icon: "✉️" },
+  slack: { name: "Slack", icon: "💬" },
+  outlook: { name: "Outlook", icon: "📧" },
+  telegram: { name: "Telegram", icon: "✈️" },
+  whatsapp: { name: "WhatsApp", icon: "📱" },
+};
 
 function ToolTrustRow({
   label,
@@ -810,7 +402,6 @@ function SettingsPanel({
   onUpdateAgent,
   onConnect,
   onDisconnect,
-  toolkits = [],
   isDraft,
   onRunNow,
   section = "objective",
@@ -822,7 +413,6 @@ function SettingsPanel({
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
-  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean; connectedAccountId: string | null }>;
   isDraft: boolean;
   onRunNow?: () => void;
   section?: "objective" | "tools";
@@ -1014,25 +604,21 @@ function SettingsPanel({
         <div style={{ display: "grid", gap: 18 }}>
           <SectionHeading>Connections</SectionHeading>
           <div style={{ display: "grid", gap: 6 }}>
-            {(toolkits.length > 0 ? toolkits : POPULAR_PROVIDERS).map((provider) => {
-              const logo = "logo" in provider ? provider.logo : null;
-              const fallback = POPULAR_PROVIDERS.find((p) => p.id === provider.id);
+            {requiredProviders.map((rp) => {
+              const display = PROVIDER_DISPLAY[rp.provider];
+              const provider = { id: rp.provider, name: display?.name ?? rp.provider, icon: display?.icon ?? "🔌", description: rp.reason ?? "" };
               const conn = connections.find((c) => c.provider === provider.id);
-              const isConnected = ("isConnected" in provider && provider.isConnected) || conn?.status === "active";
-              const accountId = "connectedAccountId" in provider ? (provider.connectedAccountId as string | null) : null;
+              const isConnected = conn?.status === "active";
+              const accountId: string | null = conn?.id ?? null;
               return (
                 <SettingsCard key={provider.id}>
                   <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      {logo ? (
-                        <img src={logo} alt="" style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, objectFit: "contain" }} />
-                      ) : (
-                        <span style={{ fontSize: 20, flexShrink: 0 }}>{fallback?.icon ?? "🔌"}</span>
-                      )}
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{provider.name}</div>
-                        {"description" in provider && provider.description ? (
-                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description as string}</div>
+                        {provider.description ? (
+                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description}</div>
                         ) : null}
                       </div>
                     </div>
@@ -1222,8 +808,6 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onAskDeeper,
     onConnect,
     onDisconnect,
-    toolkits = [],
-    timelineEvents = [],
     approvals = [],
     runs = [],
     pendingActions = [],
@@ -1237,24 +821,31 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const availableSkills = props.availableSkills ?? props.skills ?? [];
   const projectConnections = props.projectConnections ?? [];
   const isDraft = isDraftProp ?? (agent.status?.toLowerCase() === "draft");
-  const [tab, setTab] = useState<"timeline" | "objective" | "tools" | "chat" | "memory">("timeline");
+  const [tab, setTab] = useState<"activity" | "objective" | "tools" | "chat" | "memory">("activity");
   const [moreOpen, setMoreOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<TimelineItem | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
+  // Auto-select latest run when runs load or on mount
   useEffect(() => {
-    setSelectedItem(null);
+    if (runs.length > 0 && !selectedRunId) {
+      setSelectedRunId(runs[0].id);
+    }
+  }, [runs, selectedRunId]);
+
+  // Reset selection when agent changes
+  useEffect(() => {
+    setSelectedRunId(null);
   }, [agent.id]);
 
-  const timelineItems = useMemo(
-    () =>
-      toTimelineItems({
-        timelineEvents,
-        approvals,
-        runs,
-        pendingActions,
-      }),
-    [timelineEvents, approvals, runs, pendingActions],
-  );
+  const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null;
+
+  // Find pending approval for the selected run
+  const selectedRunApproval = useMemo(() => {
+    if (!selectedRun) return null;
+    const pending = pendingActions.find((a) => a.runId === selectedRun.id && a.status === "pending");
+    if (!pending) return null;
+    return { id: pending.id, toolName: pending.toolName, reason: pending.decisionReason };
+  }, [selectedRun, pendingActions]);
 
   const mergedRequiredProviders = useMemo(() => {
     const config = normalizeToolConfig(agent.toolConfig);
@@ -1475,7 +1066,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         )}
 
         <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
-          {(["timeline", "objective", "tools", "chat", "memory"] as const).map((item) => (
+          {(["activity", "objective", "tools", "chat", "memory"] as const).map((item) => (
             <button
               key={item}
               onClick={() => setTab(item)}
@@ -1518,7 +1109,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                   Ready to start the first run?
                 </div>
                 <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, marginBottom: 4 }}>
-                  The agent will follow its instructions, use connected tools to gather data, analyze what it finds, and surface results on the timeline.
+                  The agent will follow its instructions, use connected tools to gather data, analyze what it finds, and surface results on the Activity tab.
                 </div>
                 <ul style={{ margin: "10px 0 0", padding: "0 0 0 18px", color: COLORS.textSecondary, fontSize: TYPE.scale.sm, lineHeight: 1.8 }}>
                   <li>Runs typically take 30 seconds to a few minutes</li>
@@ -1545,7 +1136,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           </Card>
         )}
 
-        {tab === "timeline" && (
+        {tab === "activity" && (
           <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
             {runError && (
               <div style={{
@@ -1564,7 +1155,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 {runError}
               </div>
             )}
-            {activeRun && (
+            {activeRun ? (
               <LiveRunView
                 triggerRunId={activeRun.triggerRunId}
                 accessToken={activeRun.accessToken}
@@ -1573,19 +1164,23 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 onApprove={onApprove ? (id, reason) => { void onApprove(id); } : undefined}
                 onReject={onReject ? (id, reason) => { void onReject(id); } : undefined}
               />
+            ) : (
+              <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
+                <RunRail
+                  runs={runs}
+                  selectedRunId={selectedRun?.id ?? null}
+                  onSelect={setSelectedRunId}
+                />
+                <RunReport
+                  run={selectedRun as any}
+                  hasRuns={runs.length > 0}
+                  onRunNow={wrappedOnRunNow}
+                  pendingApproval={selectedRunApproval}
+                  onApprove={(id) => { void onApprove?.(id); }}
+                  onReject={(id) => { void onReject?.(id); }}
+                />
+              </div>
             )}
-            <TimelinePanel
-              items={timelineItems}
-              selected={selectedItem}
-              onSelect={setSelectedItem}
-              onApprove={(approvalId) => {
-                void onApprove?.(approvalId);
-              }}
-              onReject={(approvalId) => {
-                void onReject?.(approvalId);
-              }}
-              onRunNow={wrappedOnRunNow}
-            />
           </div>
         )}
 
@@ -1614,7 +1209,6 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onUpdateAgent={handleSave}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
-              toolkits={toolkits}
               isDraft={isDraft}
               onRunNow={wrappedOnRunNow}
               section="tools"

@@ -139,6 +139,123 @@ export const activateConnection = createServerFn({ method: "POST" })
     return jsonSafe({ success: true, connectionId: pending.id });
   });
 
+export const getToolkitMetadata = createServerFn({ method: "GET" })
+  .inputValidator((input: { projectId: string; toolkits: string[] }) => input)
+  .handler(async ({ data }) => {
+    try {
+      const composio = await createComposioClient();
+      const session = await composio.create(getComposioUserId(data.projectId), {
+        toolkits: data.toolkits,
+        manageConnections: false,
+      });
+      const { items } = await session.toolkits();
+      return jsonSafe(
+        items.map((toolkit: {
+          slug: string;
+          name: string;
+          logo?: string;
+          isNoAuth?: boolean;
+          connection?: {
+            isActive?: boolean;
+            connectedAccount?: { id?: string; status?: string };
+          };
+        }) => ({
+          id: toolkit.slug,
+          name: toolkit.name,
+          logo: toolkit.logo ?? null,
+          isConnected: toolkit.connection?.isActive ?? false,
+          isNoAuth: toolkit.isNoAuth ?? false,
+          connectedAccountId: toolkit.connection?.connectedAccount?.id ?? null,
+          accountStatus: toolkit.connection?.connectedAccount?.status ?? null,
+        })),
+      );
+    } catch {
+      return jsonSafe([]);
+    }
+  });
+
+export const disconnectProvider = createServerFn({ method: "POST" })
+  .inputValidator((input: { projectId: string; provider: string; connectedAccountId: string }) => input)
+  .handler(async ({ data }) => {
+    try {
+      const composio = await createComposioClient();
+      await composio.connectedAccounts.delete(data.connectedAccountId);
+      // Also update local DB status
+      const { db } = getProjectDeps(data.projectId);
+      const rows = db
+        .select()
+        .from(connections)
+        .where(eq(connections.projectId, data.projectId))
+        .all()
+        .filter((row) => row.provider === data.provider && row.status === "active");
+      for (const row of rows) {
+        db.update(connections)
+          .set({ status: "disconnected", updatedAt: Date.now() })
+          .where(eq(connections.id, row.id))
+          .run();
+      }
+      return jsonSafe({ success: true });
+    } catch {
+      return jsonSafe({ success: false });
+    }
+  });
+
+const SUPPORTED_PROVIDERS = [
+  "googleads",
+  "meta",
+  "slack",
+  "gmail",
+  "ga4",
+  "shopify",
+  "stripe",
+  "github",
+  "googlesearchconsole",
+  "tiktok",
+];
+
+export interface ComposioToolMeta {
+  slug: string;
+  name: string;
+  description: string;
+  provider: string;
+  providerName: string;
+  providerLogo: string | null;
+  tags: string[];
+}
+
+export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
+  .inputValidator((input: { projectId: string }) => input)
+  .handler(async ({ data }): Promise<ComposioToolMeta[]> => {
+    try {
+      const composio = await createComposioClient();
+      const session = await composio.create(getComposioUserId(data.projectId), {
+        toolkits: SUPPORTED_PROVIDERS,
+        manageConnections: false,
+      });
+      const result = await session.tools();
+      const items = (result as { items?: unknown[] }).items ?? (Array.isArray(result) ? result : []);
+
+      return (items as Array<{
+          slug: string;
+          name: string;
+          description?: string;
+          human_description?: string;
+          tags?: string[];
+          toolkit: { slug: string; name: string; logo?: string };
+        }>).map((tool) => ({
+          slug: tool.slug,
+          name: tool.name,
+          description: tool.description ?? tool.human_description ?? "",
+          provider: tool.toolkit.slug,
+          providerName: tool.toolkit.name,
+          providerLogo: tool.toolkit.logo ?? null,
+          tags: tool.tags ?? [],
+        }));
+    } catch {
+      return [];
+    }
+  });
+
 export const listConnections = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
   .handler(async ({ data }) => {

@@ -21,7 +21,7 @@ import {
 } from "~/server/approvals";
 import { sendChat } from "~/server/chat";
 import { listAvailableSkills } from "~/server/skills";
-import { listConnections } from "~/server/connections";
+import { disconnectProvider, initiateConnection, listConnections } from "~/server/connections";
 import { getRealtimeToken } from "~/server/realtime";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
@@ -65,7 +65,6 @@ function AgentDetailPage() {
   const projectConnections = normalizeConnections(loaderData.projectConnections);
   const runs = normalizeRuns(loaderData.runs);
   const pending = normalizeApprovals(loaderData.pending);
-
   const [activeRun, setActiveRun] = useState<{
     runId: string;
     triggerRunId: string;
@@ -87,6 +86,35 @@ function AgentDetailPage() {
   const handleLiveRunComplete = useCallback(() => {
     setActiveRun(null);
     void router.invalidate();
+  }, [router]);
+
+  const handleConnect = useCallback(async (provider: string) => {
+    try {
+      const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}`;
+      const result = await initiateConnection({ data: { projectId, provider, callbackUrl } });
+      const data = result as { redirectUrl?: string };
+      if (data.redirectUrl) {
+        window.open(data.redirectUrl, "composio-oauth", "width=600,height=700");
+      }
+    } catch {
+      // Connection initiation failed
+    }
+  }, [projectId]);
+
+  const handleDisconnect = useCallback(async (provider: string, connectedAccountId: string) => {
+    await disconnectProvider({ data: { projectId, provider, connectedAccountId } });
+    void router.invalidate();
+  }, [projectId, router]);
+
+  // Refresh data when OAuth popup signals a successful connection
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "composio:connected") {
+        void router.invalidate();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, [router]);
 
   // Auto-activate LiveRunView if page loads with an active run
@@ -186,6 +214,8 @@ function AgentDetailPage() {
       }
       onDeleteAgent={handleDeleteAgent}
       onRunNow={handleRunNow}
+      onConnect={handleConnect}
+      onDisconnect={handleDisconnect}
       onUpdateAgent={async (updates) => {
         await updateAgentConfig({
           data: {
@@ -320,3 +350,4 @@ function normalizeApprovals(value: unknown) {
       !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string",
   );
 }
+
