@@ -351,8 +351,10 @@ function toTimelineItems(params: {
   for (const run of params.runs) {
     const events = (run as any).events as Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> }> | undefined;
     if (!events || events.length === 0) continue;
+    // Only surface events the user cares about: findings, tool activity, approvals
+    const visibleTypes = new Set(["finding_recorded", "tool_called", "tool_executed", "tool_approval_requested", "tool_approval_resolved"]);
     for (const event of events) {
-      if (event.type === "run_started" || event.type === "run_completed" || event.type === "run_failed") continue;
+      if (!visibleTypes.has(event.type)) continue;
       const tone = event.type === "finding_recorded" || event.type === "lesson_distilled" ? "success" as const
         : event.type.includes("approval") ? "warning" as const
         : event.type === "tool_executed" ? "info" as const
