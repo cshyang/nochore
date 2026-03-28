@@ -145,7 +145,8 @@ export interface AgentWorkspaceProps {
   pendingActions?: ApprovalLike[];
   isDraft?: boolean;
   onConnect?: (provider: string) => void;
-  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean }>;
+  onDisconnect?: (provider: string, connectedAccountId: string) => void;
+  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean; connectedAccountId: string | null }>;
   activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
   onLiveRunComplete?: () => void;
   runError?: string | null;
@@ -562,6 +563,7 @@ function SettingsPanel({
   requiredProviders,
   onUpdateAgent,
   onConnect,
+  onDisconnect,
   toolkits = [],
   isDraft,
   onRunNow,
@@ -573,7 +575,8 @@ function SettingsPanel({
   requiredProviders: Array<{ provider: string; reason?: string }>;
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: (provider: string) => void;
-  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean }>;
+  onDisconnect?: (provider: string, connectedAccountId: string) => void;
+  toolkits?: Array<{ id: string; name: string; logo: string | null; isConnected: boolean; connectedAccountId: string | null }>;
   isDraft: boolean;
   onRunNow?: () => void;
   section?: "objective" | "tools";
@@ -799,6 +802,7 @@ function SettingsPanel({
               const fallback = POPULAR_PROVIDERS.find((p) => p.id === provider.id);
               const conn = connections.find((c) => c.provider === provider.id);
               const isConnected = ("isConnected" in provider && provider.isConnected) || conn?.status === "active";
+              const accountId = "connectedAccountId" in provider ? (provider.connectedAccountId as string | null) : null;
               return (
                 <SettingsCard key={provider.id}>
                   <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -816,12 +820,36 @@ function SettingsPanel({
                       </div>
                     </div>
                     {isConnected ? (
-                      <Badge color="green">Connected</Badge>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <Badge color="green">Connected</Badge>
+                        <button
+                          className="btn"
+                          onClick={() => onConnect?.(provider.id)}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.textDim; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
+                          style={{ fontFamily: TYPE.body, padding: "4px 10px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.textSecondary, fontSize: TYPE.scale.xs, cursor: "pointer", transition: `all ${MOTION.duration} ${MOTION.ease}` }}
+                        >
+                          Reconnect
+                        </button>
+                        {accountId && (
+                          <button
+                            className="btn"
+                            onClick={() => onDisconnect?.(provider.id, accountId)}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.red; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
+                            style={{ fontFamily: TYPE.body, padding: "4px 10px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.red, fontSize: TYPE.scale.xs, cursor: "pointer", transition: `all ${MOTION.duration} ${MOTION.ease}` }}
+                          >
+                            Disconnect
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <button
                         className="btn"
                         onClick={() => onConnect?.(provider.id)}
                         disabled={!onConnect}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.accentDim; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                         style={{
                           fontFamily: TYPE.body,
                           padding: "6px 16px",
@@ -976,6 +1004,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onUpdateAgent,
     onAskDeeper,
     onConnect,
+    onDisconnect,
     toolkits = [],
     timelineEvents = [],
     approvals = [],
@@ -1123,6 +1152,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                           setMoreOpen(false);
                           onDeleteAgent();
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.redDim; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                         style={{
                           width: "100%",
                           padding: "10px 12px",
@@ -1132,6 +1163,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                           textAlign: "left",
                           cursor: "pointer",
                           borderRadius: 8,
+                          transition: `background ${MOTION.duration} ${MOTION.ease}`,
                         }}
                       >
                         Delete agent
@@ -1241,6 +1273,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               requiredProviders={mergedRequiredProviders}
               onUpdateAgent={handleSave}
               onConnect={onConnect}
+              onDisconnect={onDisconnect}
               toolkits={toolkits}
               isDraft={isDraft}
               onRunNow={onRunNow ? () => void onRunNow() : undefined}
