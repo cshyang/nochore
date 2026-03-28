@@ -53,6 +53,8 @@ function ComposioCallbackPage() {
 
           if (result.connected) {
             if (!cancelled) setStatus("success");
+            // Notify opener window so it can refresh connection state
+            try { window.opener?.postMessage({ type: "composio:connected", provider }, "*"); } catch {}
             setTimeout(() => {
               if (!cancelled) {
                 if (isPopup) {
@@ -90,6 +92,7 @@ function ComposioCallbackPage() {
 
           if (activation.success) {
             setStatus("success");
+            try { window.opener?.postMessage({ type: "composio:connected", provider }, "*"); } catch {}
             setTimeout(() => {
               if (!cancelled) {
                 if (isPopup) {

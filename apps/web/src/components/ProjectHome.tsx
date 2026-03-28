@@ -14,10 +14,28 @@ interface ProjectHomeProps {
   onDeleteProject?: () => void;
 }
 
+function isIncompleteDraft(agent: ProjectView["agents"][number]): boolean {
+  if (agent.lifecycleStatus !== "draft") return false;
+  const hasName = !!agent.name && agent.name !== "Untitled Agent";
+  const hasInstructions = !!agent.instructions && agent.instructions.trim().length > 20;
+  return !hasName || !hasInstructions;
+}
+
+function draftHint(agent: ProjectView["agents"][number]): string {
+  const missing: string[] = [];
+  if (!agent.name || agent.name === "Untitled Agent") missing.push("name");
+  if (!agent.instructions || agent.instructions.trim().length <= 20) missing.push("instructions");
+  if (agent.skills.length === 0) missing.push("skills");
+  if (missing.length === 0) return "Ready to go live";
+  return `Needs ${missing.join(", ")}`;
+}
+
 export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProject }: ProjectHomeProps) {
   const [projectTab, setProjectTab] = useState("agents");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const needsAttention = project.agents.filter((a) => a.status === "attention");
+  const incompleteDrafts = project.agents.filter(isIncompleteDraft);
+  const regularAgents = project.agents.filter((a) => !isIncompleteDraft(a));
 
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -143,12 +161,63 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
           </Card>
         )}
 
+        {/* Incomplete drafts — resume setup prompt */}
+        {incompleteDrafts.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+              Finish setup
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {incompleteDrafts.map((agent) => (
+                <div
+                  key={agent.id}
+                  onClick={() => onSelectAgent(agent.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    padding: "14px 18px",
+                    background: COLORS.surface,
+                    border: `1px dashed ${COLORS.border}`,
+                    borderRadius: RADIUS.lg,
+                    cursor: "pointer",
+                    transition: `border-color ${transition}`,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.accent; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+                        {agent.name}
+                      </span>
+                      <Badge color="orange">Draft</Badge>
+                    </div>
+                    <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>
+                      {draftHint(agent)}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: TYPE.scale.xs,
+                    fontWeight: TYPE.weight.medium,
+                    color: COLORS.accent,
+                    flexShrink: 0,
+                  }}>
+                    Resume setup →
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Agent grid */}
         <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
-          All agents
+          {incompleteDrafts.length > 0 ? "Active agents" : "All agents"}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {project.agents.map((agent) => {
+          {regularAgents.map((agent) => {
             const statusDotColor =
               agent.status === "attention"
                 ? COLORS.orange

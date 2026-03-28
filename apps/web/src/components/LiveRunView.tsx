@@ -30,8 +30,8 @@ interface LiveRunViewProps {
   accessToken: string;
   runId: string;
   onComplete?: () => void;
-  onApprove?: (actionId: string, reason: string) => Promise<void>;
-  onReject?: (actionId: string, reason: string) => Promise<void>;
+  onApprove?: (actionId: string, reason: string) => void | Promise<void>;
+  onReject?: (actionId: string, reason: string) => void | Promise<void>;
 }
 
 const EVENT_BORDER_COLORS: Record<string, string> = {

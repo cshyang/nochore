@@ -143,6 +143,56 @@ body::before {
   box-shadow: 0 0 0 2px var(--accent-subtle);
 }
 
+/* Hero input — focus lifts the outer container border */
+.hero-input:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* ── Prose: markdown content inside chat messages ── */
+.prose {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.prose p {
+  margin: 0 0 0.5em;
+}
+.prose p:last-child {
+  margin-bottom: 0;
+}
+.prose strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+.prose em {
+  font-style: italic;
+}
+.prose ul, .prose ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.prose li {
+  margin: 0.2em 0;
+}
+.prose li::marker {
+  color: var(--text-dim);
+}
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.prose a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.prose a:hover {
+  text-decoration: underline;
+}
+
 /* ── Keyframes ── */
 @keyframes spin {
   from { transform: rotate(0deg); }
