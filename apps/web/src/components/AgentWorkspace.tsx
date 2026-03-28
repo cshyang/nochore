@@ -144,6 +144,7 @@ export interface AgentWorkspaceProps {
   runs?: RunLike[];
   pendingActions?: ApprovalLike[];
   isDraft?: boolean;
+  onConnect?: (provider: string) => void;
   activeRun?: { runId: string; triggerRunId: string; accessToken: string } | null;
   onLiveRunComplete?: () => void;
   runError?: string | null;
@@ -526,6 +527,14 @@ function TimelinePanel({
   );
 }
 
+const POPULAR_PROVIDERS = [
+  { id: "gmail", name: "Gmail", icon: "✉️", description: "Send emails and read inbox" },
+  { id: "outlook", name: "Outlook", icon: "📧", description: "Microsoft email and calendar" },
+  { id: "slack", name: "Slack", icon: "💬", description: "Send messages and notifications" },
+  { id: "telegram", name: "Telegram", icon: "✈️", description: "Send messages via Telegram bot" },
+  { id: "whatsapp", name: "WhatsApp", icon: "📱", description: "Send WhatsApp messages" },
+] as const;
+
 function ToolTrustRow({
   label,
   value,
@@ -551,6 +560,7 @@ function SettingsPanel({
   connections,
   requiredProviders,
   onUpdateAgent,
+  onConnect,
   isDraft,
   onRunNow,
   section = "objective",
@@ -560,6 +570,7 @@ function SettingsPanel({
   connections: ConnectionLike[];
   requiredProviders: Array<{ provider: string; reason?: string }>;
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
+  onConnect?: (provider: string) => void;
   isDraft: boolean;
   onRunNow?: () => void;
   section?: "objective" | "tools";
@@ -778,106 +789,112 @@ function SettingsPanel({
 
       {section === "tools" && (
         <div style={{ display: "grid", gap: 18 }}>
-          <SectionHeading>Tool Trust</SectionHeading>
-          <SettingsCard>
-            <div style={{ padding: 16, display: "grid", gap: 10 }}>
-              <ToolTrustRow label="Auto" value={autoCount} tone="success" />
-              <ToolTrustRow label="Approval" value={approvalCount} tone="warning" />
-              <ToolTrustRow label="Blocked" value={blockedCount} tone="danger" />
-              <ToolTrustRow label="Required providers" value={requiredProviders.length} tone="info" />
-            </div>
-          </SettingsCard>
-
-          <SectionHeading>Per-tool settings</SectionHeading>
-          <SettingsCard>
-            {toolEntries.length === 0 ? (
-              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
-                No tool settings yet. They will appear once the server provides the tool catalog.
-              </div>
-            ) : (
-              toolEntries.map(([key, tool], index) => (
-                <SettingsRow
-                  key={key}
-                  icon={tool.mode === "write" ? "↗" : "↘"}
-                  title={tool.title ?? humanize(key)}
-                  description={tool.description}
-                  value={tool.approvalMode ? humanize(tool.approvalMode) : "Auto"}
-                  isLast={index === toolEntries.length - 1}
-                  defaultExpanded
-                  trailing={
-                    <Badge color={tool.mode === "write" ? "write" : "read"}>
-                      {tool.mode === "write" ? "Write" : "Read"}
-                    </Badge>
-                  }
-                >
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {(["auto", "approval", "blocked"] as const).map((mode) => (
+          <SectionHeading>Connections</SectionHeading>
+          <div style={{ display: "grid", gap: 6 }}>
+            {POPULAR_PROVIDERS.map((provider) => {
+              const conn = connections.find((c) => c.provider === provider.id);
+              const isConnected = conn?.status === "active";
+              return (
+                <SettingsCard key={provider.id}>
+                  <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{provider.name}</div>
+                        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description}</div>
+                      </div>
+                    </div>
+                    {isConnected ? (
+                      <Badge color="green">Connected</Badge>
+                    ) : (
                       <button
-                        className="pill"
-                        key={mode}
-                        onClick={() => {
-                          const next = {
-                            ...pendingToolConfig,
-                            tools: {
-                              ...(pendingToolConfig.tools ?? {}),
-                              [key]: {
-                                ...tool,
-                                approvalMode: mode,
-                                enabled: mode !== "blocked",
-                                toolName: tool.toolName ?? key,
-                              },
-                            },
-                          };
-                          setPendingToolConfig(next);
-                          void persist({ toolConfig: next });
-                        }}
+                        onClick={() => onConnect?.(provider.id)}
+                        disabled={!onConnect}
                         style={{
                           fontFamily: TYPE.body,
-                          padding: "6px 14px",
+                          padding: "6px 16px",
                           borderRadius: RADIUS.pill,
-                          border: `1px solid ${tool.approvalMode === mode ? COLORS.accent : COLORS.border}`,
-                          background: tool.approvalMode === mode ? COLORS.accentDim : "transparent",
-                          color: tool.approvalMode === mode ? COLORS.accent : COLORS.textSecondary,
+                          border: `1px solid ${COLORS.accent}`,
+                          background: "transparent",
+                          color: COLORS.accent,
                           fontSize: TYPE.scale.xs,
-                          fontWeight: TYPE.weight.medium,
-                          cursor: "pointer",
+                          fontWeight: TYPE.weight.semibold,
+                          cursor: onConnect ? "pointer" : "default",
                           transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                          flexShrink: 0,
                         }}
                       >
-                        {humanize(mode)}
+                        Connect
                       </button>
-                    ))}
+                    )}
                   </div>
-                </SettingsRow>
-              ))
-            )}
-          </SettingsCard>
+                </SettingsCard>
+              );
+            })}
+          </div>
 
-          <SectionHeading>Connections</SectionHeading>
-          <SettingsCard>
-            {requiredProviders.length === 0 && connections.length === 0 ? (
-              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
-                No required providers yet.
-              </div>
-            ) : (
-              <div style={{ display: "grid" }}>
-                {requiredProviders.map((provider, index) => {
-                  const connection = connections.find((item) => item.provider === provider.provider);
-                  return (
-                    <SettingsRow
-                      key={provider.provider}
-                      icon={connection?.status === "active" ? "●" : "○"}
-                      title={humanize(provider.provider)}
-                      description={provider.reason ?? "Required for this agent."}
-                      value={connection?.status ?? "missing"}
-                      isLast={index === requiredProviders.length - 1}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </SettingsCard>
-
+          {toolEntries.length > 0 && (
+            <>
+              <SectionHeading>Per-tool settings</SectionHeading>
+              <SettingsCard>
+                {toolEntries.map(([key, tool], index) => (
+                  <SettingsRow
+                    key={key}
+                    icon={tool.mode === "write" ? "↗" : "↘"}
+                    title={tool.title ?? humanize(key)}
+                    description={tool.description}
+                    value={tool.approvalMode ? humanize(tool.approvalMode) : "Auto"}
+                    isLast={index === toolEntries.length - 1}
+                    defaultExpanded
+                    trailing={
+                      <Badge color={tool.mode === "write" ? "write" : "read"}>
+                        {tool.mode === "write" ? "Write" : "Read"}
+                      </Badge>
+                    }
+                  >
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {(["auto", "approval", "blocked"] as const).map((mode) => (
+                        <button
+                          className="pill"
+                          key={mode}
+                          onClick={() => {
+                            const next = {
+                              ...pendingToolConfig,
+                              tools: {
+                                ...(pendingToolConfig.tools ?? {}),
+                                [key]: {
+                                  ...tool,
+                                  approvalMode: mode,
+                                  enabled: mode !== "blocked",
+                                  toolName: tool.toolName ?? key,
+                                },
+                              },
+                            };
+                            setPendingToolConfig(next);
+                            void persist({ toolConfig: next });
+                          }}
+                          style={{
+                            fontFamily: TYPE.body,
+                            padding: "6px 14px",
+                            borderRadius: RADIUS.pill,
+                            border: `1px solid ${tool.approvalMode === mode ? COLORS.accent : COLORS.border}`,
+                            background: tool.approvalMode === mode ? COLORS.accentDim : "transparent",
+                            color: tool.approvalMode === mode ? COLORS.accent : COLORS.textSecondary,
+                            fontSize: TYPE.scale.xs,
+                            fontWeight: TYPE.weight.medium,
+                            cursor: "pointer",
+                            transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                          }}
+                        >
+                          {humanize(mode)}
+                        </button>
+                      ))}
+                    </div>
+                  </SettingsRow>
+                ))}
+              </SettingsCard>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -946,6 +963,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onReject,
     onUpdateAgent,
     onAskDeeper,
+    onConnect,
     timelineEvents = [],
     approvals = [],
     runs = [],
@@ -1047,12 +1065,12 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
                 <Badge color="accent">{project.icon ?? "◌"} {project.name}</Badge>
-                <Badge color={isDraft ? "orange" : agent.status === "paused" ? "accent" : "green"}>
+                <Badge color={isDraft ? "orange" : agent.status === "running" ? "green" : "gray"}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {!isDraft && agent.status !== "paused" && (
+                    {agent.status === "running" && (
                       <span className="aw-running-dot" style={{ width: 6, height: 6, borderRadius: RADIUS.pill, background: COLORS.green, display: "inline-block" }} />
                     )}
-                    {humanize(agent.status ?? (isDraft ? "draft" : "live"))}
+                    {humanize(agent.status ?? (isDraft ? "draft" : "idle"))}
                   </span>
                 </Badge>
               </div>
@@ -1208,6 +1226,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               connections={projectConnections}
               requiredProviders={mergedRequiredProviders}
               onUpdateAgent={handleSave}
+              onConnect={onConnect}
               isDraft={isDraft}
               onRunNow={onRunNow ? () => void onRunNow() : undefined}
               section="tools"
