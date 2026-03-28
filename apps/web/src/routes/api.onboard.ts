@@ -180,7 +180,8 @@ export const Route = createFileRoute("/api/onboard")({
               description:
                 "Present options to the user and wait for their selection. " +
                 "For tool recommendations, use multiSelect with description and selected fields. " +
-                "For simple choices (permissions, schedule), use single-select without description.",
+                "For simple choices (permissions, schedule), use single-select without description. " +
+                "You can call this tool multiple times in one response to batch questions into a paginated card.",
               inputSchema: z.object({
                 question: z.string().describe("The question or context to show the user"),
                 options: z
@@ -197,11 +198,27 @@ export const Route = createFileRoute("/api/onboard")({
                   .boolean()
                   .default(false)
                   .describe("True = checkboxes (pick many), false = radio (pick one)"),
+                allowCustom: z
+                  .boolean()
+                  .default(false)
+                  .describe("Show a 'Something else' option where the user can type a custom answer"),
+                skippable: z
+                  .boolean()
+                  .default(false)
+                  .describe("Show a Skip button — use when the question is optional"),
               }),
               outputSchema: z.object({
                 selectedKeys: z
                   .array(z.string())
                   .describe("The key(s) the user selected"),
+                customText: z
+                  .string()
+                  .optional()
+                  .describe("The user's freeform text when they chose 'Something else'"),
+                skipped: z
+                  .boolean()
+                  .optional()
+                  .describe("True when the user clicked Skip"),
               }),
               // No execute — UI-only tool, rendered client-side.
             },

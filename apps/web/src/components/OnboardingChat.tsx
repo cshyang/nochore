@@ -195,15 +195,6 @@ export function OnboardingChat({
   const handleOptionClick = useCallback(
     (value: string) => {
       if (isLoading || redirecting) return;
-
-      // "Something else" / "Other" → let user type their own answer
-      const lower = value.toLowerCase();
-      if (/\b(else|other|custom)\b/.test(lower)) {
-        setInputValue("");
-        inputRef.current?.focus();
-        return;
-      }
-
       if (!hasSubmitted) setHasSubmitted(true);
       setInputValue("");
       void sendMessage({ text: value });
@@ -768,6 +759,22 @@ function parseOptions(text: string): {
 // ConversationMessage — renders markdown + clickable option buttons
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Types for request_input tool
+// ---------------------------------------------------------------------------
+
+interface RequestInputToolInput {
+  question: string;
+  options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
+  multiSelect: boolean;
+  allowCustom?: boolean;
+  skippable?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// ConversationMessage — renders markdown + option cards (single or paginated)
+// ---------------------------------------------------------------------------
+
 function ConversationMessage({
   message,
   onOptionClick,
@@ -784,14 +791,14 @@ function ConversationMessage({
     .map((part) => part.text)
     .join("");
 
-  // Check for tool parts before deciding to return null
-  const hasToolPart = (message.parts as unknown as Array<Record<string, unknown>>).some(
+  // Collect ALL request_input tool calls in this message
+  const toolParts = (message.parts as unknown as Array<Record<string, unknown>>).filter(
     (p) => isRequestInputPart(p as Record<string, unknown>),
   );
 
-  if (!textContent.trim() && !hasToolPart) return null;
+  if (!textContent.trim() && toolParts.length === 0) return null;
 
-  // User messages — right-aligned, subtle surface chip
+  // User messages — right-aligned chip
   if (isUser) {
     return (
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -815,49 +822,93 @@ function ConversationMessage({
     );
   }
 
-  // Check for request_input tool call
-  const requestInputPart = (message.parts as unknown as Array<Record<string, unknown>>).find((p) =>
-    isRequestInputPart(p as Record<string, unknown>),
-  );
+  // Extract tool inputs
+  const toolInputs: RequestInputToolInput[] = toolParts
+    .map((p) => p.input as RequestInputToolInput | undefined)
+    .filter((input): input is RequestInputToolInput => !!input);
 
-  const toolInput = requestInputPart?.input as {
-    question: string;
-    options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
-    multiSelect: boolean;
-  } | undefined;
-
-  // Resolve selected keys from tool output or next user message
-  let resolvedSelectedKey = selectedKey;
-  if (!resolvedSelectedKey && requestInputPart?.state === "output-available") {
-    const output = requestInputPart.output as { selectedKeys?: string[] } | undefined;
-    if (output?.selectedKeys) {
-      resolvedSelectedKey = output.selectedKeys.join(", ");
-    }
-  }
-
-  // Use tool-based options if available, fall back to regex parsing
-  const toolOptions = toolInput?.options ?? [];
+  // For single tool call, fall back to regex if no tool input
+  const singleToolInput = toolInputs[0];
+  const toolOptions = singleToolInput?.options ?? [];
   const { body: regexBody, options: regexOptions, isMultiSelect: regexMulti } =
     toolOptions.length > 0
       ? { body: textContent, options: [] as Array<{ key: string; label: string }>, isMultiSelect: false }
       : parseOptions(textContent);
 
-  const finalBody = toolOptions.length > 0 ? (toolInput?.question ?? textContent) : regexBody;
+  const isActive = !!onOptionClick;
+  const isPast = !isActive;
+
+  // Past message: collapsed summary
+  if (isPast && toolParts.length > 0) {
+    // Resolve what was selected
+    let resolvedSelectedKey = selectedKey;
+    if (!resolvedSelectedKey && toolParts[0]?.state === "output-available") {
+      const output = toolParts[0].output as { selectedKeys?: string[] } | undefined;
+      if (output?.selectedKeys) resolvedSelectedKey = output.selectedKeys.join(", ");
+    }
+
+    if (toolInputs.length > 1) {
+      // Batched: show collapsed summary
+      const answeredCount = resolvedSelectedKey
+        ? resolvedSelectedKey.split("\n").filter((l) => l.trim()).length
+        : 0;
+      return (
+        <div>
+          {textContent.trim() && (
+            <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
+              <Markdown>{textContent}</Markdown>
+            </div>
+          )}
+          <div style={{ marginTop: 8, fontSize: TYPE.scale.sm, color: COLORS.textDim, fontFamily: TYPE.body, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: COLORS.accent }}>☑</span>
+            {answeredCount > 0 ? `${answeredCount} questions answered` : "Questions answered"}
+          </div>
+        </div>
+      );
+    }
+
+    // Single past card: collapsed single-line
+    const question = singleToolInput?.question ?? regexBody;
+    const answer = resolvedSelectedKey || "Skipped";
+    const resolvedAnswer = resolveSelectedLabel(answer, singleToolInput?.options ?? regexOptions);
+    return (
+      <div>
+        {textContent.trim() && textContent !== question && (
+          <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
+            <Markdown>{textContent}</Markdown>
+          </div>
+        )}
+        <div style={{ marginTop: 8, fontSize: TYPE.scale.sm, color: COLORS.textDim, fontFamily: TYPE.body, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ color: COLORS.accent }}>☑</span>
+          {question} → <span style={{ color: COLORS.text }}>{resolvedAnswer}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Active message: paginated card (or single card)
+  if (toolInputs.length > 1) {
+    return (
+      <div>
+        {textContent.trim() && (
+          <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
+            <Markdown>{textContent}</Markdown>
+          </div>
+        )}
+        <PaginatedCard steps={toolInputs} onComplete={onOptionClick} />
+      </div>
+    );
+  }
+
+  // Single active card
+  const finalBody = toolOptions.length > 0 ? (singleToolInput?.question ?? textContent) : regexBody;
   const finalOptions = toolOptions.length > 0 ? toolOptions : regexOptions;
-  const finalMultiSelect = toolOptions.length > 0 ? (toolInput?.multiSelect ?? false) : regexMulti;
+  const finalMultiSelect = toolOptions.length > 0 ? (singleToolInput?.multiSelect ?? false) : regexMulti;
 
   return (
     <div>
       {finalBody && (
-        <div
-          className="prose"
-          style={{
-            fontSize: TYPE.scale.md,
-            lineHeight: TYPE.leading.loose,
-            color: COLORS.textSecondary,
-            fontFamily: TYPE.body,
-          }}
-        >
+        <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
           <Markdown>{finalBody}</Markdown>
         </div>
       )}
@@ -865,76 +916,98 @@ function ConversationMessage({
         <OptionCards
           options={finalOptions}
           isMultiSelect={finalMultiSelect}
+          allowCustom={singleToolInput?.allowCustom}
+          skippable={singleToolInput?.skippable}
           onOptionClick={onOptionClick}
-          selectedKey={resolvedSelectedKey}
         />
       )}
     </div>
   );
 }
 
+/** Resolve a selectedKey back to a human-readable label */
+function resolveSelectedLabel(
+  selected: string,
+  options: Array<{ key: string; label: string }>,
+): string {
+  const keyToLabel = new Map(options.map((o) => [o.key, o.label]));
+  // Try full match first
+  if (keyToLabel.has(selected)) return keyToLabel.get(selected)!;
+  const byLabel = options.find((o) => o.label === selected);
+  if (byLabel) return byLabel.label;
+  // Multi-select: resolve each token
+  return selected
+    .split(",")
+    .map((s) => s.trim())
+    .map((t) => keyToLabel.get(t) ?? t)
+    .join(", ");
+}
+
 // ---------------------------------------------------------------------------
-// OptionCards — unified: radio (single) or checkbox (multi) with optional descriptions
+// PaginatedCard — batched questions with Next/Back/Skip navigation
 // ---------------------------------------------------------------------------
 
-function OptionCards({
-  options,
-  isMultiSelect,
-  onOptionClick,
-  selectedKey,
+function PaginatedCard({
+  steps,
+  onComplete,
 }: {
-  options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
-  isMultiSelect: boolean;
-  onOptionClick?: (value: string) => void;
-  selectedKey?: string;
+  steps: RequestInputToolInput[];
+  onComplete?: (value: string) => void;
 }) {
-  // Initialize from pre-selected options (for tool recommendations)
-  const [toggled, setToggled] = useState<Set<string>>(
-    () => new Set(options.filter((o) => o.selected).map((o) => o.key)),
-  );
-  const isActive = !!onOptionClick;
+  const [currentStep, setCurrentStep] = useState(0);
+  const [answers, setAnswers] = useState<Map<number, { keys: string[]; customText?: string; skipped?: boolean }>>(new Map);
 
-  const handleToggle = (key: string) => {
-    if (!isActive) return;
-    if (isMultiSelect) {
-      setToggled((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        return next;
-      });
+  const step = steps[currentStep];
+  const isLast = currentStep === steps.length - 1;
+  const currentAnswer = answers.get(currentStep);
+  const hasAnswer = currentAnswer && (currentAnswer.keys.length > 0 || currentAnswer.customText || currentAnswer.skipped);
+
+  const handleStepAnswer = (keys: string[], customText?: string) => {
+    setAnswers((prev) => {
+      const next = new Map(prev);
+      next.set(currentStep, { keys, customText });
+      return next;
+    });
+  };
+
+  const handleSkip = () => {
+    setAnswers((prev) => {
+      const next = new Map(prev);
+      next.set(currentStep, { keys: [], skipped: true });
+      return next;
+    });
+    if (isLast) {
+      submitAll();
     } else {
-      // Single-select: send label text so the chat bubble reads naturally
-      const opt = options.find((o) => o.key === key);
-      onOptionClick?.(opt?.label ?? key);
+      setCurrentStep((s) => s + 1);
     }
   };
 
-  const handleConfirm = () => {
-    if (toggled.size === 0) return;
-    // Multi-select: send keys (slugs) since labels would be too verbose
-    onOptionClick?.([...toggled].join(", "));
+  const handleNext = () => {
+    if (isLast) {
+      submitAll();
+    } else {
+      setCurrentStep((s) => s + 1);
+    }
   };
 
-  // For past messages: resolve selectedKey to option keys.
-  // Try full-string match first (handles labels with commas), then split for multi-select.
-  const labelToKey = new Map(options.map((o) => [o.label, o.key]));
-  const keySet = new Set(options.map((o) => o.key));
-  const selectedKeys = new Set<string>();
-  if (selectedKey) {
-    const fullMatch = labelToKey.get(selectedKey) ?? (keySet.has(selectedKey) ? selectedKey : undefined);
-    if (fullMatch) {
-      selectedKeys.add(fullMatch);
-    } else {
-      // Multi-select: split by comma and resolve each token
-      for (const token of selectedKey.split(",").map((s) => s.trim())) {
-        const mapped = labelToKey.get(token);
-        if (mapped) selectedKeys.add(mapped);
-        else selectedKeys.add(token);
+  const submitAll = () => {
+    // Build a combined text from all answers
+    const parts: string[] = [];
+    for (let i = 0; i < steps.length; i++) {
+      const ans = answers.get(i);
+      if (!ans || ans.skipped) continue;
+      if (ans.customText) {
+        parts.push(ans.customText);
+      } else if (ans.keys.length > 0) {
+        // Resolve keys to labels
+        const labelMap = new Map(steps[i].options.map((o) => [o.key, o.label]));
+        const labels = ans.keys.map((k) => labelMap.get(k) ?? k);
+        parts.push(labels.join(", "));
       }
     }
-  }
-  const selectedKeysUpper = new Set([...selectedKeys].map((k) => k.toUpperCase()));
+    onComplete?.(parts.join("\n"));
+  };
 
   return (
     <div
@@ -944,15 +1017,166 @@ function OptionCards({
         border: `1px solid ${COLORS.border}`,
         borderRadius: RADIUS.lg,
         overflow: "hidden",
-        pointerEvents: isActive ? "auto" : "none",
-        transition: `opacity ${MOTION.duration} ${MOTION.ease}`,
       }}
     >
+      {/* Header with question + progress */}
+      <div style={{ padding: "14px 16px 10px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <span style={{ fontSize: TYPE.scale.base, fontFamily: TYPE.body, fontWeight: TYPE.weight.medium, color: COLORS.text, lineHeight: TYPE.leading.snug }}>
+          {step.question}
+        </span>
+        <span style={{ fontSize: TYPE.scale.xs, fontFamily: TYPE.body, color: COLORS.textDim, flexShrink: 0, whiteSpace: "nowrap" }}>
+          {currentStep + 1} / {steps.length}
+        </span>
+      </div>
+
+      {/* Options */}
+      <OptionCards
+        options={step.options}
+        isMultiSelect={step.multiSelect}
+        allowCustom={step.allowCustom}
+        skippable={step.skippable}
+        isPaginated
+        initialKeys={currentAnswer?.keys}
+        initialCustomText={currentAnswer?.customText}
+        onSelectionChange={handleStepAnswer}
+        onSkip={handleSkip}
+        onSubmit={handleNext}
+        isLast={isLast}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OptionCards — radio/checkbox with optional "Something else" and Skip
+// ---------------------------------------------------------------------------
+
+function OptionCards({
+  options,
+  isMultiSelect,
+  allowCustom,
+  skippable,
+  onOptionClick,
+  // Paginated mode props
+  isPaginated,
+  initialKeys,
+  initialCustomText,
+  onSelectionChange,
+  onSkip,
+  onSubmit,
+  isLast,
+}: {
+  options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
+  isMultiSelect: boolean;
+  allowCustom?: boolean;
+  skippable?: boolean;
+  onOptionClick?: (value: string) => void;
+  // Paginated mode
+  isPaginated?: boolean;
+  initialKeys?: string[];
+  initialCustomText?: string;
+  onSelectionChange?: (keys: string[], customText?: string) => void;
+  onSkip?: () => void;
+  onSubmit?: () => void;
+  isLast?: boolean;
+}) {
+  const [toggled, setToggled] = useState<Set<string>>(
+    () => new Set(initialKeys ?? options.filter((o) => o.selected).map((o) => o.key)),
+  );
+  const [customActive, setCustomActive] = useState(initialKeys?.includes("_custom") ?? false);
+  const [customText, setCustomText] = useState(initialCustomText ?? "");
+  const customInputRef = useRef<HTMLInputElement>(null);
+  const isActive = !!onOptionClick || isPaginated;
+
+  // Sync selection changes to parent in paginated mode
+  useEffect(() => {
+    if (isPaginated && onSelectionChange) {
+      const keys = [...toggled];
+      if (customActive) keys.push("_custom");
+      onSelectionChange(keys, customActive ? customText : undefined);
+    }
+  }, [toggled, customActive, customText, isPaginated, onSelectionChange]);
+
+  // Reset state when paginated step changes
+  useEffect(() => {
+    setToggled(new Set(initialKeys ?? options.filter((o) => o.selected).map((o) => o.key)));
+    setCustomActive(initialKeys?.includes("_custom") ?? false);
+    setCustomText(initialCustomText ?? "");
+  }, [options, initialKeys, initialCustomText]);
+
+  const handleToggle = (key: string) => {
+    if (!isActive) return;
+
+    if (isMultiSelect) {
+      setToggled((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      if (customActive) { setCustomActive(false); setCustomText(""); }
+    } else {
+      // Single-select in non-paginated mode: send immediately
+      if (!isPaginated) {
+        const opt = options.find((o) => o.key === key);
+        onOptionClick?.(opt?.label ?? key);
+        return;
+      }
+      // Single-select in paginated mode: save locally
+      setToggled(new Set([key]));
+      if (customActive) { setCustomActive(false); setCustomText(""); }
+    }
+  };
+
+  const handleCustomClick = () => {
+    if (!isActive) return;
+    if (customActive) {
+      // Deselect custom
+      setCustomActive(false);
+      setCustomText("");
+    } else {
+      setCustomActive(true);
+      if (!isMultiSelect) setToggled(new Set());
+      setTimeout(() => customInputRef.current?.focus(), 0);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (isPaginated) {
+      onSubmit?.();
+      return;
+    }
+    // Non-paginated multi-select or custom
+    if (customActive && customText.trim()) {
+      onOptionClick?.(customText.trim());
+    } else if (toggled.size > 0) {
+      onOptionClick?.([...toggled].join(", "));
+    }
+  };
+
+  const handleSkip = () => {
+    if (isPaginated) {
+      onSkip?.();
+    } else {
+      onOptionClick?.("_skipped");
+    }
+  };
+
+  const hasSelection = toggled.size > 0 || (customActive && customText.trim().length > 0);
+  const showFooter = isActive && (isMultiSelect || isPaginated || skippable || (customActive && customText.trim()));
+  const totalOptions = options.length + (allowCustom ? 1 : 0);
+
+  return (
+    <div style={isPaginated ? {} : {
+      marginTop: 14,
+      background: COLORS.surface,
+      border: `1px solid ${COLORS.border}`,
+      borderRadius: RADIUS.lg,
+      overflow: "hidden",
+    }}>
       {options.map((opt, idx) => {
-        const isOn = isActive
-          ? toggled.has(opt.key)
-          : selectedKeys.has(opt.key) || selectedKeysUpper.has(opt.key.toUpperCase());
-        const isDimmed = !isActive && !isOn && selectedKeys.size > 0;
+        const isOn = toggled.has(opt.key);
+        const isLastOption = !allowCustom && idx === options.length - 1 && !showFooter;
         return (
           <button
             key={opt.key}
@@ -967,88 +1191,149 @@ function OptionCards({
               padding: "14px 16px",
               background: isOn ? COLORS.accentDim : "transparent",
               border: "none",
-              borderBottom: idx < options.length - 1 ? `1px solid ${COLORS.border}` : "none",
-              color: isDimmed ? COLORS.textDim : COLORS.text,
+              borderBottom: isLastOption ? "none" : `1px solid ${COLORS.border}`,
+              color: COLORS.text,
               fontSize: TYPE.scale.base,
               fontFamily: TYPE.body,
               fontWeight: TYPE.weight.medium,
               cursor: isActive ? "pointer" : "default",
-              opacity: isDimmed ? 0.4 : 1,
               transition: `all ${MOTION.duration} ${MOTION.ease}`,
               textAlign: "left",
             }}
-            onMouseEnter={(e) => {
-              if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : COLORS.surfaceHover;
-            }}
-            onMouseLeave={(e) => {
-              if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent";
-            }}
+            onMouseEnter={(e) => { if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : COLORS.surfaceHover; }}
+            onMouseLeave={(e) => { if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent"; }}
           >
-            {/* Radio (single) or Checkbox (multi) indicator */}
-            <span
-              style={{
-                width: 18,
-                height: 18,
-                borderRadius: isMultiSelect ? 4 : "50%",
-                border: isOn ? "none" : `2px solid ${COLORS.textDim}`,
-                background: isOn ? COLORS.accent : "transparent",
-                color: COLORS.white,
-                fontSize: 11,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                marginTop: 0,
-                transition: `all ${MOTION.duration} ${MOTION.ease}`,
-              }}
-            >
+            <span style={{
+              width: 18, height: 18,
+              borderRadius: isMultiSelect ? 4 : "50%",
+              border: isOn ? "none" : `2px solid ${COLORS.textDim}`,
+              background: isOn ? COLORS.accent : "transparent",
+              color: COLORS.white, fontSize: 11,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+              transition: `all ${MOTION.duration} ${MOTION.ease}`,
+            }}>
               {isOn ? "✓" : ""}
             </span>
-            {/* Label — description shown as tooltip */}
-            <span
-              style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug }}
-              title={opt.description ?? undefined}
-            >
+            <span style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug }} title={opt.description ?? undefined}>
               {opt.label}
             </span>
           </button>
         );
       })}
-      {/* Confirm bar — only for multi-select */}
-      {isActive && isMultiSelect && (
+
+      {/* "Something else" row with inline text input */}
+      {allowCustom && isActive && (
+        <div
+          key="_custom"
+          className="btn"
+          onClick={!customActive ? handleCustomClick : undefined}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            width: "100%",
+            padding: "14px 16px",
+            background: customActive ? COLORS.accentDim : "transparent",
+            borderBottom: showFooter ? `1px solid ${COLORS.border}` : "none",
+            cursor: customActive ? "default" : "pointer",
+            transition: `all ${MOTION.duration} ${MOTION.ease}`,
+          }}
+          onMouseEnter={(e) => { if (!customActive) e.currentTarget.style.background = COLORS.surfaceHover; }}
+          onMouseLeave={(e) => { if (!customActive) e.currentTarget.style.background = customActive ? COLORS.accentDim : "transparent"; }}
+        >
+          <span style={{
+            width: 18, height: 18,
+            borderRadius: isMultiSelect ? 4 : "50%",
+            border: customActive ? "none" : `2px solid ${COLORS.textDim}`,
+            background: customActive ? COLORS.accent : "transparent",
+            color: COLORS.white, fontSize: 11,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+            transition: `all ${MOTION.duration} ${MOTION.ease}`,
+          }}>
+            {customActive ? "✓" : ""}
+          </span>
+          {customActive ? (
+            <input
+              ref={customInputRef}
+              type="text"
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && customText.trim()) handleConfirm();
+              }}
+              placeholder="Something else..."
+              style={{
+                flex: 1, minWidth: 0,
+                background: "transparent", border: "none", outline: "none",
+                color: COLORS.text, fontSize: TYPE.scale.base,
+                fontFamily: TYPE.body, fontWeight: TYPE.weight.medium,
+                lineHeight: TYPE.leading.snug,
+              }}
+            />
+          ) : (
+            <span style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug, color: COLORS.textDim }}>
+              Something else...
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Footer: Skip / Confirm|Next|Submit */}
+      {showFooter && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: skippable ? "space-between" : "flex-end",
             padding: "10px 16px",
             borderTop: `1px solid ${COLORS.border}`,
           }}
         >
+          {skippable && (
+            <button
+              className="btn"
+              onClick={handleSkip}
+              style={{
+                padding: "7px 12px",
+                borderRadius: RADIUS.md,
+                border: "none",
+                background: "transparent",
+                color: COLORS.textDim,
+                fontSize: TYPE.scale.sm,
+                fontWeight: TYPE.weight.medium,
+                fontFamily: TYPE.body,
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textDim; }}
+            >
+              Skip
+            </button>
+          )}
           <button
             className="btn"
             onClick={handleConfirm}
-            disabled={toggled.size === 0}
+            disabled={!hasSelection}
             style={{
               padding: "7px 18px",
               borderRadius: RADIUS.md,
               border: "none",
-              background: toggled.size > 0 ? COLORS.accent : COLORS.border,
-              color: toggled.size > 0 ? COLORS.white : COLORS.textDim,
+              background: hasSelection ? COLORS.accent : COLORS.border,
+              color: hasSelection ? COLORS.white : COLORS.textDim,
               fontSize: TYPE.scale.sm,
               fontWeight: TYPE.weight.medium,
               fontFamily: TYPE.body,
-              cursor: toggled.size > 0 ? "pointer" : "default",
+              cursor: hasSelection ? "pointer" : "default",
               transition: `all ${MOTION.duration} ${MOTION.ease}`,
             }}
-            onMouseEnter={(e) => {
-              if (toggled.size > 0) e.currentTarget.style.background = COLORS.accentBright;
-            }}
-            onMouseLeave={(e) => {
-              if (toggled.size > 0) e.currentTarget.style.background = COLORS.accent;
-            }}
+            onMouseEnter={(e) => { if (hasSelection) e.currentTarget.style.background = COLORS.accentBright; }}
+            onMouseLeave={(e) => { if (hasSelection) e.currentTarget.style.background = COLORS.accent; }}
           >
-            Confirm{toggled.size > 0 ? ` (${toggled.size})` : ""}
+            {isPaginated
+              ? (isLast ? "Submit" : "Next")
+              : `Confirm${toggled.size > 0 ? ` (${toggled.size})` : ""}`}
           </button>
         </div>
       )}
