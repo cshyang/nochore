@@ -9,7 +9,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ToolLoopAgent, stepCountIs, tool } from "ai";
 import { z } from "zod";
-import { buildDefaultToolConfig } from "../../../../packages/harness/src/connections/capabilities";
 import type {
   AgentSchedule,
   NotificationConfig,
@@ -180,7 +179,7 @@ function expandBlueprint(raw: ToolInput): BlueprintDraft {
     instructions: raw.instructions.trim(),
     skills: raw.skills ?? [],
     requiredProviders,
-    toolConfig: buildDefaultToolConfig(providers, requiredProviders),
+    toolConfig: { requiredProviders, tools: {} },
     notificationConfig: {
       inApp: true,
       email: providers.includes("gmail"),

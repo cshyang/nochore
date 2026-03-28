@@ -3,11 +3,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { Composio } from "@composio/core";
 import { eq } from "drizzle-orm";
-import { tool, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import {
-  buildAgentToolSet,
-  buildDefaultToolConfig,
   createComposioClient,
   getComposioUserId,
   sendNotificationTool,
@@ -27,11 +24,8 @@ import {
   type PromptSkill,
 } from "../../../../packages/harness/src/skills";
 import {
-  type AgentConfig,
   type NotificationConfig,
-  type ProviderRequirement,
   type RunTrigger,
-  type ToolConfigEntry,
 } from "../../../../packages/harness/src/types";
 import {
   WorkspaceStore,
@@ -182,81 +176,6 @@ export async function buildPromptBundle(params: {
     selectedSkills,
     workspaceKnowledge,
   };
-}
-
-export async function buildRuntimeTools(params: {
-  runtime: WorkerRuntime;
-  agent: AgentRecord;
-}): Promise<ToolSet> {
-  const effectiveToolConfig = buildEffectiveToolConfig(
-    params.agent,
-    params.runtime.activeProviders,
-  );
-  const baseTools = buildAgentToolSet({
-    composio: params.runtime.composio,
-    userId: params.runtime.userId,
-    providers: params.runtime.activeProviders,
-    toolConfig: effectiveToolConfig,
-  });
-
-  return Object.fromEntries(
-    Object.entries(baseTools).map(([toolName, baseTool]) => {
-      const configured = effectiveToolConfig.tools[toolName];
-      const approvalMode = configured?.approvalMode;
-      const baseNeedsApproval = baseTool.needsApproval;
-      const needsApproval =
-        approvalMode === "blocked" || approvalMode === "approval"
-          ? true
-          : approvalMode === "auto"
-            ? false
-            : typeof baseNeedsApproval === "function"
-              ? baseNeedsApproval()
-              : Boolean(baseNeedsApproval);
-
-      return [
-        toolName,
-        tool({
-          description: baseTool.description,
-          inputSchema: baseTool.inputSchema,
-          needsApproval,
-          execute: baseTool.execute,
-        }),
-      ];
-    }),
-  ) as Record<string, ReturnType<typeof tool>>;
-}
-
-export function getMissingRequiredProviders(agent: AgentRecord, activeProviders: string[]): ProviderRequirement[] {
-  const active = new Set(activeProviders);
-  return agent.toolConfig.requiredProviders.filter(
-    (provider) => !active.has(provider.provider),
-  );
-}
-
-export function buildEffectiveToolConfig(
-  agent: AgentRecord,
-  activeProviders: string[],
-): AgentConfig["toolConfig"] {
-  const defaults = buildDefaultToolConfig(
-    activeProviders,
-    agent.toolConfig.requiredProviders,
-  );
-
-  return {
-    requiredProviders: agent.toolConfig.requiredProviders,
-    tools: {
-      ...defaults.tools,
-      ...agent.toolConfig.tools,
-    },
-  };
-}
-
-export function getEffectiveToolEntry(
-  agent: AgentRecord,
-  activeProviders: string[],
-  toolName: string,
-): ToolConfigEntry | undefined {
-  return buildEffectiveToolConfig(agent, activeProviders).tools[toolName];
 }
 
 export async function sendApprovalNotification(params: {

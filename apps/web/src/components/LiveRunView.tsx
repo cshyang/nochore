@@ -110,8 +110,16 @@ export function LiveRunView({
 
   const meta = (run?.metadata ?? {}) as RunMetadata;
   const events = meta.events ?? [];
-  const status = meta.status ?? "running";
   const cycle = meta.cycle;
+
+  // Derive status from two sources:
+  // 1. Our custom metadata.status (granular: includes "waiting_for_approval")
+  // 2. trigger.dev's platform run.status (safety net: fires even if task crashes before our catch block)
+  const platformStatus = (run?.status ?? "").toUpperCase();
+  const platformDone = platformStatus === "COMPLETED" || platformStatus === "FAILED" || platformStatus === "CANCELED" || platformStatus === "SYSTEM_FAILURE";
+  const status = platformDone
+    ? (platformStatus === "COMPLETED" ? "completed" : "failed")
+    : (meta.status ?? "running");
 
   useEffect(() => {
     if (scrollRef.current) {

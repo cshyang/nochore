@@ -87,43 +87,26 @@ function buildSystemPrompt(params: {
     .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
     .join("\n");
 
-  const catalogText = formatToolCatalog(params.toolCatalog);
+  const NOTIFICATION_PROVIDERS = new Set(["slack", "gmail", "outlook", "telegram", "whatsapp"]);
+  const dataTools = params.toolCatalog.filter((t) => !NOTIFICATION_PROVIDERS.has(t.provider));
+  const notificationTools = params.toolCatalog.filter((t) => NOTIFICATION_PROVIDERS.has(t.provider));
 
-  return `You are Nochore's agent setup assistant. Help the user create a new agent through a brief, focused conversation.
+  const catalogText = formatToolCatalog(dataTools);
+  const notificationText = notificationTools.length
+    ? notificationTools.map((t) => `- ${t.slug}: "${t.name}" (${t.providerName})`).join("\n")
+    : "none available";
 
-## Rules
-- Ask ONE question at a time
-- ALWAYS use the suggest_tools or request_input tools — never write options as plain text
-- Never ask more than 4 questions total
-- If the user's first message is detailed enough, skip redundant questions and call create_agent
-- Be concise: 1-2 sentences of context before calling a tool
-- When you have enough info, call create_agent immediately — don't ask for confirmation
-- After calling create_agent, say one short sentence like "Done — your agent is ready." Do NOT list a summary or ask follow-up questions.
+  return `You are Nochore's agent setup assistant. Understand what the user wants their agent to do, gather what you need, then call create_agent.
 
-## Conversation flow
-1. The user already described what the agent should do (their first message). Analyze their intent.
-2. Call suggest_tools with recommended tools based on the user's intent. Pre-select (recommended: true) tools you think are needed. Include a few non-recommended (recommended: false) tools the user might also want. Always consider whether a notification channel (Slack or Gmail) is needed.
-3. Call request_input to ask about autonomy level: Conservative (approve all writes), Balanced (auto-read, approve writes), Autonomous (auto-approve everything)
-4. Call request_input to ask about schedule: Manual, Hourly, Daily, Weekly
-5. Call create_agent with all gathered info.
+Use request_input to present choices. One question per message — wait for the response before the next. Be concise. When you have enough, call create_agent — don't summarize or ask for confirmation.
 
-## Tool recommendation guidelines
-- "monitor", "track", "report", "alert" → read tools + notification channel
-- "optimize", "manage", "adjust" → read + write tools
-- "spend", "budget" → budget and performance tools
-- "keywords", "search terms" → search term and quality score tools
-- Always suggest at least one notification channel (Slack preferred) when the agent has reporting/alerting duties
-- Fewer tools is better — the user can add more later in the workspace
-- Only recommend tools from the catalog below
+You need to determine: which tools the agent needs, how the user wants updates (ask — don't assume), autonomy level (conservative/balanced/autonomous), and schedule. Skip what's obvious from context.
 
-## Available tools (recommend only what the agent needs)
+## Data sources
 ${catalogText}
 
-## When calling create_agent
-- Write detailed, operational instructions. Tell the agent what to monitor, what patterns to look for, how to communicate findings, and what outcome to optimize for.
-- Only include tool slugs the user confirmed in the suggest_tools step
-- Pick skills that match the agent's job from the available list
-- Match schedule to the user's preference
+## Notification channels
+${notificationText}
 
 ## Available skills
 ${skillsList || "none available"}
@@ -185,14 +168,14 @@ export const Route = createFileRoute("/api/onboard")({
         const model = await createModel();
         const system = buildSystemPrompt({ availableSkills, existingConnections, toolCatalog });
 
-        // Strip UI-only tool parts from history — request_input and suggest_tools
-        // are rendered client-side; the user's text response carries their selection.
+        // Strip request_input tool parts from history — rendered client-side;
+        // the user's text response carries their selection.
         const cleanedMessages = (rawMessages as Array<{ id?: string; role: string; parts: Array<Record<string, unknown>> }>).map((msg) => ({
           ...msg,
           parts: msg.parts.filter((p) => {
             const type = p.type as string;
-            if (type === "tool-request_input" || type === "tool-suggest_tools") return false;
-            if (type === "dynamic-tool" && (p.toolName === "request_input" || p.toolName === "suggest_tools")) return false;
+            if (type === "tool-request_input") return false;
+            if (type === "dynamic-tool" && p.toolName === "request_input") return false;
             return true;
           }),
         })).filter((msg) => msg.parts.length > 0);
@@ -218,25 +201,31 @@ export const Route = createFileRoute("/api/onboard")({
           system,
           messages: modelMessages,
           stopWhen: stepCountIs(3),
+          providerOptions: {
+            anthropic: { effort: "medium" },
+          },
           tools: {
             request_input: {
               description:
-                "Present a set of options to the user and wait for their selection. " +
-                "Use this for autonomy level and schedule questions.",
+                "Present options to the user and wait for their selection. " +
+                "For tool recommendations, use multiSelect with description and selected fields. " +
+                "For simple choices (autonomy, schedule), omit description.",
               inputSchema: z.object({
-                question: z.string().describe("The question to ask the user"),
+                question: z.string().describe("The question or context to show the user"),
                 options: z
                   .array(
                     z.object({
-                      key: z.string().describe("Single uppercase letter: A, B, C, D, etc. NEVER use slugs or words."),
+                      key: z.string().describe("Unique key for this option (slug, letter, or short id)"),
                       label: z.string().describe("Human-readable option label"),
+                      description: z.string().optional().describe("Optional subtitle explaining this option"),
+                      selected: z.boolean().optional().describe("Pre-select this option (for recommendations)"),
                     }),
                   )
                   .describe("Available options"),
                 multiSelect: z
                   .boolean()
                   .default(false)
-                  .describe("Whether the user can pick more than one option"),
+                  .describe("True = checkboxes (pick many), false = radio (pick one)"),
               }),
               outputSchema: z.object({
                 selectedKeys: z
@@ -245,97 +234,21 @@ export const Route = createFileRoute("/api/onboard")({
               }),
               // No execute — UI-only tool.
             },
-            suggest_tools: {
-              description:
-                "Present recommended tools to the user based on their intent. " +
-                "Pre-select (recommended: true) tools you recommend. " +
-                "Include a few non-recommended extras the user might want.",
-              inputSchema: z.object({
-                message: z.string().describe("Brief explanation of your recommendations (1-2 sentences)"),
-                tools: z.array(z.object({
-                  slug: z.string().describe("Exact tool slug from the catalog"),
-                  name: z.string().describe("Human-readable tool name"),
-                  reason: z.string().describe("One sentence: why this agent needs this tool"),
-                  recommended: z.boolean().default(true).describe("Pre-select as recommended"),
-                })),
-              }),
-              outputSchema: z.object({
-                selectedSlugs: z.array(z.string()).describe("Tool slugs the user confirmed"),
-              }),
-              // No execute — UI-only tool.
-            },
             create_agent: {
               description: "Create the agent with the gathered configuration. Call this once you have enough context from the conversation.",
               inputSchema,
               execute: async (input: ToolInput) => {
-                const { buildDefaultToolConfig, DEFAULT_TOOL_CAPABILITY_MAP } = await import("../../../../packages/harness/src/connections/capabilities");
                 const { createAgent } = await import("~/server/agents");
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
-                // Build tool config from selected slugs
+                // Derive providers from selected tool slugs
                 const selectedSlugs = input.toolSlugs.length > 0 ? input.toolSlugs : [];
                 const catalogMap = new Map(toolCatalog.map((t) => [t.slug, t]));
-
-                const toolEntries: Record<string, {
-                  toolName: string;
-                  slug: string;
-                  provider: string;
-                  title: string;
-                  description: string;
-                  mode: "read" | "write";
-                  enabled: boolean;
-                  approvalMode: "auto" | "approval" | "blocked";
-                }> = {};
-
-                for (const slug of selectedSlugs) {
-                  // Check hardcoded capabilities first (has schemas + approval modes)
-                  const hardcoded = DEFAULT_TOOL_CAPABILITY_MAP.get(
-                    slug.toLowerCase().replace(/_/g, "_"),
-                  );
-                  // Also try matching by slug field
-                  let matchedHardcoded = hardcoded;
-                  if (!matchedHardcoded) {
-                    for (const [, cap] of DEFAULT_TOOL_CAPABILITY_MAP) {
-                      if (cap.slug === slug) {
-                        matchedHardcoded = cap;
-                        break;
-                      }
-                    }
-                  }
-
-                  if (matchedHardcoded) {
-                    toolEntries[matchedHardcoded.toolName] = {
-                      toolName: matchedHardcoded.toolName,
-                      slug: matchedHardcoded.slug,
-                      provider: matchedHardcoded.provider,
-                      title: matchedHardcoded.title,
-                      description: matchedHardcoded.description,
-                      mode: matchedHardcoded.mode,
-                      enabled: true,
-                      approvalMode: matchedHardcoded.defaultApprovalMode,
-                    };
-                  } else {
-                    // Use catalog metadata for tools not in hardcoded list
-                    const catalogTool = catalogMap.get(slug);
-                    if (catalogTool) {
-                      const mode = inferToolMode(catalogTool);
-                      const toolName = slug.toLowerCase();
-                      toolEntries[toolName] = {
-                        toolName,
-                        slug,
-                        provider: catalogTool.provider,
-                        title: catalogTool.name,
-                        description: catalogTool.description,
-                        mode,
-                        enabled: true,
-                        approvalMode: mode === "read" ? "auto" : "approval",
-                      };
-                    }
-                  }
-                }
-
-                // Derive providers from selected tools, include logos from catalog
-                const providers = [...new Set(Object.values(toolEntries).map((t) => t.provider))];
+                const providers = [...new Set(
+                  selectedSlugs
+                    .map((slug) => catalogMap.get(slug)?.provider)
+                    .filter((p): p is string => !!p),
+                )];
                 const logoByProvider = new Map(toolCatalog.map((t) => [t.provider, t.providerLogo]));
                 const requiredProviders = providers.map((p) => ({
                   provider: p,
@@ -343,18 +256,8 @@ export const Route = createFileRoute("/api/onboard")({
                   logo: logoByProvider.get(p) ?? undefined,
                 }));
 
-                const toolConfig = { requiredProviders, tools: toolEntries };
-
-                // Apply autonomy overrides
-                if (input.autonomyLevel === "autonomous") {
-                  for (const entry of Object.values(toolConfig.tools)) {
-                    entry.approvalMode = "auto";
-                  }
-                } else if (input.autonomyLevel === "conservative") {
-                  for (const entry of Object.values(toolConfig.tools)) {
-                    entry.approvalMode = "approval";
-                  }
-                }
+                // Composio is the source of truth for tools — we only store provider-level config
+                const toolConfig = { requiredProviders, tools: {} };
 
                 const result = await createAgent({
                   data: {

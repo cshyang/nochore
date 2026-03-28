@@ -225,19 +225,12 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
     try {
       const composio = await createComposioClient();
 
-      // Use composio.tools.list() — the REST API that returns metadata.
-      // session.tools() returns AI SDK ToolSet objects (for execution), not catalog metadata.
+      // composio.client.tools.list() is the REST API that returns tool metadata.
+      // composio.tools.* is the SDK wrapper for execution — no list() method.
       const results = await Promise.all(
         SUPPORTED_PROVIDERS.map((provider) =>
-          (composio as any).tools.list({ toolkit_slug: provider, limit: 50 })
-            .then((res: { items?: Array<{
-              slug: string;
-              name: string;
-              description?: string;
-              human_description?: string;
-              tags?: string[];
-              toolkit: { slug: string; name: string; logo?: string };
-            }> }) => (res.items ?? []).map((tool) => ({
+          (composio as any).client.tools.list({ toolkit_slug: provider, limit: 50 })
+            .then((res) => (res.items ?? []).map((tool) => ({
               slug: tool.slug,
               name: tool.name,
               description: tool.description ?? tool.human_description ?? "",
@@ -250,24 +243,12 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
         ),
       );
 
-      const catalog = results.flat();
-      if (catalog.length > 0) return catalog;
+      return results.flat();
     } catch {
-      // Fall through to hardcoded fallback
+      return [];
     }
-
-    // Fallback: use DEFAULT_TOOL_CAPABILITIES when Composio is unavailable
-    const { DEFAULT_TOOL_CAPABILITIES } = await import("../../../../packages/harness/src/connections/capabilities");
-    return DEFAULT_TOOL_CAPABILITIES.map((tool) => ({
-      slug: tool.slug,
-      name: tool.title,
-      description: tool.description,
-      provider: tool.provider,
-      providerName: tool.provider,
-      providerLogo: null,
-      tags: [tool.mode],
-    }));
   });
+
 
 export const listConnections = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)

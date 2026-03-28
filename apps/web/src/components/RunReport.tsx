@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Play, WarningCircle, CheckCircle, CircleNotch } from "@phosphor-icons/react";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/Badge";
@@ -166,7 +167,7 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
       {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
       <div className="run-report-md">
         <style>{markdownStyles}</style>
-        <ReactMarkdown>{finding}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{finding}</ReactMarkdown>
       </div>
       <RunMeta run={run} />
     </div>

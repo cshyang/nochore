@@ -4,7 +4,6 @@ import { DefaultChatTransport } from "ai";
 import { useNavigate } from "@tanstack/react-router";
 import Markdown from "react-markdown";
 import {
-  CircleNotch,
   Sparkle,
   ArrowLeft,
   ArrowRight,
@@ -24,12 +23,6 @@ interface OnboardingChatProps {
 function isRequestInputPart(p: Record<string, unknown>): boolean {
   return p.type === "tool-request_input" ||
     (p.type === "dynamic-tool" && p.toolName === "request_input");
-}
-
-/** Check if a message part is a suggest_tools tool call (static or dynamic) */
-function isSuggestToolsPart(p: Record<string, unknown>): boolean {
-  return p.type === "tool-suggest_tools" ||
-    (p.type === "dynamic-tool" && p.toolName === "suggest_tools");
 }
 
 const EXAMPLE_PROMPTS = [
@@ -202,10 +195,17 @@ export function OnboardingChat({
   const handleOptionClick = useCallback(
     (value: string) => {
       if (isLoading || redirecting) return;
+
+      // "Something else" / "Other" → let user type their own answer
+      const lower = value.toLowerCase();
+      if (/\b(else|other|custom)\b/.test(lower)) {
+        setInputValue("");
+        inputRef.current?.focus();
+        return;
+      }
+
       if (!hasSubmitted) setHasSubmitted(true);
       setInputValue("");
-
-      // Send selection as text — the LLM interprets the response in context
       void sendMessage({ text: value });
     },
     [isLoading, redirecting, hasSubmitted, sendMessage],
@@ -489,19 +489,15 @@ export function OnboardingChat({
                         }
                       }
                     }
-                    // Fallback: check next user message text (regex path)
+                    // Fallback: use next user message text as the selection
                     if (!selected) {
                       const nextUser = conversationMessages.slice(idx + 1).find((m) => m.role === "user");
                       if (nextUser) {
-                        const userText = nextUser.parts
+                        selected = nextUser.parts
                           .filter((p): p is { type: "text"; text: string } => p.type === "text")
                           .map((p) => p.text)
                           .join("")
-                          .trim()
-                          .toUpperCase();
-                        if (/^[A-Z](,\s*[A-Z])*$/.test(userText)) {
-                          selected = userText;
-                        }
+                          .trim();
                       }
                     }
                   }
@@ -518,23 +514,7 @@ export function OnboardingChat({
                 })}
 
                 {isLoading && !redirecting && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      color: COLORS.textDim,
-                      fontSize: TYPE.scale.sm,
-                      fontFamily: TYPE.body,
-                    }}
-                  >
-                    <CircleNotch
-                      size={14}
-                      weight="bold"
-                      style={{ animation: "spin 1s linear infinite" }}
-                    />
-                    Thinking...
-                  </div>
+                  <ThinkingIndicator messages={conversationMessages} />
                 )}
 
                 {redirecting && (
@@ -659,6 +639,97 @@ export function OnboardingChat({
 }
 
 // ---------------------------------------------------------------------------
+// ThinkingIndicator — pulsing dot + ephemeral reasoning text with shimmer
+// ---------------------------------------------------------------------------
+
+function ThinkingIndicator({
+  messages,
+}: {
+  messages: Array<{ role: string; parts: Array<{ type: string; text?: string; reasoning?: string; state?: string }> }>;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Extract the latest streaming reasoning text from the last assistant message
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const reasoningPart = lastAssistant?.parts
+    .slice()
+    .reverse()
+    .find((p) => p.type === "reasoning" && p.state === "streaming");
+  const reasoningText = reasoningPart?.text ?? reasoningPart?.reasoning ?? "";
+
+  // Auto-scroll to bottom as reasoning streams in
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [reasoningText]);
+
+  return (
+    <div
+      style={{
+        borderLeft: `2px solid ${COLORS.accent}`,
+        borderRadius: `0 ${RADIUS.md}px ${RADIUS.md}px 0`,
+        background: COLORS.surface,
+        padding: "10px 14px",
+        animation: "fadeIn 0.2s ease both",
+      }}
+    >
+      {/* Header: pulsing dot + label */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: reasoningText ? 8 : 0,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: COLORS.accent,
+            flexShrink: 0,
+            animation: "heartbeat 1.2s ease-in-out infinite",
+          }}
+        />
+        <span
+          className="thinking-shimmer"
+          style={{
+            fontSize: TYPE.scale.xs,
+            fontFamily: TYPE.body,
+            fontWeight: TYPE.weight.medium,
+            letterSpacing: TYPE.tracking.wide,
+            textTransform: "uppercase" as const,
+          }}
+        >
+          Thinking
+        </span>
+      </div>
+      {/* Streaming reasoning text */}
+      {reasoningText && (
+        <div
+          ref={scrollRef}
+          style={{
+            maxHeight: 120,
+            overflowY: "auto",
+            fontSize: TYPE.scale.xs,
+            fontFamily: TYPE.body,
+            color: COLORS.textDim,
+            lineHeight: TYPE.leading.loose,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+          }}
+        >
+          {reasoningText}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Option detection — parses "A) label" / "A. label" lines from LLM responses
 // ---------------------------------------------------------------------------
 
@@ -715,7 +786,7 @@ function ConversationMessage({
 
   // Check for tool parts before deciding to return null
   const hasToolPart = (message.parts as unknown as Array<Record<string, unknown>>).some(
-    (p) => isRequestInputPart(p as Record<string, unknown>) || isSuggestToolsPart(p as Record<string, unknown>),
+    (p) => isRequestInputPart(p as Record<string, unknown>),
   );
 
   if (!textContent.trim() && !hasToolPart) return null;
@@ -744,64 +815,18 @@ function ConversationMessage({
     );
   }
 
-  // Check for suggest_tools tool call
-  const suggestToolsPart = (message.parts as unknown as Array<Record<string, unknown>>).find((p) =>
-    isSuggestToolsPart(p as Record<string, unknown>),
-  );
-
-  if (suggestToolsPart) {
-    const toolInput = suggestToolsPart.input as {
-      message: string;
-      tools: Array<{ slug: string; name: string; reason: string; recommended: boolean }>;
-    } | undefined;
-
-    // Resolve selected slugs from tool output (for past messages)
-    let resolvedSlugs: string[] | undefined;
-    if (suggestToolsPart.state === "output-available") {
-      const output = suggestToolsPart.output as { selectedSlugs?: string[] } | undefined;
-      resolvedSlugs = output?.selectedSlugs;
-    }
-
-    return (
-      <div>
-        {(toolInput?.message ?? textContent) && (
-          <div
-            className="prose"
-            style={{
-              fontSize: TYPE.scale.md,
-              lineHeight: TYPE.leading.loose,
-              color: COLORS.textSecondary,
-              fontFamily: TYPE.body,
-            }}
-          >
-            <Markdown>{toolInput?.message ?? textContent}</Markdown>
-          </div>
-        )}
-        {toolInput?.tools && toolInput.tools.length > 0 && (
-          <ToolSuggestionCards
-            tools={toolInput.tools}
-            onConfirm={onOptionClick}
-            resolvedSlugs={resolvedSlugs}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // Check for request_input tool call in message parts
-  // Tool parts have type "tool-request_input" (static) or "dynamic-tool" (dynamic)
-  // Use a simple check: any part with toolName === "request_input"
+  // Check for request_input tool call
   const requestInputPart = (message.parts as unknown as Array<Record<string, unknown>>).find((p) =>
     isRequestInputPart(p as Record<string, unknown>),
   );
 
   const toolInput = requestInputPart?.input as {
     question: string;
-    options: Array<{ key: string; label: string }>;
+    options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
     multiSelect: boolean;
   } | undefined;
 
-  // Resolve selected keys from tool output (for past messages)
+  // Resolve selected keys from tool output or next user message
   let resolvedSelectedKey = selectedKey;
   if (!resolvedSelectedKey && requestInputPart?.state === "output-available") {
     const output = requestInputPart.output as { selectedKeys?: string[] } | undefined;
@@ -810,7 +835,7 @@ function ConversationMessage({
     }
   }
 
-  // Use tool-based options if available, fall back to regex
+  // Use tool-based options if available, fall back to regex parsing
   const toolOptions = toolInput?.options ?? [];
   const { body: regexBody, options: regexOptions, isMultiSelect: regexMulti } =
     toolOptions.length > 0
@@ -818,15 +843,7 @@ function ConversationMessage({
       : parseOptions(textContent);
 
   const finalBody = toolOptions.length > 0 ? (toolInput?.question ?? textContent) : regexBody;
-  // Normalize keys: if LLM used slugs ("shopify") instead of letters ("A"), assign letter keys
-  const normalizedToolOptions = toolOptions.length > 0
-    ? toolOptions.map((opt, i) => ({
-        key: opt.key.length === 1 ? opt.key.toUpperCase() : String.fromCharCode(65 + i), // A, B, C...
-        label: opt.label,
-        originalKey: opt.key, // preserve for tool output
-      }))
-    : [];
-  const finalOptions = normalizedToolOptions.length > 0 ? normalizedToolOptions : regexOptions;
+  const finalOptions = toolOptions.length > 0 ? toolOptions : regexOptions;
   const finalMultiSelect = toolOptions.length > 0 ? (toolInput?.multiSelect ?? false) : regexMulti;
 
   return (
@@ -857,176 +874,7 @@ function ConversationMessage({
 }
 
 // ---------------------------------------------------------------------------
-// ToolSuggestionCards — pre-selected tool recommendations with reasons
-// ---------------------------------------------------------------------------
-
-function ToolSuggestionCards({
-  tools,
-  onConfirm,
-  resolvedSlugs,
-}: {
-  tools: Array<{ slug: string; name: string; reason: string; recommended: boolean }>;
-  onConfirm?: (value: string) => void;
-  resolvedSlugs?: string[];
-}) {
-  // Initialize toggled set from recommended tools
-  const [toggled, setToggled] = useState<Set<string>>(
-    () => new Set(tools.filter((t) => t.recommended).map((t) => t.slug)),
-  );
-  const isActive = !!onConfirm && !resolvedSlugs;
-
-  // For past messages, show what was selected
-  const displaySlugs = resolvedSlugs ? new Set(resolvedSlugs) : toggled;
-
-  const handleToggle = (slug: string) => {
-    if (!isActive) return;
-    setToggled((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-  };
-
-  const handleConfirm = () => {
-    if (toggled.size === 0) return;
-    // Send selected slugs as comma-separated string for the tool output
-    onConfirm?.([...toggled].join(", "));
-  };
-
-  return (
-    <div
-      style={{
-        marginTop: 14,
-        background: COLORS.surface,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: RADIUS.lg,
-        overflow: "hidden",
-        pointerEvents: isActive ? "auto" : "none",
-        transition: `opacity ${MOTION.duration} ${MOTION.ease}`,
-      }}
-    >
-      {tools.map((tool, idx) => {
-        const isOn = displaySlugs.has(tool.slug);
-        const isDimmed = !isActive && !isOn && (resolvedSlugs?.length ?? 0) > 0;
-        return (
-          <button
-            key={tool.slug}
-            className={isActive ? "btn" : undefined}
-            onClick={() => handleToggle(tool.slug)}
-            disabled={!isActive}
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 12,
-              width: "100%",
-              padding: "14px 16px",
-              background: isOn ? COLORS.accentDim : "transparent",
-              border: "none",
-              borderBottom: idx < tools.length - 1 ? `1px solid ${COLORS.border}` : "none",
-              color: isDimmed ? COLORS.textDim : COLORS.text,
-              fontSize: TYPE.scale.base,
-              fontFamily: TYPE.body,
-              cursor: isActive ? "pointer" : "default",
-              opacity: isDimmed ? 0.4 : 1,
-              transition: `all ${MOTION.duration} ${MOTION.ease}`,
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => {
-              if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : COLORS.surfaceHover;
-            }}
-            onMouseLeave={(e) => {
-              if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent";
-            }}
-          >
-            {/* Checkmark / empty box */}
-            <span
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: RADIUS.sm,
-                background: isOn ? COLORS.accent : COLORS.accentDim,
-                color: isOn ? COLORS.white : COLORS.accent,
-                fontWeight: TYPE.weight.semibold,
-                fontSize: TYPE.scale.xs,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                marginTop: 1,
-                transition: `all ${MOTION.duration} ${MOTION.ease}`,
-              }}
-            >
-              {isOn ? "✓" : ""}
-            </span>
-            {/* Name + reason */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontWeight: TYPE.weight.medium,
-                  lineHeight: TYPE.leading.snug,
-                }}
-              >
-                {tool.name}
-              </div>
-              <div
-                style={{
-                  fontSize: TYPE.scale.xs,
-                  color: isDimmed ? COLORS.textDim : COLORS.textSecondary,
-                  lineHeight: TYPE.leading.normal,
-                  marginTop: 2,
-                }}
-              >
-                {tool.reason}
-              </div>
-            </div>
-          </button>
-        );
-      })}
-      {/* Confirm bar */}
-      {isActive && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            padding: "10px 16px",
-            borderTop: `1px solid ${COLORS.border}`,
-          }}
-        >
-          <button
-            className="btn"
-            onClick={handleConfirm}
-            disabled={toggled.size === 0}
-            style={{
-              padding: "7px 18px",
-              borderRadius: RADIUS.md,
-              border: "none",
-              background: toggled.size > 0 ? COLORS.accent : COLORS.border,
-              color: toggled.size > 0 ? COLORS.white : COLORS.textDim,
-              fontSize: TYPE.scale.sm,
-              fontWeight: TYPE.weight.medium,
-              fontFamily: TYPE.body,
-              cursor: toggled.size > 0 ? "pointer" : "default",
-              transition: `all ${MOTION.duration} ${MOTION.ease}`,
-            }}
-            onMouseEnter={(e) => {
-              if (toggled.size > 0) e.currentTarget.style.background = COLORS.accentBright;
-            }}
-            onMouseLeave={(e) => {
-              if (toggled.size > 0) e.currentTarget.style.background = COLORS.accent;
-            }}
-          >
-            Confirm{toggled.size > 0 ? ` (${toggled.size})` : ""}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// OptionCards — handles single-select (instant) and multi-select (toggle + confirm)
+// OptionCards — unified: radio (single) or checkbox (multi) with optional descriptions
 // ---------------------------------------------------------------------------
 
 function OptionCards({
@@ -1035,19 +883,19 @@ function OptionCards({
   onOptionClick,
   selectedKey,
 }: {
-  options: Array<{ key: string; label: string; originalKey?: string }>;
+  options: Array<{ key: string; label: string; description?: string; selected?: boolean }>;
   isMultiSelect: boolean;
   onOptionClick?: (value: string) => void;
   selectedKey?: string;
 }) {
-  const [toggled, setToggled] = useState<Set<string>>(new Set());
+  // Initialize from pre-selected options (for tool recommendations)
+  const [toggled, setToggled] = useState<Set<string>>(
+    () => new Set(options.filter((o) => o.selected).map((o) => o.key)),
+  );
   const isActive = !!onOptionClick;
 
   const handleToggle = (key: string) => {
     if (!isActive) return;
-    // Find the option to get its originalKey for tool output
-    const opt = options.find((o) => o.key === key);
-    const outputKey = opt?.originalKey ?? key;
     if (isMultiSelect) {
       setToggled((prev) => {
         const next = new Set(prev);
@@ -1056,26 +904,26 @@ function OptionCards({
         return next;
       });
     } else {
-      onOptionClick?.(outputKey);
+      // Single-select: send label text so the chat bubble reads naturally
+      const opt = options.find((o) => o.key === key);
+      onOptionClick?.(opt?.label ?? key);
     }
   };
 
   const handleConfirm = () => {
     if (toggled.size === 0) return;
-    // Map display keys back to original keys for tool output
-    const outputKeys = [...toggled].sort().map((k) => {
-      const opt = options.find((o) => o.key === k);
-      return opt?.originalKey ?? k;
-    });
-    onOptionClick?.(outputKeys.join(", "));
+    // Multi-select: send keys (slugs) since labels would be too verbose
+    onOptionClick?.([...toggled].join(", "));
   };
 
-  // For past messages: parse selectedKey which may be "A, C, D"
+  // For past messages: parse selectedKey
   const selectedKeys = new Set(
     selectedKey
-      ? selectedKey.split(",").map((s) => s.trim().toUpperCase())
+      ? selectedKey.split(",").map((s) => s.trim())
       : [],
   );
+  // Also match case-insensitively
+  const selectedKeysUpper = new Set([...selectedKeys].map((k) => k.toUpperCase()));
 
   return (
     <div
@@ -1090,7 +938,9 @@ function OptionCards({
       }}
     >
       {options.map((opt, idx) => {
-        const isOn = isActive ? toggled.has(opt.key) : selectedKeys.has(opt.key);
+        const isOn = isActive
+          ? toggled.has(opt.key)
+          : selectedKeys.has(opt.key) || selectedKeysUpper.has(opt.key.toUpperCase());
         const isDimmed = !isActive && !isOn && selectedKeys.size > 0;
         return (
           <button
@@ -1123,29 +973,37 @@ function OptionCards({
               if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent";
             }}
           >
+            {/* Radio (single) or Checkbox (multi) indicator */}
             <span
               style={{
-                width: 24,
-                height: 24,
-                borderRadius: RADIUS.sm,
-                background: isOn ? COLORS.accent : COLORS.accentDim,
-                color: isOn ? COLORS.white : COLORS.accent,
-                fontWeight: TYPE.weight.semibold,
-                fontSize: TYPE.scale.xs,
+                width: 18,
+                height: 18,
+                borderRadius: isMultiSelect ? 4 : "50%",
+                border: isOn ? "none" : `2px solid ${COLORS.textDim}`,
+                background: isOn ? COLORS.accent : "transparent",
+                color: COLORS.white,
+                fontSize: 11,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
+                marginTop: 0,
                 transition: `all ${MOTION.duration} ${MOTION.ease}`,
               }}
             >
-              {isOn ? "✓" : opt.key}
+              {isOn ? "✓" : ""}
             </span>
-            <span style={{ flex: 1 }}>{opt.label}</span>
+            {/* Label — description shown as tooltip */}
+            <span
+              style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug }}
+              title={opt.description ?? undefined}
+            >
+              {opt.label}
+            </span>
           </button>
         );
       })}
-      {/* Confirm bar — only in multi-select active mode */}
+      {/* Confirm bar — only for multi-select */}
       {isActive && isMultiSelect && (
         <div
           style={{

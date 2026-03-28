@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { buildDefaultToolConfig } from "../../../../packages/harness/src/connections";
 import { agents, approvals, connections, lessons, runEvents, runs } from "../../../../packages/harness/src/db/schema";
 import { initializeWorkspace } from "../../../../packages/harness/src/workspace";
 import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
@@ -226,10 +225,12 @@ function resolveToolConfig(
     return toolConfig;
   }
 
-  return buildDefaultToolConfig(
-    requiredProviders?.map((provider) => provider.provider) ?? [],
-    requiredProviders ?? [],
-  );
+  // Composio is now the source of truth for available tools.
+  // Return a minimal config — tools are discovered at runtime via session.tools().
+  return {
+    requiredProviders: requiredProviders ?? [],
+    tools: {},
+  };
 }
 
 async function loadProjectAgentViews(projectId: string) {

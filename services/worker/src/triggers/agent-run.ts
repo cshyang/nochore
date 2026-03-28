@@ -7,13 +7,11 @@ import {
 } from "ai";
 import {
   buildPromptBundle,
-  buildRuntimeTools,
   createModel,
   createWorkerRuntime,
-  getEffectiveToolEntry,
-  getMissingRequiredProviders,
   sendApprovalNotification,
 } from "../lib/agent-runtime";
+import { getSessionTools } from "../lib/composio-session";
 import { evaluatePolicy } from "../../../../packages/harness/src/policy";
 import { narrateEvent } from "../lib/narrate";
 import type {
@@ -59,24 +57,6 @@ export const agentRunTask = task({
     eventIds.push(startEventId);
     emitLiveEvent(startEventId, "run_started", startEventPayload);
 
-    const missingProviders = getMissingRequiredProviders(
-      agent,
-      runtime.activeProviders,
-    );
-    if (missingProviders.length > 0) {
-      const error = `Missing required connections: ${missingProviders
-        .map((provider) => provider.provider)
-        .join(", ")}`;
-      eventIds.push(
-        await recordEvent(runtime, runId, agent.id, "run_failed", {
-          reason: error,
-          missingProviders,
-        }),
-      );
-      await runtime.runRepository.fail(runId, new Date(), error);
-      throw new Error(error);
-    }
-
     const promptBundle = await buildPromptBundle({
       agent,
       trigger: payload.trigger,
@@ -91,7 +71,10 @@ export const agentRunTask = task({
     emitLiveEvent(promptEventId, "prompt_built", promptEventPayload);
 
     const model = await createModel();
-    const tools = await buildRuntimeTools({ runtime, agent });
+    const tools = await getSessionTools({
+      userId: runtime.userId,
+      toolkits: runtime.activeProviders,
+    });
     const messages: ModelMessage[] = [
       {
         role: "user",
@@ -99,12 +82,23 @@ export const agentRunTask = task({
       },
     ];
 
+    logger.info("Prompt assembled", {
+      systemPromptLength: promptBundle.system.length,
+      systemPromptPreview: promptBundle.system.slice(0, 500),
+      userPromptPreview: promptBundle.user.slice(0, 500),
+      skills: promptBundle.selectedSkills.map((s) => s.id),
+      activeProviders: runtime.activeProviders,
+      toolCount: Object.keys(tools).length,
+      toolNames: Object.keys(tools),
+    });
+
     let finalText = "";
     let lastResult: Awaited<ReturnType<typeof generateText>> | null = null;
 
     try {
       for (let cycle = 0; cycle < 12; cycle += 1) {
         metadata.set("cycle", cycle);
+        logger.info(`Cycle ${cycle}: calling LLM`, { cycle, messageCount: messages.length });
 
         const result = await generateText({
           model,
@@ -117,8 +111,17 @@ export const agentRunTask = task({
         lastResult = result;
         messages.push(...result.response.messages);
 
+        logger.info(`Cycle ${cycle}: LLM responded`, {
+          cycle,
+          textLength: result.text.length,
+          toolCalls: result.toolCalls.map((tc) => tc.toolName),
+          toolResults: result.toolResults.map((tr) => tr.toolName),
+          steps: result.steps.length,
+        });
+
         if (result.text.trim().length > 0) {
           finalText = result.text.trim();
+          logger.info("Agent output", { textPreview: finalText.slice(0, 1000) });
           const findingPayload = { text: finalText };
           const findingId = await recordEvent(runtime, runId, agent.id, "finding_recorded", findingPayload);
           eventIds.push(findingId);
@@ -144,6 +147,15 @@ export const agentRunTask = task({
               toolName: toolResult.toolName,
               timestamp: new Date(),
             });
+            const outputStr = typeof toolResult.output === "string"
+              ? toolResult.output
+              : JSON.stringify(toolResult.output);
+            logger.info(`Tool result: ${toolResult.toolName}`, {
+              toolName: toolResult.toolName,
+              inputPreview: JSON.stringify(toolResult.input).slice(0, 300),
+              outputPreview: outputStr.slice(0, 500),
+              outputLength: outputStr.length,
+            });
             const toolExecPayload = {
               toolCallId: toolResult.toolCallId,
               toolName: toolResult.toolName,
@@ -168,16 +180,25 @@ export const agentRunTask = task({
         for (const approvalRequest of approvalRequests) {
           const toolName = approvalRequest.toolCall.toolName;
           const toolInput = normalizeToolInput(approvalRequest.toolCall.input);
-          const toolConfig = getEffectiveToolEntry(
-            agent,
-            runtime.activeProviders,
-            toolName,
-          );
+          // Default policy: all Composio tools auto-approve.
+          // Per-tool approval overrides will come from agent.toolConfig.toolOverrides
+          // once the UI exposes per-tool toggles.
+          const toolOverrides = (agent.toolConfig as any)?.toolOverrides as Record<string, string> | undefined;
+          const overrideMode = toolOverrides?.[toolName];
           const policy = evaluatePolicy(
             {
               toolName,
               toolInput,
-              toolConfig,
+              toolConfig: {
+                toolName,
+                slug: toolName,
+                provider: "",
+                title: toolName,
+                description: "",
+                mode: "write" as const,
+                enabled: true,
+                approvalMode: (overrideMode as "auto" | "approval" | "blocked") ?? "auto",
+              },
             },
             {
               now: new Date(),
@@ -385,9 +406,10 @@ async function ensureRunRecord(
   if (runId) {
     const existing = await runtime.runRepository.getById(runId);
     if (existing) {
-      if (existing.status === "completed" || existing.status === "failed") {
-        throw new Error(`Run ${runId} is already ${existing.status}`);
+      if (existing.status === "completed") {
+        throw new Error(`Run ${runId} is already completed`);
       }
+      // Allow retrying a failed run (trigger.dev retry) — reset it to running
       await runtime.runRepository.markRunning(runId);
       return runId;
     }
