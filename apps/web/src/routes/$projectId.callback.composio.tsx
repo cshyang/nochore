@@ -136,10 +136,12 @@ function ComposioCallbackPage() {
   return (
     <div
       style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100vh",
         background: COLORS.bg,
         padding: 32,
       }}

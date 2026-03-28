@@ -27,6 +27,7 @@ export type ToolConfigEntry = z.infer<typeof ToolConfigEntrySchema>;
 export const ProviderRequirementSchema = z.object({
   provider: z.string(),
   reason: z.string().optional(),
+  logo: z.string().optional(),
 });
 export type ProviderRequirement = z.infer<typeof ProviderRequirementSchema>;
 

@@ -91,7 +91,7 @@ type ToolConfigEntryLike = {
 };
 
 type ToolConfigLike = {
-  requiredProviders?: Array<{ provider: string; reason?: string }>;
+  requiredProviders?: Array<{ provider: string; reason?: string; logo?: string }>;
   tools?: Record<string, ToolConfigEntryLike>;
 };
 
@@ -123,7 +123,7 @@ export interface AgentWorkspaceProps {
   availableSkills?: SkillLike[];
   skills?: SkillLike[];
   projectConnections?: ConnectionLike[];
-  requiredProviders?: Array<{ provider: string; reason?: string }>;
+  requiredProviders?: Array<{ provider: string; reason?: string; logo?: string }>;
   approvals?: ApprovalLike[];
   runs?: RunLike[];
   pendingActions?: ApprovalLike[];
@@ -150,7 +150,7 @@ function normalizeToolConfig(value: unknown): ToolConfigLike {
   return {
     requiredProviders: Array.isArray(record.requiredProviders)
       ? record.requiredProviders.filter(
-          (item): item is { provider: string; reason?: string } =>
+          (item): item is { provider: string; reason?: string; logo?: string } =>
             !!item &&
             typeof item === "object" &&
             typeof (item as Record<string, unknown>).provider === "string",
@@ -409,7 +409,7 @@ function SettingsPanel({
   agent: AgentLike;
   skills: SkillLike[];
   connections: ConnectionLike[];
-  requiredProviders: Array<{ provider: string; reason?: string }>;
+  requiredProviders: Array<{ provider: string; reason?: string; logo?: string }>;
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
@@ -606,7 +606,7 @@ function SettingsPanel({
           <div style={{ display: "grid", gap: 6 }}>
             {requiredProviders.map((rp) => {
               const display = PROVIDER_DISPLAY[rp.provider];
-              const provider = { id: rp.provider, name: display?.name ?? rp.provider, icon: display?.icon ?? "🔌", description: rp.reason ?? "" };
+              const provider = { id: rp.provider, name: display?.name ?? rp.provider, icon: display?.icon ?? "🔌", description: rp.reason ?? "", logo: rp.logo ?? null };
               const conn = connections.find((c) => c.provider === provider.id);
               const isConnected = conn?.status === "active";
               const accountId: string | null = conn?.id ?? null;
@@ -614,7 +614,11 @@ function SettingsPanel({
                 <SettingsCard key={provider.id}>
                   <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
+                      {provider.logo ? (
+                        <img src={provider.logo} alt="" style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, objectFit: "contain" }} />
+                      ) : (
+                        <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
+                      )}
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{provider.name}</div>
                         {provider.description ? (

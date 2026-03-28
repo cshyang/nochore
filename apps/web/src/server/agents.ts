@@ -16,25 +16,38 @@ import { getProjectDeps } from "./deps";
 import { jsonSafe } from "./serializable";
 import { startAgentRun } from "./orchestration";
 
-export const createBlankAgent = createServerFn({ method: "POST" })
-  .inputValidator((input: { projectId: string }) => input)
-  .handler(async ({ data: { projectId } }) => {
+export const createAgent = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      projectId: string;
+      name?: string;
+      description?: string;
+      instructions?: string;
+      skills?: string[];
+      toolConfig?: ToolConfig;
+      requiredProviders?: Array<{ provider: string; reason: string }>;
+      notificationConfig?: NotificationConfig;
+      schedule?: AgentConfig["schedule"];
+      status?: "draft" | "live";
+    }) => input,
+  )
+  .handler(async ({ data }) => {
     const agentId = crypto.randomUUID().slice(0, 12);
     await createAgentRecord({
       agentId,
-      projectId,
-      name: "Untitled Agent",
-      description: "",
-      instructions: "",
-      skills: [],
-      toolConfig: buildDefaultToolConfig([]),
-      notificationConfig: {
+      projectId: data.projectId,
+      name: data.name ?? "Untitled Agent",
+      description: data.description ?? "",
+      instructions: data.instructions ?? "",
+      skills: data.skills ?? [],
+      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
+      notificationConfig: data.notificationConfig ?? {
         inApp: true,
         email: false,
         slack: false,
       },
-      schedule: "manual",
-      status: "draft",
+      schedule: data.schedule ?? "manual",
+      status: data.status ?? "draft",
     });
     return jsonSafe({ id: agentId });
   });
@@ -51,107 +64,6 @@ export const getAgent = createServerFn({ method: "GET" })
   .handler(async ({ data: { agentId, projectId } }) => {
     const view = await loadAgentView(projectId, agentId);
     return jsonSafe(view);
-  });
-
-export const createAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      projectId: string;
-      name: string;
-      description?: string;
-      instructions?: string;
-      skills?: string[];
-      toolConfig?: ToolConfig;
-      requiredProviders?: Array<{ provider: string; reason: string }>;
-      notificationConfig?: NotificationConfig;
-      schedule?: AgentConfig["schedule"];
-      status?: "draft" | "live";
-    }) => input,
-  )
-  .handler(async ({ data }) => {
-    const agentId = crypto.randomUUID().slice(0, 12);
-    await createAgentRecord({
-      agentId,
-      projectId: data.projectId,
-      name: data.name,
-      description: data.description ?? "",
-      instructions: data.instructions ?? "",
-      skills: data.skills ?? [],
-      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
-      notificationConfig: data.notificationConfig ?? {
-        inApp: true,
-        email: false,
-        slack: false,
-      },
-      schedule: data.schedule ?? "manual",
-      status: data.status ?? "live",
-    });
-    return jsonSafe({ id: agentId });
-  });
-
-export const createDraftAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      projectId: string;
-      name: string;
-      description?: string;
-      instructions?: string;
-      skills?: string[];
-      toolConfig?: ToolConfig;
-      requiredProviders?: Array<{ provider: string; reason: string }>;
-      notificationConfig?: NotificationConfig;
-      schedule?: AgentConfig["schedule"];
-    }) => input,
-  )
-  .handler(async ({ data }) => {
-    const agentId = crypto.randomUUID().slice(0, 12);
-    await createAgentRecord({
-      agentId,
-      projectId: data.projectId,
-      name: data.name,
-      description: data.description ?? "",
-      instructions: data.instructions ?? "",
-      skills: data.skills ?? [],
-      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
-      notificationConfig: data.notificationConfig ?? {
-        inApp: true,
-        email: false,
-        slack: false,
-      },
-      schedule: data.schedule ?? "manual",
-      status: "draft",
-    });
-    return jsonSafe({ id: agentId });
-  });
-
-export const updateDraftAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      agentId: string;
-      projectId: string;
-      name?: string;
-      description?: string;
-      instructions?: string;
-      skills?: string[];
-      toolConfig?: ToolConfig;
-      requiredProviders?: Array<{ provider: string; reason: string }>;
-      notificationConfig?: NotificationConfig;
-      schedule?: AgentConfig["schedule"];
-      status?: "draft" | "live";
-    }) => input,
-  )
-  .handler(async ({ data }) => {
-    await updateAgentRecord(data.projectId, data.agentId, {
-      name: data.name,
-      description: data.description,
-      instructions: data.instructions,
-      skills: data.skills,
-      toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
-      notificationConfig: data.notificationConfig,
-      schedule: data.schedule,
-      status: data.status,
-    });
-    return jsonSafe({ updated: true });
   });
 
 export const updateAgentConfig = createServerFn({ method: "POST" })

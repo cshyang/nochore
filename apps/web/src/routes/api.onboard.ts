@@ -334,11 +334,13 @@ export const Route = createFileRoute("/api/onboard")({
                   }
                 }
 
-                // Derive providers from selected tools
+                // Derive providers from selected tools, include logos from catalog
                 const providers = [...new Set(Object.values(toolEntries).map((t) => t.provider))];
+                const logoByProvider = new Map(toolCatalog.map((t) => [t.provider, t.providerLogo]));
                 const requiredProviders = providers.map((p) => ({
                   provider: p,
                   reason: PROVIDER_REASONS[p] ?? `Required for ${p} tools`,
+                  logo: logoByProvider.get(p) ?? undefined,
                 }));
 
                 const toolConfig = { requiredProviders, tools: toolEntries };

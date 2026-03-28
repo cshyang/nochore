@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
 import { connections } from "../../../../packages/harness/src/db/schema";
 import { getProjectDeps } from "./deps";
@@ -47,9 +47,8 @@ export const checkConnection = createServerFn({ method: "GET" })
     const rows = db
       .select()
       .from(connections)
-      .where(eq(connections.projectId, data.projectId))
-      .all()
-      .filter((row) => row.provider === data.provider);
+      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider)))
+      .all();
 
     if (rows.length === 0) {
       return jsonSafe({ connected: false });
@@ -70,9 +69,8 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
     const pending = db
       .select()
       .from(connections)
-      .where(eq(connections.projectId, data.projectId))
+      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "pending")))
       .all()
-      .filter((row) => row.provider === data.provider && row.status === "pending")
       .at(-1);
 
     if (!pending) {
@@ -110,9 +108,8 @@ export const activateConnection = createServerFn({ method: "POST" })
     const pending = db
       .select()
       .from(connections)
-      .where(eq(connections.projectId, data.projectId))
+      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "pending")))
       .all()
-      .filter((row) => row.provider === data.provider && row.status === "pending")
       .at(-1);
 
     if (!pending) {
@@ -185,9 +182,8 @@ export const disconnectProvider = createServerFn({ method: "POST" })
       const rows = db
         .select()
         .from(connections)
-        .where(eq(connections.projectId, data.projectId))
-        .all()
-        .filter((row) => row.provider === data.provider && row.status === "active");
+        .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "active")))
+        .all();
       for (const row of rows) {
         db.update(connections)
           .set({ status: "disconnected", updatedAt: Date.now() })
@@ -228,32 +224,49 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<ComposioToolMeta[]> => {
     try {
       const composio = await createComposioClient();
-      const session = await composio.create(getComposioUserId(data.projectId), {
-        toolkits: SUPPORTED_PROVIDERS,
-        manageConnections: false,
-      });
-      const result = await session.tools();
-      const items = (result as { items?: unknown[] }).items ?? (Array.isArray(result) ? result : []);
 
-      return (items as Array<{
-          slug: string;
-          name: string;
-          description?: string;
-          human_description?: string;
-          tags?: string[];
-          toolkit: { slug: string; name: string; logo?: string };
-        }>).map((tool) => ({
-          slug: tool.slug,
-          name: tool.name,
-          description: tool.description ?? tool.human_description ?? "",
-          provider: tool.toolkit.slug,
-          providerName: tool.toolkit.name,
-          providerLogo: tool.toolkit.logo ?? null,
-          tags: tool.tags ?? [],
-        }));
+      // Use composio.tools.list() — the REST API that returns metadata.
+      // session.tools() returns AI SDK ToolSet objects (for execution), not catalog metadata.
+      const results = await Promise.all(
+        SUPPORTED_PROVIDERS.map((provider) =>
+          (composio as any).tools.list({ toolkit_slug: provider, limit: 50 })
+            .then((res: { items?: Array<{
+              slug: string;
+              name: string;
+              description?: string;
+              human_description?: string;
+              tags?: string[];
+              toolkit: { slug: string; name: string; logo?: string };
+            }> }) => (res.items ?? []).map((tool) => ({
+              slug: tool.slug,
+              name: tool.name,
+              description: tool.description ?? tool.human_description ?? "",
+              provider,
+              providerName: tool.toolkit?.name ?? provider,
+              providerLogo: tool.toolkit?.logo ?? null,
+              tags: tool.tags ?? [],
+            })))
+            .catch(() => [] as ComposioToolMeta[]),
+        ),
+      );
+
+      const catalog = results.flat();
+      if (catalog.length > 0) return catalog;
     } catch {
-      return [];
+      // Fall through to hardcoded fallback
     }
+
+    // Fallback: use DEFAULT_TOOL_CAPABILITIES when Composio is unavailable
+    const { DEFAULT_TOOL_CAPABILITIES } = await import("../../../../packages/harness/src/connections/capabilities");
+    return DEFAULT_TOOL_CAPABILITIES.map((tool) => ({
+      slug: tool.slug,
+      name: tool.title,
+      description: tool.description,
+      provider: tool.provider,
+      providerName: tool.provider,
+      providerLogo: null,
+      tags: [tool.mode],
+    }));
   });
 
 export const listConnections = createServerFn({ method: "GET" })
