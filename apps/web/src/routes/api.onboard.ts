@@ -2,117 +2,88 @@
  * Conversational agent onboarding endpoint.
  *
  * Multi-turn chat using Vercel AI SDK v6 streamText + useChat protocol.
- * The LLM analyzes intent, suggests tools, then calls create_agent to finalize.
+ * The LLM clarifies intent, searches for tools, then calls create_agent.
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import { streamText, convertToModelMessages, hasToolCall, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { z } from "zod";
-import crypto from "node:crypto";
-import type { ComposioToolMeta } from "~/server/connections";
+import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
+import type { ToolkitSummary } from "~/server/onboard-prompt";
 
-const PROVIDER_REASONS: Record<string, string> = {
-  googleads: "Read campaign performance and adjust paid media execution",
-  meta: "Monitor and adjust Meta campaign execution",
-  slack: "Send approval requests and findings to the team",
-  gmail: "Send approval requests and finding summaries by email",
-  ga4: "Use website conversion and traffic context in decisions",
-  shopify: "Use storefront order and revenue context in analysis",
-  stripe: "Use payments and subscription data as operating context",
-  github: "Inspect repository and deployment activity when required",
-  googlesearchconsole: "Read organic search performance, queries, and indexing data",
-  tiktok: "Monitor and adjust TikTok ad campaigns",
+/** Maps user-facing permission labels to internal autonomy keys. */
+const PERMISSION_TO_AUTONOMY: Record<string, string> = {
+  "ask before acting": "conservative",
+  "ask before making changes": "balanced",
+  "act independently": "autonomous",
+};
+
+type AvailableSkill = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+type IncomingMessage = {
+  id?: string;
+  role: string;
+  parts: unknown[];
+};
+
+type MessagePart = Record<string, unknown>;
+
+type OnboardingRequestBody = {
+  messages: IncomingMessage[];
+  projectId: string;
+  availableSkills?: AvailableSkill[];
+  existingConnections?: string[];
+  toolkitSummaries?: ToolkitSummary[];
 };
 
 async function createModel() {
   const provider = process.env.LLM_PROVIDER ?? "anthropic";
+  const modelName = process.env.LLM_MODEL;
 
   switch (provider) {
     case "zai": {
-      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-      const zai = createOpenAICompatible({
-        name: "zai",
-        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
+      return createCompatibleModel({
         apiKey: process.env.ZAI_API_KEY,
+        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
+        modelName: modelName ?? "glm-4.7",
+        providerName: "zai",
       });
-      return zai(process.env.LLM_MODEL ?? "glm-4.7");
     }
     case "openai": {
-      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-      const openai = createOpenAICompatible({
-        name: "openai",
-        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
+      return createCompatibleModel({
         apiKey: process.env.OPENAI_API_KEY ?? process.env.LLM_API_KEY,
+        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
+        modelName: modelName ?? "gpt-4o",
+        providerName: "openai",
       });
-      return openai(process.env.LLM_MODEL ?? "gpt-4o");
     }
     case "anthropic":
     default: {
       const { createAnthropic } = await import("@ai-sdk/anthropic");
       const anthropic = createAnthropic();
-      return anthropic(process.env.LLM_MODEL ?? "claude-sonnet-4-20250514");
+      return anthropic(modelName ?? "claude-sonnet-4-20250514");
     }
   }
 }
 
-function formatToolCatalog(toolCatalog: ComposioToolMeta[]): string {
-  if (!toolCatalog.length) return "No tools available.";
-
-  const byProvider = new Map<string, ComposioToolMeta[]>();
-  for (const tool of toolCatalog) {
-    const list = byProvider.get(tool.provider) ?? [];
-    list.push(tool);
-    byProvider.set(tool.provider, list);
-  }
-
-  const sections: string[] = [];
-  for (const [provider, tools] of byProvider) {
-    const providerName = tools[0]?.providerName ?? provider;
-    const lines = tools.map(
-      (t) => `- ${t.slug}: "${t.name}" — ${t.description}`,
-    );
-    sections.push(`### ${providerName} (provider: ${provider})\n${lines.join("\n")}`);
-  }
-
-  return sections.join("\n\n");
-}
-
-function buildSystemPrompt(params: {
-  availableSkills: Array<{ id: string; name: string; description: string }>;
-  existingConnections: string[];
-  toolCatalog: ComposioToolMeta[];
+async function createCompatibleModel(params: {
+  providerName: string;
+  baseURL: string;
+  apiKey: string | undefined;
+  modelName: string;
 }) {
-  const skillsList = params.availableSkills
-    .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
-    .join("\n");
-
-  const NOTIFICATION_PROVIDERS = new Set(["slack", "gmail", "outlook", "telegram", "whatsapp"]);
-  const dataTools = params.toolCatalog.filter((t) => !NOTIFICATION_PROVIDERS.has(t.provider));
-  const notificationTools = params.toolCatalog.filter((t) => NOTIFICATION_PROVIDERS.has(t.provider));
-
-  const catalogText = formatToolCatalog(dataTools);
-  const notificationText = notificationTools.length
-    ? notificationTools.map((t) => `- ${t.slug}: "${t.name}" (${t.providerName})`).join("\n")
-    : "none available";
-
-  return `You are Nochore's agent setup assistant. Understand what the user wants their agent to do, gather what you need, then call create_agent.
-
-Use request_input to present choices. One question per message — wait for the response before the next. Be concise. When you have enough, call create_agent — don't summarize or ask for confirmation.
-
-You need to determine: which tools the agent needs, how the user wants updates (ask — don't assume), autonomy level (conservative/balanced/autonomous), and schedule. Skip what's obvious from context.
-
-## Data sources
-${catalogText}
-
-## Notification channels
-${notificationText}
-
-## Available skills
-${skillsList || "none available"}
-
-## Already connected providers
-${params.existingConnections.length ? params.existingConnections.join(", ") : "none yet"}`;
+  const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
+  const provider = createOpenAICompatible({
+    name: params.providerName,
+    baseURL: params.baseURL,
+    apiKey: params.apiKey,
+  });
+  return provider(params.modelName);
 }
 
 function resolveSkillIds(
@@ -122,12 +93,12 @@ function resolveSkillIds(
   if (!modelSkills.length || !available.length) return [];
   const resolved: string[] = [];
   for (const raw of modelSkills) {
-    const lower = raw.toLowerCase().replace(/[-_\s]/g, "");
+    const lower = normalizeSkillToken(raw);
     const exact = available.find((s) => s.id === raw);
     if (exact) { resolved.push(exact.id); continue; }
     const fuzzy = available.find((s) => {
-      const normId = s.id.toLowerCase().replace(/[-_\s]/g, "");
-      const normName = s.name.toLowerCase().replace(/[-_\s]/g, "");
+      const normId = normalizeSkillToken(s.id);
+      const normName = normalizeSkillToken(s.name);
       return normId === lower || normName === lower || normId.includes(lower) || lower.includes(normId);
     });
     if (fuzzy) resolved.push(fuzzy.id);
@@ -135,81 +106,81 @@ function resolveSkillIds(
   return Array.from(new Set(resolved));
 }
 
-function inferToolMode(tool: ComposioToolMeta): "read" | "write" {
-  const slug = tool.slug.toUpperCase();
-  const tags = tool.tags.map((t) => t.toLowerCase());
-  if (tags.includes("read") || tags.includes("important")) return "read";
-  if (tags.includes("write")) return "write";
-  if (/^(GET_|LIST_|SEARCH_|FETCH_|READ_|FIND_)/.test(slug)) return "read";
-  if (/_GET_|_LIST_|_SEARCH_|_FETCH_|_READ_|_FIND_/.test(slug)) return "read";
-  if (/REPORT|PERFORMANCE|METRICS|ANALYTICS|STATUS|SCORE/.test(slug)) return "read";
-  return "write";
+function normalizeSkillToken(value: string) {
+  return value.toLowerCase().replace(/[-_\s]/g, "");
+}
+
+function stripUiOnlyToolParts(messages: IncomingMessage[]) {
+  return messages
+    .map((message) => ({
+      ...message,
+      parts: message.parts.filter((part) => {
+        const record = part as MessagePart;
+        const type = record.type as string | undefined;
+        if (type === "tool-request_input") return false;
+        if (type === "dynamic-tool" && record.toolName === "request_input") return false;
+        return true;
+      }),
+    }))
+    .filter((message) => message.parts.length > 0);
 }
 
 export const Route = createFileRoute("/api/onboard")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = await request.json();
+        const body = await request.json() as OnboardingRequestBody;
         const {
           messages: rawMessages,
           projectId,
           availableSkills = [],
           existingConnections = [],
-          toolCatalog = [],
-        } = body as {
-          messages: Array<{ id?: string; role: string; parts: unknown[] }>;
-          projectId: string;
-          availableSkills: Array<{ id: string; name: string; description: string }>;
-          existingConnections: string[];
-          toolCatalog: ComposioToolMeta[];
-        };
+          toolkitSummaries = [],
+        } = body;
 
         const model = await createModel();
-        const system = buildSystemPrompt({ availableSkills, existingConnections, toolCatalog });
+        const system = buildOnboardingSystemPrompt({ availableSkills, existingConnections, toolkitSummaries });
 
-        // Strip request_input tool parts from history — rendered client-side;
-        // the user's text response carries their selection.
-        const cleanedMessages = (rawMessages as Array<{ id?: string; role: string; parts: Array<Record<string, unknown>> }>).map((msg) => ({
-          ...msg,
-          parts: msg.parts.filter((p) => {
-            const type = p.type as string;
-            if (type === "tool-request_input") return false;
-            if (type === "dynamic-tool" && p.toolName === "request_input") return false;
-            return true;
-          }),
-        })).filter((msg) => msg.parts.length > 0);
-
+        const cleanedMessages = stripUiOnlyToolParts(rawMessages);
         const modelMessages = await convertToModelMessages(
           cleanedMessages as UIMessage[],
         );
 
-        const inputSchema = z.object({
+        const createAgentSchema = z.object({
           name: z.string().min(1).describe("A short, memorable agent name"),
-          description: z.string().min(1).describe("A concise one-sentence summary"),
-          instructions: z.string().min(1).describe("Detailed operational instructions (markdown)"),
+          description: z.string().min(1).describe("A concise one-sentence summary of what the agent does"),
+          instructions: z.string().min(1).describe(
+            "Detailed operational instructions (markdown). This becomes the agent's system prompt. " +
+            "Be specific: what data to pull, what patterns to look for, how to format findings, " +
+            "what thresholds trigger action.",
+          ),
           skills: z.array(z.string()).default([]).describe("Skill IDs from available skills"),
-          toolSlugs: z.array(z.string()).default([]).describe("Tool slugs selected by the user from suggest_tools"),
-          schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("Run schedule"),
-          autonomyLevel: z.enum(["conservative", "balanced", "autonomous"]).describe("How much autonomy"),
+          toolSlugs: z.array(z.string()).default([]).describe("Tool slugs confirmed by the user"),
+          schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
+          permissionLevel: z.enum(["ask before acting", "ask before making changes", "act independently"])
+            .describe("How much freedom the agent has"),
         });
 
-        type ToolInput = z.infer<typeof inputSchema>;
+        type CreateAgentInput = z.infer<typeof createAgentSchema>;
+
+        // Build a toolkit description lookup from summaries for provider reasons
+        const toolkitDescriptions = new Map(toolkitSummaries.map((tk) => [tk.slug, tk.description]));
+        const toolkitLogos = new Map(toolkitSummaries.map((tk) => [tk.slug, tk.logo]));
 
         const result = streamText({
           model,
           system,
           messages: modelMessages,
-          stopWhen: stepCountIs(3),
+          stopWhen: [hasToolCall("create_agent"), stepCountIs(20)],
           providerOptions: {
-            anthropic: { effort: "medium" },
+            anthropic: { thinking: { type: "enabled", budgetTokens: 5000 } },
           },
           tools: {
             request_input: {
               description:
                 "Present options to the user and wait for their selection. " +
                 "For tool recommendations, use multiSelect with description and selected fields. " +
-                "For simple choices (autonomy, schedule), omit description.",
+                "For simple choices (permissions, schedule), use single-select without description.",
               inputSchema: z.object({
                 question: z.string().describe("The question or context to show the user"),
                 options: z
@@ -232,34 +203,81 @@ export const Route = createFileRoute("/api/onboard")({
                   .array(z.string())
                   .describe("The key(s) the user selected"),
               }),
-              // No execute — UI-only tool.
+              // No execute — UI-only tool, rendered client-side.
             },
+
+            search_tools: {
+              description:
+                "Search for available tools across all connected platforms. " +
+                "Use after clarifying the user's intent to find relevant integrations. " +
+                "You can filter by toolkit (platform) or search by keyword.",
+              inputSchema: z.object({
+                query: z.string().optional().describe("Search query (e.g. 'campaign performance', 'send message')"),
+                toolkits: z.array(z.string()).optional().describe("Filter by toolkit slugs (e.g. ['googleads', 'slack'])"),
+              }),
+              execute: async (input: { query?: string; toolkits?: string[] }) => {
+                try {
+                  const { createComposioClient } = await import("../../../../packages/harness/src/connections/composio");
+                  const composio = await createComposioClient();
+
+                  const tools = await composio.tools.getRawComposioTools({
+                    ...(input.toolkits?.length ? { toolkits: input.toolkits } : {}),
+                    ...(input.query ? { search: input.query } : {}),
+                    limit: 20,
+                  });
+
+                  return (tools as Array<{ slug: string; name: string; description: string }>).map((t) => ({
+                    slug: t.slug,
+                    name: t.name,
+                    description: t.description,
+                  }));
+                } catch (err) {
+                  console.error("search_tools failed:", err);
+                  return [{ slug: "error", name: "Search failed", description: String(err) }];
+                }
+              },
+            },
+
             create_agent: {
-              description: "Create the agent with the gathered configuration. Call this once you have enough context from the conversation.",
-              inputSchema,
-              execute: async (input: ToolInput) => {
+              description:
+                "Create the agent with the gathered configuration. " +
+                "Call this once you have confirmed tools, permissions, and schedule with the user.",
+              inputSchema: createAgentSchema,
+              execute: async (input: CreateAgentInput) => {
                 const { createAgent } = await import("~/server/agents");
+                const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections/composio");
+
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
-                // Derive providers from selected tool slugs
-                const selectedSlugs = input.toolSlugs.length > 0 ? input.toolSlugs : [];
-                const catalogMap = new Map(toolCatalog.map((t) => [t.slug, t]));
+                // Derive providers from confirmed tool slugs
+                const composio = await createComposioClient();
+                const userId = getComposioUserId(projectId);
+
+                // Look up which toolkit each tool belongs to
+                const toolMeta = await composio.tools.getRawComposioTools({
+                  tools: input.toolSlugs,
+                }) as Array<{ slug: string; name: string; description: string; toolkit?: { slug: string; name: string; logo?: string } }>;
+
+                const providerBySlug = new Map(
+                  toolMeta.map((t) => [t.slug, t.toolkit?.slug ?? ""]),
+                );
                 const providers = [...new Set(
-                  selectedSlugs
-                    .map((slug) => catalogMap.get(slug)?.provider)
+                  input.toolSlugs
+                    .map((slug) => providerBySlug.get(slug))
                     .filter((p): p is string => !!p),
                 )];
-                const logoByProvider = new Map(toolCatalog.map((t) => [t.provider, t.providerLogo]));
+
                 const requiredProviders = providers.map((p) => ({
                   provider: p,
-                  reason: PROVIDER_REASONS[p] ?? `Required for ${p} tools`,
-                  logo: logoByProvider.get(p) ?? undefined,
+                  reason: toolkitDescriptions.get(p) ?? `Required for ${p} integrations`,
+                  logo: toolkitLogos.get(p) ?? undefined,
                 }));
 
-                // Composio is the source of truth for tools — we only store provider-level config
+                // Map user-facing permission label to internal autonomy key
+                const autonomyLevel = PERMISSION_TO_AUTONOMY[input.permissionLevel] ?? "balanced";
                 const toolConfig = { requiredProviders, tools: {} };
 
-                const result = await createAgent({
+                const agentResult = await createAgent({
                   data: {
                     projectId,
                     name: input.name.trim(),
@@ -274,10 +292,11 @@ export const Route = createFileRoute("/api/onboard")({
                       slack: providers.includes("slack"),
                     },
                     schedule: input.schedule,
+                    autonomyLevel,
                     status: "draft",
                   },
                 });
-                const agentId = (result as { id?: string })?.id;
+                const agentId = (agentResult as { id?: string })?.id;
 
                 return { success: true as const, agentId };
               },

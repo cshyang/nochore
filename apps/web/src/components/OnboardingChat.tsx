@@ -9,13 +9,13 @@ import {
   ArrowRight,
 } from "@phosphor-icons/react";
 import { COLORS, RADIUS, TYPE, MOTION } from "~/lib/colors";
-import type { ComposioToolMeta } from "~/server/connections";
+import type { ToolkitSummary } from "~/server/onboard-prompt";
 
 interface OnboardingChatProps {
   projectId: string;
   availableSkills: Array<{ id: string; name: string; description: string }>;
   existingConnections: string[];
-  toolCatalog: ComposioToolMeta[];
+  toolkitSummaries: ToolkitSummary[];
   onBack: () => void;
 }
 
@@ -36,7 +36,7 @@ export function OnboardingChat({
   projectId,
   availableSkills,
   existingConnections,
-  toolCatalog,
+  toolkitSummaries,
   onBack,
 }: OnboardingChatProps) {
   const navigate = useNavigate();
@@ -49,7 +49,7 @@ export function OnboardingChat({
   const transport = useRef(
     new DefaultChatTransport({
       api: "/api/onboard",
-      body: { projectId, availableSkills, existingConnections, toolCatalog },
+      body: { projectId, availableSkills, existingConnections, toolkitSummaries },
     }),
   ).current;
 
@@ -916,13 +916,24 @@ function OptionCards({
     onOptionClick?.([...toggled].join(", "));
   };
 
-  // For past messages: parse selectedKey
-  const selectedKeys = new Set(
-    selectedKey
-      ? selectedKey.split(",").map((s) => s.trim())
-      : [],
-  );
-  // Also match case-insensitively
+  // For past messages: resolve selectedKey to option keys.
+  // Try full-string match first (handles labels with commas), then split for multi-select.
+  const labelToKey = new Map(options.map((o) => [o.label, o.key]));
+  const keySet = new Set(options.map((o) => o.key));
+  const selectedKeys = new Set<string>();
+  if (selectedKey) {
+    const fullMatch = labelToKey.get(selectedKey) ?? (keySet.has(selectedKey) ? selectedKey : undefined);
+    if (fullMatch) {
+      selectedKeys.add(fullMatch);
+    } else {
+      // Multi-select: split by comma and resolve each token
+      for (const token of selectedKey.split(",").map((s) => s.trim())) {
+        const mapped = labelToKey.get(token);
+        if (mapped) selectedKeys.add(mapped);
+        else selectedKeys.add(token);
+      }
+    }
+  }
   const selectedKeysUpper = new Set([...selectedKeys].map((k) => k.toUpperCase()));
 
   return (

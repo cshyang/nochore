@@ -6,6 +6,39 @@ import { connections } from "../../../../packages/harness/src/db/schema";
 import { getProjectDeps } from "./deps";
 import { jsonSafe } from "./serializable";
 
+type ProjectDb = ReturnType<typeof getProjectDeps>["db"];
+
+interface ToolkitMetadataItem {
+  slug: string;
+  name: string;
+  logo?: string;
+  isNoAuth?: boolean;
+  connection?: {
+    isActive?: boolean;
+    connectedAccount?: { id?: string; status?: string };
+  };
+}
+
+interface ComposioCatalogTool {
+  slug: string;
+  name: string;
+  description?: string;
+  human_description?: string;
+  toolkit?: {
+    name?: string;
+    logo?: string | null;
+  };
+  tags?: string[];
+}
+
+interface ComposioCatalogClient {
+  client: {
+    tools: {
+      list(input: { toolkit_slug: string; limit: number }): Promise<{ items?: ComposioCatalogTool[] }>;
+    };
+  };
+}
+
 export const initiateConnection = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; callbackUrl: string }) => input)
   .handler(async ({ data }) => {
@@ -44,17 +77,12 @@ export const checkConnection = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string; provider: string }) => input)
   .handler(async ({ data }) => {
     const { db } = getProjectDeps(data.projectId);
-    const rows = db
-      .select()
-      .from(connections)
-      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider)))
-      .all();
+    const latest = getLatestConnection(db, data.projectId, data.provider);
 
-    if (rows.length === 0) {
+    if (!latest) {
       return jsonSafe({ connected: false });
     }
 
-    const latest = rows[rows.length - 1];
     return jsonSafe({
       connected: latest.status === "active",
       status: latest.status,
@@ -66,12 +94,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string; provider: string }) => input)
   .handler(async ({ data }) => {
     const { db } = getProjectDeps(data.projectId);
-    const pending = db
-      .select()
-      .from(connections)
-      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "pending")))
-      .all()
-      .at(-1);
+    const pending = getLatestConnection(db, data.projectId, data.provider, "pending");
 
     if (!pending) {
       return jsonSafe({ connected: false, status: "no_pending" });
@@ -85,10 +108,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
       const composio = await createComposioClient();
       const account = await composio.connectedAccounts.get(pending.composioEntityId);
       if (account.status === "ACTIVE") {
-        db.update(connections)
-          .set({ status: "active", updatedAt: Date.now() })
-          .where(eq(connections.id, pending.id))
-          .run();
+        setConnectionStatus(db, pending.id, "active");
         return jsonSafe({ connected: true, status: "active" });
       }
 
@@ -105,12 +125,7 @@ export const activateConnection = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string }) => input)
   .handler(async ({ data }) => {
     const { db } = getProjectDeps(data.projectId);
-    const pending = db
-      .select()
-      .from(connections)
-      .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "pending")))
-      .all()
-      .at(-1);
+    const pending = getLatestConnection(db, data.projectId, data.provider, "pending");
 
     if (!pending) {
       return jsonSafe({ success: false, error: "No pending connection found" });
@@ -128,10 +143,7 @@ export const activateConnection = createServerFn({ method: "POST" })
       }
     }
 
-    db.update(connections)
-      .set({ status: "active", updatedAt: Date.now() })
-      .where(eq(connections.id, pending.id))
-      .run();
+    setConnectionStatus(db, pending.id, "active");
 
     return jsonSafe({ success: true, connectionId: pending.id });
   });
@@ -147,16 +159,7 @@ export const getToolkitMetadata = createServerFn({ method: "GET" })
       });
       const { items } = await session.toolkits();
       return jsonSafe(
-        items.map((toolkit: {
-          slug: string;
-          name: string;
-          logo?: string;
-          isNoAuth?: boolean;
-          connection?: {
-            isActive?: boolean;
-            connectedAccount?: { id?: string; status?: string };
-          };
-        }) => ({
+        items.map((toolkit: ToolkitMetadataItem) => ({
           id: toolkit.slug,
           name: toolkit.name,
           logo: toolkit.logo ?? null,
@@ -177,19 +180,10 @@ export const disconnectProvider = createServerFn({ method: "POST" })
     try {
       const composio = await createComposioClient();
       await composio.connectedAccounts.delete(data.connectedAccountId);
-      // Also update local DB status
+
       const { db } = getProjectDeps(data.projectId);
-      const rows = db
-        .select()
-        .from(connections)
-        .where(and(eq(connections.projectId, data.projectId), eq(connections.provider, data.provider), eq(connections.status, "active")))
-        .all();
-      for (const row of rows) {
-        db.update(connections)
-          .set({ status: "disconnected", updatedAt: Date.now() })
-          .where(eq(connections.id, row.id))
-          .run();
-      }
+      setProviderConnectionStatus(db, data.projectId, data.provider, "active", "disconnected");
+
       return jsonSafe({ success: true });
     } catch {
       return jsonSafe({ success: false });
@@ -221,24 +215,17 @@ export interface ComposioToolMeta {
 
 export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
-  .handler(async ({ data }): Promise<ComposioToolMeta[]> => {
+  .handler(async (): Promise<ComposioToolMeta[]> => {
     try {
       const composio = await createComposioClient();
+      const catalogClient = getCatalogClient(composio);
 
       // composio.client.tools.list() is the REST API that returns tool metadata.
       // composio.tools.* is the SDK wrapper for execution — no list() method.
       const results = await Promise.all(
         SUPPORTED_PROVIDERS.map((provider) =>
-          (composio as any).client.tools.list({ toolkit_slug: provider, limit: 50 })
-            .then((res) => (res.items ?? []).map((tool) => ({
-              slug: tool.slug,
-              name: tool.name,
-              description: tool.description ?? tool.human_description ?? "",
-              provider,
-              providerName: tool.toolkit?.name ?? provider,
-              providerLogo: tool.toolkit?.logo ?? null,
-              tags: tool.tags ?? [],
-            })))
+          catalogClient.tools.list({ toolkit_slug: provider, limit: 50 })
+            .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
             .catch(() => [] as ComposioToolMeta[]),
         ),
       );
@@ -249,6 +236,39 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
     }
   });
 
+export const fetchToolkitSummaries = createServerFn({ method: "GET" })
+  .inputValidator((input: { projectId: string }) => input)
+  .handler(async (): Promise<Array<{
+    slug: string;
+    name: string;
+    description: string;
+    categories: string[];
+    logo: string | null;
+  }>> => {
+    try {
+      const composio = await createComposioClient();
+
+      const results = await Promise.allSettled(
+        SUPPORTED_PROVIDERS.map((slug) =>
+          composio.toolkits.get(slug).then((tk) => ({
+            slug: tk.slug,
+            name: tk.name,
+            description: (tk as unknown as { meta?: { description?: string } }).meta?.description ?? "",
+            categories: ((tk as unknown as { meta?: { categories?: Array<{ slug: string; name: string }> } }).meta?.categories ?? []).map((c) => c.name),
+            logo: (tk as unknown as { meta?: { logo?: string } }).meta?.logo ?? null,
+          })),
+        ),
+      );
+
+      return results
+        .filter((r): r is PromiseFulfilledResult<{ slug: string; name: string; description: string; categories: string[]; logo: string | null }> =>
+          r.status === "fulfilled",
+        )
+        .map((r) => r.value);
+    } catch {
+      return [];
+    }
+  });
 
 export const listConnections = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
@@ -270,3 +290,77 @@ export const listConnections = createServerFn({ method: "GET" })
     );
   });
 
+function getLatestConnection(
+  db: ProjectDb,
+  projectId: string,
+  provider: string,
+  status?: string,
+) {
+  return listConnectionsForProvider(db, projectId, provider, status).at(-1);
+}
+
+function listConnectionsForProvider(
+  db: ProjectDb,
+  projectId: string,
+  provider: string,
+  status?: string,
+) {
+  const filter = status
+    ? and(
+      eq(connections.projectId, projectId),
+      eq(connections.provider, provider),
+      eq(connections.status, status),
+    )
+    : and(
+      eq(connections.projectId, projectId),
+      eq(connections.provider, provider),
+    );
+
+  return db
+    .select()
+    .from(connections)
+    .where(filter)
+    .all();
+}
+
+function setConnectionStatus(db: ProjectDb, connectionId: string, status: string) {
+  db.update(connections)
+    .set({ status, updatedAt: Date.now() })
+    .where(eq(connections.id, connectionId))
+    .run();
+}
+
+function setProviderConnectionStatus(
+  db: ProjectDb,
+  projectId: string,
+  provider: string,
+  currentStatus: string,
+  nextStatus: string,
+) {
+  db.update(connections)
+    .set({ status: nextStatus, updatedAt: Date.now() })
+    .where(
+      and(
+        eq(connections.projectId, projectId),
+        eq(connections.provider, provider),
+        eq(connections.status, currentStatus),
+      ),
+    )
+    .run();
+}
+
+function getCatalogClient(composio: Awaited<ReturnType<typeof createComposioClient>>) {
+  return (composio as unknown as ComposioCatalogClient).client;
+}
+
+function toToolMeta(provider: string, tool: ComposioCatalogTool): ComposioToolMeta {
+  return {
+    slug: tool.slug,
+    name: tool.name,
+    description: tool.description ?? tool.human_description ?? "",
+    provider,
+    providerName: tool.toolkit?.name ?? provider,
+    providerLogo: tool.toolkit?.logo ?? null,
+    tags: tool.tags ?? [],
+  };
+}

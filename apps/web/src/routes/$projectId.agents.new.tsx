@@ -1,17 +1,17 @@
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { OnboardingChat } from "~/components/OnboardingChat";
 import { listAvailableSkills } from "~/server/skills";
-import { listConnections, fetchComposioToolCatalog } from "~/server/connections";
-import type { ComposioToolMeta } from "~/server/connections";
+import { listConnections, fetchToolkitSummaries } from "~/server/connections";
+import type { ToolkitSummary } from "~/server/onboard-prompt";
 
 export const Route = createFileRoute("/$projectId/agents/new")({
   loader: async ({ params }) => {
-    const [skills, connections, toolCatalog] = await Promise.all([
+    const [skills, connections, toolkitSummaries] = await Promise.all([
       listAvailableSkills(),
       listConnections({ data: { projectId: params.projectId } }).catch(() => []),
-      fetchComposioToolCatalog({ data: { projectId: params.projectId } }).catch(() => []),
+      fetchToolkitSummaries({ data: { projectId: params.projectId } }).catch(() => []),
     ]);
-    return { skills, connections, toolCatalog };
+    return { skills, connections, toolkitSummaries };
   },
   component: NewAgentPage,
 });
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/$projectId/agents/new")({
 function NewAgentPage() {
   const { projectId } = useParams({ from: "/$projectId/agents/new" });
   const navigate = useNavigate();
-  const { skills, connections, toolCatalog } = Route.useLoaderData();
+  const { skills, connections, toolkitSummaries } = Route.useLoaderData();
 
   const availableSkills = ((skills ?? []) as Array<{ id: string; name: string; description: string }>);
   const existingConnections = ((connections ?? []) as Array<{ provider: string; status: string }>)
@@ -31,7 +31,7 @@ function NewAgentPage() {
       projectId={projectId}
       availableSkills={availableSkills}
       existingConnections={existingConnections}
-      toolCatalog={(toolCatalog ?? []) as ComposioToolMeta[]}
+      toolkitSummaries={(toolkitSummaries ?? []) as ToolkitSummary[]}
       onBack={() => navigate({ to: "/$projectId", params: { projectId } })}
     />
   );
