@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowLeft, BookOpen, ChatCircle, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
+import { ArrowLeft, BookOpen, ChatCircle, Check, CheckCircle, CircleNotch, DotsThree, Info, Play, RocketLaunch, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
 import { LiveRunView } from "~/components/LiveRunView";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
@@ -308,18 +308,23 @@ function toTimelineItems(params: {
     const status = (run.status ?? "").toLowerCase();
     const tone = getStatusTone(status);
     const startedAt = toDate(run.startedAt);
+
+    // Find the best summary from run events
+    const events = (run as any).events as Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> }> | undefined;
+    const findingEvent = events?.find((e) => e.type === "finding_recorded");
+    const findingText = findingEvent?.payload?.text as string | undefined;
+
     const baseTitle =
-      run.result?.headline ??
-      (status === "failed"
+      status === "failed"
         ? "Run failed"
         : status === "running"
           ? "Run in progress"
           : status === "queued"
             ? "Run queued"
-            : "Run completed");
+            : "Run completed";
     const summary =
       run.error ??
-      run.result?.details?.[0] ??
+      (findingText ? findingText.slice(0, 300) : null) ??
       (run.result?.proposals?.length
         ? `${run.result.proposals.length} proposal${run.result.proposals.length === 1 ? "" : "s"} surfaced`
         : `Triggered by ${run.triggerType ?? "manual"}.`);
@@ -341,6 +346,43 @@ function toTimelineItems(params: {
     } satisfies TimelineItem;
   });
 
+  // Extract individual events from runs into timeline items
+  const runEventItems: TimelineItem[] = [];
+  for (const run of params.runs) {
+    const events = (run as any).events as Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> }> | undefined;
+    if (!events || events.length === 0) continue;
+    for (const event of events) {
+      if (event.type === "run_started" || event.type === "run_completed" || event.type === "run_failed") continue;
+      const tone = event.type === "finding_recorded" || event.type === "lesson_distilled" ? "success" as const
+        : event.type.includes("approval") ? "warning" as const
+        : event.type === "tool_executed" ? "info" as const
+        : "info" as const;
+      const title = event.type === "finding_recorded" ? "Finding"
+        : event.type === "tool_called" ? `Calling ${humanize((event.payload?.toolName as string) ?? "tool")}`
+        : event.type === "tool_executed" ? `${humanize((event.payload?.toolName as string) ?? "tool")} completed`
+        : event.type === "tool_approval_requested" ? `Approval needed: ${humanize((event.payload?.toolName as string) ?? "tool")}`
+        : event.type === "tool_approval_resolved" ? `${humanize((event.payload?.toolName as string) ?? "tool")} ${(event.payload?.status as string) ?? "resolved"}`
+        : event.type === "prompt_built" ? "Prompt assembled"
+        : event.type === "lesson_distilled" ? "Lesson learned"
+        : humanize(event.type);
+      const summary = event.type === "finding_recorded" ? ((event.payload?.text as string) ?? "").slice(0, 300)
+        : event.type === "tool_called" || event.type === "tool_executed" ? humanize((event.payload?.toolName as string) ?? "")
+        : event.type === "prompt_built" ? `${(event.payload?.selectedSkills as string[])?.length ?? 0} skills loaded`
+        : "";
+      runEventItems.push({
+        id: `event-${event.id}`,
+        type: event.type,
+        title,
+        summary,
+        timestamp: toDate(event.timestamp),
+        tone,
+        tags: [humanize(event.type)],
+        runId: run.id,
+        raw: event,
+      });
+    }
+  }
+
   const eventItems = params.timelineEvents.map((event) => ({
     id: event.id,
     type: event.type ?? "event",
@@ -357,7 +399,7 @@ function toTimelineItems(params: {
     raw: event,
   } satisfies TimelineItem));
 
-  return [...eventItems, ...approvalItems, ...pendingItems, ...runItems]
+  return [...eventItems, ...approvalItems, ...pendingItems, ...runItems, ...runEventItems]
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
 }
@@ -460,6 +502,189 @@ function TimelineCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// DraftChecklist — pre-flight readiness banner for draft agents
+// ---------------------------------------------------------------------------
+
+type ChecklistItem = {
+  label: string;
+  done: boolean;
+  hint?: string;
+  action?: { label: string; onClick: () => void };
+};
+
+function DraftChecklist({
+  items,
+  onGoLive,
+  goingLive,
+}: {
+  items: ChecklistItem[];
+  onGoLive: () => void;
+  goingLive: boolean;
+}) {
+  const doneCount = items.filter((i) => i.done).length;
+  const allDone = doneCount === items.length;
+
+  return (
+    <div
+      style={{
+        marginBottom: 18,
+        background: COLORS.surface,
+        border: `1px solid ${allDone ? COLORS.green : COLORS.border}`,
+        borderRadius: RADIUS.lg,
+        overflow: "hidden",
+        transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          padding: "16px 20px",
+          borderBottom: `1px solid ${COLORS.border}`,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: TYPE.scale.xs,
+              fontWeight: TYPE.weight.semibold,
+              color: COLORS.textDim,
+              textTransform: "uppercase",
+              letterSpacing: TYPE.tracking.wide,
+              marginBottom: 4,
+            }}
+          >
+            Before you go live
+          </div>
+          <div
+            style={{
+              fontSize: TYPE.scale.base,
+              fontWeight: TYPE.weight.medium,
+              color: COLORS.text,
+            }}
+          >
+            {allDone
+              ? "All set — your agent is ready to launch."
+              : `${doneCount} of ${items.length} complete`}
+          </div>
+        </div>
+        <button
+          className="btn"
+          onClick={onGoLive}
+          disabled={!allDone || goingLive}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 22px",
+            borderRadius: RADIUS.md,
+            border: "none",
+            fontFamily: TYPE.body,
+            fontSize: TYPE.scale.sm,
+            fontWeight: TYPE.weight.medium,
+            cursor: allDone && !goingLive ? "pointer" : "not-allowed",
+            background: allDone ? COLORS.green : COLORS.border,
+            color: allDone ? COLORS.bg : COLORS.textDim,
+            transition: `all ${MOTION.duration} ${MOTION.ease}`,
+            opacity: goingLive ? 0.6 : 1,
+          }}
+        >
+          {goingLive ? (
+            <CircleNotch size={14} weight="bold" style={{ animation: "spin 1s linear infinite" }} />
+          ) : (
+            <RocketLaunch size={14} weight="bold" />
+          )}
+          {goingLive ? "Activating..." : "Go live"}
+        </button>
+      </div>
+
+      {/* Checklist rows */}
+      <div style={{ padding: "8px 12px" }}>
+        {items.map((item, index) => (
+          <div
+            key={index}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 8px",
+              borderBottom: index < items.length - 1 ? `1px solid ${COLORS.border}` : "none",
+            }}
+          >
+            <span
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: RADIUS.pill,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                background: item.done ? COLORS.greenDim : "transparent",
+                border: item.done ? "none" : `1.5px solid ${COLORS.border}`,
+                transition: `all ${MOTION.duration} ${MOTION.ease}`,
+              }}
+            >
+              {item.done && <Check size={12} weight="bold" color={COLORS.green} />}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: TYPE.scale.sm,
+                  fontWeight: TYPE.weight.medium,
+                  color: item.done ? COLORS.textSecondary : COLORS.text,
+                  textDecoration: item.done ? "line-through" : "none",
+                }}
+              >
+                {item.label}
+              </span>
+              {!item.done && item.hint && (
+                <span
+                  style={{
+                    fontSize: TYPE.scale.xs,
+                    color: COLORS.textDim,
+                    marginLeft: 8,
+                  }}
+                >
+                  {item.hint}
+                </span>
+              )}
+            </div>
+            {!item.done && item.action && (
+              <button
+                className="btn"
+                onClick={item.action.onClick}
+                style={{
+                  background: "transparent",
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: RADIUS.md,
+                  color: COLORS.textSecondary,
+                  fontSize: TYPE.scale.xs,
+                  fontWeight: TYPE.weight.medium,
+                  fontFamily: TYPE.body,
+                  padding: "4px 12px",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.accent; e.currentTarget.style.color = COLORS.accent; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
+              >
+                {item.action.label}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TimelinePanel({
   items,
   onApprove,
@@ -508,8 +733,27 @@ function TimelinePanel({
       </Card>
 
       {items.length === 0 ? (
-        <Card style={{ padding: SPACE[6], textAlign: "center", color: COLORS.textDim, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
-          No timeline events yet. Trigger a run or keep the agent in draft while you finish setup.
+        <Card style={{ padding: "32px 24px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: RADIUS.lg,
+              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
+            }}>
+              <Play size={20} weight="bold" color={COLORS.accent} />
+            </div>
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+              No runs yet
+            </div>
+            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal, marginBottom: 20 }}>
+              When the agent runs, its findings, actions, and approval requests will appear here as a timeline you can review and act on.
+            </div>
+            {onRunNow ? (
+              <Button onClick={onRunNow}>
+                <Play size={13} weight="bold" />
+                Start first run
+              </Button>
+            ) : null}
+          </div>
         </Card>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -621,35 +865,6 @@ function SettingsPanel({
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {isDraft && section === "objective" ? (
-        <Card style={{ padding: 18, borderLeft: `3px solid ${COLORS.orange}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div style={{ minWidth: 0 }}>
-              <Badge color="orange">Setup</Badge>
-              <h3 style={{ margin: "10px 0 6px", color: COLORS.text, fontSize: TYPE.scale.md, fontFamily: TYPE.display, fontWeight: TYPE.weight.semibold }}>Draft agent</h3>
-              <p style={{ margin: 0, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
-                Finish the instructions, tools, and required connections before launching.
-              </p>
-            </div>
-            {onRunNow ? (
-              <Button variant="secondary" onClick={onRunNow}>
-                Run check
-              </Button>
-            ) : null}
-          </div>
-          {missingProviders.length > 0 ? (
-            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-              {missingProviders.map((provider) => (
-                <div key={provider.provider} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: RADIUS.md, background: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
-                  <span style={{ color: COLORS.textSecondary, fontSize: TYPE.scale.sm }}>{humanize(provider.provider)}</span>
-                  <Badge color="orange">Required</Badge>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
-
       {section === "objective" && (
         <div style={{ display: "grid", gap: 18 }}>
           <SectionHeading>Identity</SectionHeading>
@@ -1057,6 +1272,78 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     await onUpdateAgent?.(updates);
   };
 
+  // --- Draft checklist readiness ---
+  const [goingLive, setGoingLive] = useState(false);
+
+  const activeProviderSet = new Set(
+    projectConnections.filter((c) => c.status === "active").map((c) => c.provider),
+  );
+  const missingProviders = mergedRequiredProviders.filter(
+    (p) => !activeProviderSet.has(p.provider),
+  );
+
+  const hasName = !!agent.name && agent.name !== "Untitled Agent";
+  const hasInstructions = !!(agent.instructions && agent.instructions.trim().length > 20);
+  const hasToolsConnected = mergedRequiredProviders.length === 0 || missingProviders.length === 0;
+  const hasSchedule = !!agent.schedule && agent.schedule !== "manual";
+
+  const checklistItems: ChecklistItem[] = isDraft
+    ? [
+        {
+          label: "Name your agent",
+          done: hasName,
+          hint: "Give it a memorable name",
+          action: !hasName ? { label: "Edit", onClick: () => setTab("objective") } : undefined,
+        },
+        {
+          label: "Write instructions",
+          done: hasInstructions,
+          hint: "Tell it what to monitor and optimize",
+          action: !hasInstructions ? { label: "Edit", onClick: () => setTab("objective") } : undefined,
+        },
+        {
+          label: "Connect required tools",
+          done: hasToolsConnected,
+          hint: missingProviders.length > 0
+            ? `${missingProviders.map((p) => humanize(p.provider)).join(", ")} not connected`
+            : undefined,
+          action: !hasToolsConnected ? { label: "Connect", onClick: () => setTab("tools") } : undefined,
+        },
+        {
+          label: "Set a run schedule",
+          done: hasSchedule,
+          hint: "Or keep manual if you prefer",
+          action: !hasSchedule ? { label: "Set", onClick: () => setTab("objective") } : undefined,
+        },
+      ]
+    : [];
+
+  const handleGoLive = async () => {
+    if (!onUpdateAgent) return;
+    setGoingLive(true);
+    try {
+      await onUpdateAgent({ status: "live" });
+    } finally {
+      setGoingLive(false);
+    }
+  };
+
+  // --- First-run confirmation ---
+  const isFirstRun = runs.length === 0;
+  const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(false);
+
+  const handleRunNowWithConfirm = () => {
+    if (isFirstRun && !showFirstRunPrompt) {
+      setShowFirstRunPrompt(true);
+      return;
+    }
+    setShowFirstRunPrompt(false);
+    void onRunNow?.();
+  };
+
+  // Wrap onRunNow so all buttons go through the first-run check
+  const wrappedOnRunNow = onRunNow ? handleRunNowWithConfirm : undefined;
+
   return (
     <div style={{ position: "relative", minHeight: "100vh" }}>
       <style>{`
@@ -1126,8 +1413,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {onRunNow ? (
-              <Button onClick={onRunNow}>
+            {wrappedOnRunNow ? (
+              <Button onClick={wrappedOnRunNow}>
                 <Play size={13} weight="bold" />
                 Run now
               </Button>
@@ -1176,6 +1463,15 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           </div>
         </div>
 
+        {/* Draft pre-flight checklist — visible on all tabs */}
+        {isDraft && checklistItems.length > 0 && (
+          <DraftChecklist
+            items={checklistItems}
+            onGoLive={() => void handleGoLive()}
+            goingLive={goingLive}
+          />
+        )}
+
         <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
           {(["timeline", "objective", "tools", "chat", "memory"] as const).map((item) => (
             <button
@@ -1204,6 +1500,48 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             <span>{mergedRequiredProviders.length} required</span>
           </div>
         </div>
+
+        {/* First-run context prompt */}
+        {showFirstRunPrompt && (
+          <Card style={{ padding: "20px 24px", marginBottom: 18, borderColor: COLORS.accent }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: RADIUS.lg,
+                background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}>
+                <Info size={18} weight="bold" color={COLORS.accent} />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+                  Ready to start the first run?
+                </div>
+                <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, marginBottom: 4 }}>
+                  The agent will follow its instructions, use connected tools to gather data, analyze what it finds, and surface results on the timeline.
+                </div>
+                <ul style={{ margin: "10px 0 0", padding: "0 0 0 18px", color: COLORS.textSecondary, fontSize: TYPE.scale.sm, lineHeight: 1.8 }}>
+                  <li>Runs typically take 30 seconds to a few minutes</li>
+                  {mergedRequiredProviders.length > 0 && (
+                    <li>
+                      Using: {mergedRequiredProviders.map((p) => humanize(p.provider)).join(", ")}
+                    </li>
+                  )}
+                  {Object.values(normalizeToolConfig(agent.toolConfig).tools ?? {}).some((t) => t.approvalMode === "approval") && (
+                    <li>Write actions will pause for your approval before executing</li>
+                  )}
+                </ul>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0, alignSelf: "center" }}>
+                <Button variant="secondary" onClick={() => setShowFirstRunPrompt(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => { setShowFirstRunPrompt(false); void onRunNow?.(); }}>
+                  <Play size={13} weight="bold" />
+                  Start run
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {tab === "timeline" && (
           <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
@@ -1244,7 +1582,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onReject={(approvalId) => {
                 void onReject?.(approvalId);
               }}
-              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              onRunNow={wrappedOnRunNow}
             />
           </div>
         )}
@@ -1258,7 +1596,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               requiredProviders={mergedRequiredProviders}
               onUpdateAgent={handleSave}
               isDraft={isDraft}
-              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              onRunNow={wrappedOnRunNow}
               section="objective"
             />
           </div>
@@ -1276,7 +1614,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onDisconnect={onDisconnect}
               toolkits={toolkits}
               isDraft={isDraft}
-              onRunNow={onRunNow ? () => void onRunNow() : undefined}
+              onRunNow={wrappedOnRunNow}
               section="tools"
             />
           </div>
@@ -1284,24 +1622,79 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
         {tab === "chat" && (
           <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
-            <ChatCircle size={40} weight="light" style={{ color: COLORS.textDim, marginBottom: 16 }} />
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 8 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: RADIUS.lg,
+              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
+            }}>
+              <ChatCircle size={20} weight="bold" color={COLORS.accent} />
+            </div>
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
               Talk to {agent.name}
             </div>
-            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal }}>
-              Ask questions about what the agent has found, request deeper analysis, or give it new instructions.
+            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 440, lineHeight: TYPE.leading.normal, marginBottom: 24 }}>
+              Ask about findings, request deeper analysis on a specific run, or give new instructions. The agent uses its full context to respond.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 360 }}>
+              {[
+                "What did you find in the last run?",
+                "Which keywords are wasting the most spend?",
+                "Run a deeper analysis on yesterday's data",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  className="btn"
+                  onClick={() => onAskDeeper?.(prompt)}
+                  style={{
+                    background: COLORS.surface,
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: RADIUS.md,
+                    color: COLORS.textSecondary,
+                    fontSize: TYPE.scale.sm,
+                    fontFamily: TYPE.body,
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.accent; e.currentTarget.style.color = COLORS.text; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
+                >
+                  {prompt}
+                </button>
+              ))}
             </div>
           </div>
         )}
 
         {tab === "memory" && (
           <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
-            <BookOpen size={40} weight="light" style={{ color: COLORS.textDim, marginBottom: 16 }} />
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 8 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: RADIUS.lg,
+              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
+            }}>
+              <BookOpen size={20} weight="bold" color={COLORS.accent} />
+            </div>
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
               {agent.name} hasn't learned anything yet
             </div>
-            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 400, lineHeight: TYPE.leading.normal }}>
-              As the agent runs, it will build up lessons and observations here. These shape how it approaches future tasks.
+            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 440, lineHeight: TYPE.leading.normal, marginBottom: 24 }}>
+              After each run, the agent extracts lessons — patterns it noticed, decisions that worked, and mistakes to avoid. These compound over time, making each run smarter than the last.
+            </div>
+            <div style={{ display: "flex", gap: 24, justifyContent: "center", flexWrap: "wrap" }}>
+              {[
+                { label: "Lessons", desc: "Patterns and takeaways from past runs" },
+                { label: "Observations", desc: "Data points the agent is tracking" },
+                { label: "Decisions", desc: "Choices made and their outcomes" },
+              ].map((item) => (
+                <div key={item.label} style={{ textAlign: "center", maxWidth: 140 }}>
+                  <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.textDim, marginBottom: 4 }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, lineHeight: TYPE.leading.normal }}>
+                    {item.desc}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
