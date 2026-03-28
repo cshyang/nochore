@@ -461,7 +461,6 @@ function TimelinePanel({
   items,
   onApprove,
   onReject,
-  onAskDeeper,
   onRunNow,
   selected,
   onSelect,
@@ -469,12 +468,11 @@ function TimelinePanel({
   items: TimelineItem[];
   onApprove?: (approvalId: string) => void;
   onReject?: (approvalId: string) => void;
-  onAskDeeper?: (prompt: string, context?: { eventId?: string; runId?: string }) => void;
   onRunNow?: () => void;
   selected: TimelineItem | null;
   onSelect: (item: TimelineItem | null) => void;
 }) {
-  const [prompt, setPrompt] = useState("");
+
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -524,56 +522,6 @@ function TimelinePanel({
         </div>
       )}
 
-      <Card style={{ padding: 16, position: "sticky", bottom: 16, backdropFilter: "blur(10px)" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <div>
-              <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display }}>Go deeper</div>
-              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
-                Ask a follow-up about the selected card or the current run.
-              </div>
-            </div>
-            {selected ? (
-              <Button size="sm" variant="ghost" onClick={() => onSelect(null)}>
-                Clear focus
-              </Button>
-            ) : null}
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-            <textarea
-              className="textarea"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={selected ? `Ask about ${selected.title}...` : "Ask what this agent should do next..."}
-              rows={2}
-              style={{
-                flex: 1,
-                resize: "none",
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: RADIUS.lg,
-                background: COLORS.bg,
-                color: COLORS.text,
-                padding: "12px 14px",
-                fontSize: TYPE.scale.base,
-                lineHeight: TYPE.leading.normal,
-                outline: "none",
-                fontFamily: TYPE.body,
-              }}
-            />
-            <Button
-              onClick={() => {
-                const value = prompt.trim();
-                if (!value) return;
-                onAskDeeper?.(value, selected ? { eventId: selected.id, runId: selected.runId } : undefined);
-                setPrompt("");
-              }}
-              style={{ minWidth: 120 }}
-            >
-              Ask
-            </Button>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
@@ -1233,9 +1181,6 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 void onReject?.(approvalId);
               }}
               onRunNow={onRunNow ? () => void onRunNow() : undefined}
-              onAskDeeper={(prompt, context) => {
-                onAskDeeper?.(prompt, context);
-              }}
             />
           </div>
         )}
