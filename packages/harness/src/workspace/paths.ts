@@ -1,7 +1,19 @@
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
+function findRepoRoot(): string {
+  let dir = process.cwd();
+  while (dir !== dirname(dir)) {
+    if (existsSync(resolve(dir, "trigger.config.ts"))) return dir;
+    dir = dirname(dir);
+  }
+  return process.cwd();
+}
+
+const REPO_ROOT = findRepoRoot();
 
 export function getRepoRoot(): string {
-  return process.env.PROJECT_ROOT ?? process.cwd();
+  return REPO_ROOT;
 }
 
 export function getWebDataRoot(): string {

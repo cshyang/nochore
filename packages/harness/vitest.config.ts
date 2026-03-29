@@ -11,6 +11,7 @@ export default defineConfig({
       "src/skills/__tests__/executor.test.ts",
       "src/policy/__tests__/engine-v2.test.ts",
       "src/pipeline/__tests__/**/*.test.ts",
+      "src/connections/google-ads/__tests__/**/*.test.ts",
     ],
   },
 });

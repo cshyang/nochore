@@ -69,24 +69,14 @@ function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; n
 }
 
 function expandBlueprint(raw: ToolInput): BlueprintDraft {
-  const providers = Array.from(new Set((raw.providers ?? []).filter((provider) => provider.trim().length > 0)));
-  const requiredProviders = providers.map((provider) => ({
-    provider,
-    reason: getProviderDefaultReason(provider),
-  }));
-
   return {
     name: raw.name.trim(),
     description: raw.description.trim(),
     instructions: raw.instructions.trim(),
     skills: raw.skills ?? [],
-    requiredProviders,
-    toolConfig: { requiredProviders, tools: {} },
-    notificationConfig: {
-      inApp: true,
-      email: providers.includes("gmail"),
-      slack: providers.includes("slack"),
-    },
+    requiredProviders: [],
+    toolConfig: { requiredProviders: [], tools: {} },
+    notificationConfig: { inApp: true, email: false, slack: false },
     schedule: raw.schedule,
   };
 }

@@ -312,7 +312,7 @@ export function WorkspaceTabs({
 }) {
   return (
     <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
-      {(["activity", "objective", "tools", "chat", "memory"] as const).map((item) => (
+      {(["activity", "chat", "memory", "settings"] as const).map((item) => (
         <button
           type="button"
           key={item}

@@ -223,32 +223,9 @@ export const Route = createFileRoute("/api/onboard")({
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
-                // Derive providers from confirmed tool slugs
-                const composio = await createComposioClient();
-
-                // Look up which toolkit each tool belongs to
-                const toolMeta = (await composio.tools.getRawComposioTools({
-                  tools: input.toolSlugs,
-                })) as Array<{
-                  slug: string;
-                  name: string;
-                  description: string;
-                  toolkit?: { slug: string; name: string; logo?: string };
-                }>;
-
-                const providerBySlug = new Map(toolMeta.map((t) => [t.slug, t.toolkit?.slug ?? ""]));
-                const providers = [
-                  ...new Set(input.toolSlugs.map((slug) => providerBySlug.get(slug)).filter((p): p is string => !!p)),
-                ];
-
-                const requiredProviders = providers.map((p) => ({
-                  provider: p,
-                  reason: toolkitDescriptions.get(p) ?? `Required for ${p} integrations`,
-                  logo: toolkitLogos.get(p) ?? undefined,
-                }));
-
-                const toolConfig = { requiredProviders, tools: {} };
-
+                // Connections are project-level, managed in Settings.
+                // The agent doesn't store requiredProviders — it works with
+                // whatever providers are connected at runtime.
                 const agentResult = await createAgent({
                   data: {
                     projectId,
@@ -256,13 +233,8 @@ export const Route = createFileRoute("/api/onboard")({
                     description: input.description.trim(),
                     instructions: input.instructions.trim(),
                     skills: resolvedSkills,
-                    toolConfig,
-                    requiredProviders,
-                    notificationConfig: {
-                      inApp: true,
-                      email: providers.includes("gmail"),
-                      slack: providers.includes("slack"),
-                    },
+                    toolConfig: { requiredProviders: [], tools: {} },
+                    notificationConfig: { inApp: true, email: false, slack: false },
                     schedule: input.schedule,
                     status: "draft",
                   },

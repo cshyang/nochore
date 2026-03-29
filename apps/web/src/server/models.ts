@@ -104,16 +104,13 @@ export function buildAgentView(params: {
       reason: connection.reason ?? "",
     })),
     toolConfig: {
-      ...params.agent.toolConfig,
-      requiredProviders: params.agent.toolConfig.requiredProviders.map((p) => ({
-        ...p,
-        reason: p.reason ?? "",
-      })),
+      requiredProviders: [],
+      tools: {},
     },
     notificationConfig: params.agent.notificationConfig,
-    requiredProviders: params.agent.toolConfig.requiredProviders.map((p) => ({
-      ...p,
-      reason: p.reason ?? "",
+    requiredProviders: params.activeConnections.map((connection) => ({
+      provider: connection.provider,
+      reason: connection.reason ?? "",
     })),
     createdAt: params.agent.createdAt.getTime(),
     updatedAt: params.agent.updatedAt.getTime(),
@@ -121,12 +118,22 @@ export function buildAgentView(params: {
 }
 
 export function buildConnectionView(row: typeof connections.$inferSelect): ConnectionView {
+  let parsedConfig: Record<string, unknown> | undefined;
+  if (row.config) {
+    try {
+      parsedConfig = JSON.parse(row.config);
+    } catch {
+      // Invalid JSON — skip
+    }
+  }
+
   return {
     id: row.id,
     provider: row.provider,
     status: row.status,
     createdAt: row.createdAt,
     connectedAccountId: row.composioEntityId ?? null,
+    config: parsedConfig,
   };
 }
 

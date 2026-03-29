@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectIdIndexRouteImport } from './routes/$projectId.index'
 import { Route as ApiOnboardRouteImport } from './routes/api.onboard'
 import { Route as ApiBlueprintRouteImport } from './routes/api.blueprint'
+import { Route as ApiAgentChatRouteImport } from './routes/api.agent-chat'
 import { Route as ProjectIdCallbackComposioRouteImport } from './routes/$projectId.callback.composio'
 import { Route as ProjectIdAgentsNewRouteImport } from './routes/$projectId.agents.new'
 import { Route as ProjectIdAgentsAgentIdRouteImport } from './routes/$projectId.agents.$agentId'
@@ -43,6 +44,11 @@ const ApiBlueprintRoute = ApiBlueprintRouteImport.update({
   path: '/api/blueprint',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentChatRoute = ApiAgentChatRouteImport.update({
+  id: '/api/agent-chat',
+  path: '/api/agent-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectIdCallbackComposioRoute =
   ProjectIdCallbackComposioRouteImport.update({
     id: '/callback/composio',
@@ -63,6 +69,7 @@ const ProjectIdAgentsAgentIdRoute = ProjectIdAgentsAgentIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
   '/$projectId/': typeof ProjectIdIndexRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
   '/$projectId': typeof ProjectIdIndexRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
   '/$projectId/': typeof ProjectIdIndexRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$projectId'
+    | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
     | '/$projectId/'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
     | '/$projectId'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$projectId'
+    | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
     | '/$projectId/'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProjectIdRoute: typeof ProjectIdRouteWithChildren
+  ApiAgentChatRoute: typeof ApiAgentChatRoute
   ApiBlueprintRoute: typeof ApiBlueprintRoute
   ApiOnboardRoute: typeof ApiOnboardRoute
 }
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       path: '/api/blueprint'
       fullPath: '/api/blueprint'
       preLoaderRoute: typeof ApiBlueprintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent-chat': {
+      id: '/api/agent-chat'
+      path: '/api/agent-chat'
+      fullPath: '/api/agent-chat'
+      preLoaderRoute: typeof ApiAgentChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$projectId/callback/composio': {
@@ -211,6 +231,7 @@ const ProjectIdRouteWithChildren = ProjectIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProjectIdRoute: ProjectIdRouteWithChildren,
+  ApiAgentChatRoute: ApiAgentChatRoute,
   ApiBlueprintRoute: ApiBlueprintRoute,
   ApiOnboardRoute: ApiOnboardRoute,
 }

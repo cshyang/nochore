@@ -3,8 +3,9 @@ import { Button } from "~/components/Button";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
-import { getProviderMetadata } from "~/lib/provider-metadata";
-import type { NotificationConfigView, ToolConfigView } from "~/lib/types";
+import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
+import type { ConnectionView, NotificationConfigView } from "~/lib/types";
+import { updateConnectionConfig } from "~/server/connections";
 
 const fieldStyle = {
   width: "100%",
@@ -27,10 +28,6 @@ function humanize(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function getToolConfig(toolConfig: ToolConfigView | undefined): ToolConfigView {
-  return toolConfig ?? { requiredProviders: [], tools: {} };
-}
-
 function getNotificationConfig(notificationConfig: NotificationConfigView | undefined): NotificationConfigView {
   return notificationConfig ?? { inApp: true, email: false, slack: false };
 }
@@ -43,7 +40,7 @@ export function AgentWorkspaceSettingsPanel({
   onUpdateAgent,
   onConnect,
   onDisconnect,
-  section = "objective",
+  providerLogos = {},
 }: {
   agent: AgentWorkspaceProps["agent"];
   skills: NonNullable<AgentWorkspaceProps["availableSkills"]>;
@@ -52,7 +49,7 @@ export function AgentWorkspaceSettingsPanel({
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: AgentWorkspaceProps["onConnect"];
   onDisconnect?: AgentWorkspaceProps["onDisconnect"];
-  section?: "objective" | "tools";
+  providerLogos?: Record<string, string>;
 }) {
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description ?? "");
@@ -81,123 +78,11 @@ export function AgentWorkspaceSettingsPanel({
     }
   };
 
-  if (section === "tools") {
-    const toolConfig = getToolConfig(agent.toolConfig);
-    const activeProviders = new Set(
-      connections.filter((connection) => connection.status === "active").map((connection) => connection.provider),
-    );
-    const mergedProviders = new Map<string, { provider: string; reason?: string; logo?: string }>();
-
-    for (const requirement of toolConfig.requiredProviders) {
-      mergedProviders.set(requirement.provider, requirement);
-    }
-    for (const requirement of requiredProviders) {
-      mergedProviders.set(requirement.provider, requirement);
-    }
-
-    const providerList = [...mergedProviders.values()];
-
-    return (
-      <div style={{ display: "grid", gap: 18 }}>
-        <SectionHeading>Connections</SectionHeading>
-        {providerList.length === 0 ? (
-          <SettingsCard>
-            <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
-              This agent does not require any authenticated providers right now.
-            </div>
-          </SettingsCard>
-        ) : (
-          <div style={{ display: "grid", gap: 6 }}>
-            {providerList.map((requirement) => {
-              const meta = getProviderMetadata(requirement.provider);
-              const connection = connections.find((item) => item.provider === requirement.provider);
-              const isConnected = activeProviders.has(requirement.provider);
-              const connectedAccountId = connection?.connectedAccountId ?? null;
-
-              return (
-                <SettingsCard key={requirement.provider}>
-                  <div
-                    style={{
-                      padding: "14px 16px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{meta.icon}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: TYPE.scale.base,
-                            fontWeight: TYPE.weight.semibold,
-                            color: COLORS.text,
-                          }}
-                        >
-                          {meta.name}
-                        </div>
-                        {requirement.reason ? (
-                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>
-                            {requirement.reason}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {isConnected ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                        <span style={{ fontSize: TYPE.scale.xs, color: COLORS.green }}>Connected</span>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => onConnect?.(requirement.provider)}
-                          style={smallActionStyle(COLORS.textSecondary)}
-                        >
-                          Reconnect
-                        </button>
-                        {connectedAccountId ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => onDisconnect?.(requirement.provider, connectedAccountId)}
-                            style={smallActionStyle(COLORS.red)}
-                          >
-                            Disconnect
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => onConnect?.(requirement.provider)}
-                        disabled={!onConnect}
-                        style={{
-                          ...smallActionStyle(COLORS.accent),
-                          borderColor: COLORS.accent,
-                          cursor: onConnect ? "pointer" : "default",
-                        }}
-                      >
-                        Connect
-                      </button>
-                    )}
-                  </div>
-                </SettingsCard>
-              );
-            })}
-          </div>
-        )}
-
-        <SettingsCard>
-          <div style={{ padding: SPACE[4], color: COLORS.textSecondary, fontSize: TYPE.scale.sm }}>
-            Tools are discovered at run time from the providers connected above. This screen only manages authenticated
-            provider access.
-          </div>
-        </SettingsCard>
-      </div>
-    );
-  }
+  const [showProviderPicker, setShowProviderPicker] = useState(false);
+  const connectedProviders = new Set(
+    connections.filter((c) => c.status === "active").map((c) => c.provider),
+  );
+  const projectId = agent.projectId ?? "";
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -318,6 +203,112 @@ export function AgentWorkspaceSettingsPanel({
         )}
       </SettingsCard>
 
+      <SectionHeading>Connections</SectionHeading>
+      <div style={{ display: "grid", gap: 6 }}>
+        {connections
+          .filter((c) => c.status === "active")
+          .map((connection) => (
+            <ConnectionRow
+              key={connection.id}
+              connection={connection}
+              projectId={projectId}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+              providerLogos={providerLogos}
+            />
+          ))}
+
+        {showProviderPicker ? (
+          <SettingsCard>
+            <div style={{ padding: "14px 16px" }}>
+              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginBottom: 10 }}>
+                Select a provider to connect
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {CONNECTABLE_PROVIDER_SLUGS.filter((slug) => !connectedProviders.has(slug)).map((slug) => {
+                  const meta = getProviderMetadata(slug);
+                  return (
+                    <button
+                      type="button"
+                      key={slug}
+                      onClick={() => {
+                        setShowProviderPicker(false);
+                        onConnect?.(slug);
+                      }}
+                      style={{
+                        fontFamily: TYPE.body,
+                        padding: "8px 14px",
+                        borderRadius: RADIUS.lg,
+                        border: `1px solid ${COLORS.border}`,
+                        background: "transparent",
+                        color: COLORS.text,
+                        fontSize: TYPE.scale.sm,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                      }}
+                    >
+                      <ProviderIcon provider={slug} logos={providerLogos} size={16} /> {meta.name}
+                      {meta.connectionType === "direct" ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: COLORS.accent,
+                            border: `1px solid ${COLORS.accent}`,
+                            borderRadius: RADIUS.pill,
+                            padding: "1px 6px",
+                            marginLeft: 2,
+                          }}
+                        >
+                          Direct
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProviderPicker(false)}
+                style={{
+                  fontFamily: TYPE.body,
+                  marginTop: 10,
+                  padding: "4px 10px",
+                  border: "none",
+                  background: "transparent",
+                  color: COLORS.textDim,
+                  fontSize: TYPE.scale.xs,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </SettingsCard>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowProviderPicker(true)}
+            style={{
+              fontFamily: TYPE.body,
+              padding: "12px 16px",
+              borderRadius: RADIUS.lg,
+              border: `1px dashed ${COLORS.border}`,
+              background: "transparent",
+              color: COLORS.textSecondary,
+              fontSize: TYPE.scale.sm,
+              cursor: "pointer",
+              textAlign: "center",
+              transition: `all ${MOTION.duration} ${MOTION.ease}`,
+            }}
+          >
+            + Add connection
+          </button>
+        )}
+      </div>
+
       <SectionHeading>Notifications</SectionHeading>
       <SettingsCard>
         <SettingsRow
@@ -400,6 +391,114 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: b
         }}
       />
     </button>
+  );
+}
+
+function ProviderIcon({ provider, logos, size = 20 }: { provider: string; logos: Record<string, string>; size?: number }) {
+  const logoUrl = logos[provider];
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: 4, flexShrink: 0 }} />;
+  }
+  const meta = getProviderMetadata(provider);
+  return <span style={{ fontSize: size, flexShrink: 0 }}>{meta.icon}</span>;
+}
+
+const PROVIDER_CONFIG_FIELDS: Record<string, { key: string; label: string; placeholder: string }> = {
+  googleads: { key: "customerId", label: "Customer ID", placeholder: "e.g. 123-456-7890" },
+};
+
+function ConnectionRow({
+  connection,
+  projectId,
+  onConnect,
+  onDisconnect,
+  providerLogos = {},
+}: {
+  connection: ConnectionView;
+  projectId: string;
+  onConnect?: (provider: string) => void;
+  onDisconnect?: (provider: string, connectedAccountId: string) => void;
+  providerLogos?: Record<string, string>;
+}) {
+  const meta = getProviderMetadata(connection.provider);
+  const configField = PROVIDER_CONFIG_FIELDS[connection.provider];
+  const existingValue = configField ? ((connection.config?.[configField.key] as string) ?? "") : "";
+  const [configValue, setConfigValue] = useState(existingValue);
+
+  const saveConfig = async () => {
+    if (!configField || configValue === existingValue) return;
+    await updateConnectionConfig({
+      data: { projectId, provider: connection.provider, config: { [configField.key]: configValue.trim() } },
+    });
+  };
+
+  return (
+    <SettingsCard>
+      <div
+        style={{
+          padding: "14px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <ProviderIcon provider={connection.provider} logos={providerLogos} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+              {meta.name}
+            </div>
+            {meta.defaultReason ? (
+              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>
+                {meta.defaultReason}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: TYPE.scale.xs, color: COLORS.green }}>Connected</span>
+          <button type="button" onClick={() => onConnect?.(connection.provider)} style={smallActionStyle(COLORS.textSecondary)}>
+            Reconnect
+          </button>
+          {connection.connectedAccountId ? (
+            <button
+              type="button"
+              onClick={() => onDisconnect?.(connection.provider, connection.connectedAccountId!)}
+              style={smallActionStyle(COLORS.red)}
+            >
+              Disconnect
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {configField ? (
+        <div style={{ padding: "0 16px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}>
+            {configField.label}
+          </label>
+          <input
+            value={configValue}
+            onChange={(e) => setConfigValue(e.target.value)}
+            onBlur={() => void saveConfig()}
+            placeholder={configField.placeholder}
+            style={{
+              flex: 1,
+              padding: "6px 10px",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: RADIUS.md,
+              background: COLORS.bg,
+              color: COLORS.text,
+              fontSize: TYPE.scale.sm,
+              fontFamily: TYPE.body,
+              outline: "none",
+            }}
+          />
+        </div>
+      ) : null}
+    </SettingsCard>
   );
 }
 

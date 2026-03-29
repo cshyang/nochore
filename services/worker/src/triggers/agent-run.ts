@@ -3,7 +3,8 @@ import { evaluatePolicy } from "../../../../packages/harness/src/policy";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories";
 import type { RunSummary, RunTrigger } from "../../../../packages/harness/src/types";
 import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
-import { buildPromptBundle, createWorkerRuntime } from "../lib/agent-runtime";
+import { getGoogleAdsToolsForPi, type PiToolDefinition } from "../../../../packages/harness/src/connections/google-ads/tools";
+import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
 import { getComposioToolsForPi } from "../lib/composio-pi-bridge";
 import { narrateEvent } from "../lib/narrate";
 import { executePiAgent } from "../lib/pi-runtime";
@@ -27,50 +28,190 @@ export const agentRunTask = task({
       metadata.set("events", liveEvents);
     }
 
-    await runtime.runRepository.markRunning(runId);
-    metadata.set("status", "running");
-
-    const startPayload = { trigger: payload.trigger, providers: runtime.activeProviders };
-    const startId = await recordEvent(runtime, runId, agent.id, "run_started", startPayload);
-    eventIds.push(startId);
-    emitLiveEvent(startId, "run_started", startPayload);
-
-    const promptBundle = await buildPromptBundle({ agent, trigger: payload.trigger });
-    const promptPayload = {
-      selectedSkills: promptBundle.selectedSkills.map((s) => s.id),
-      systemLength: promptBundle.system.length,
-      workspaceKnowledgeLength: promptBundle.workspaceKnowledge.length,
-    };
-    const promptId = await recordEvent(runtime, runId, agent.id, "prompt_built", promptPayload);
-    eventIds.push(promptId);
-    emitLiveEvent(promptId, "prompt_built", promptPayload);
-
-    const composioTools = await getComposioToolsForPi({
-      userId: runtime.userId,
-      toolkits: runtime.activeProviders,
-    });
-
-    const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
-
-    logger.info("Prompt assembled", {
-      systemPromptLength: promptBundle.system.length,
-      systemPromptPreview: promptBundle.system.slice(0, 500),
-      userPromptPreview: promptBundle.user.slice(0, 500),
-      skills: promptBundle.selectedSkills.map((s) => s.id),
-      activeProviders: runtime.activeProviders,
-      composioToolCount: composioTools.length,
-      composioToolNames: composioTools.map((t) => t.name),
-      workspacePath,
-    });
-
     const recentToolCalls: Array<{ toolName: string; timestamp: Date }> = [];
 
     try {
+      await runtime.runRepository.markRunning(runId);
+      metadata.set("status", "running");
+
+      const startPayload = { trigger: payload.trigger, providers: runtime.activeProviders };
+      const startId = await recordEvent(runtime, runId, agent.id, "run_started", startPayload);
+      eventIds.push(startId);
+      emitLiveEvent(startId, "run_started", startPayload);
+
+      const promptBundle = await buildPromptBundle({ agent, trigger: payload.trigger });
+      const promptPayload = {
+        selectedSkills: promptBundle.selectedSkills.map((s) => s.id),
+        systemLength: promptBundle.system.length,
+        workspaceKnowledgeLength: promptBundle.workspaceKnowledge.length,
+      };
+      const promptId = await recordEvent(runtime, runId, agent.id, "prompt_built", promptPayload);
+      eventIds.push(promptId);
+      emitLiveEvent(promptId, "prompt_built", promptPayload);
+
+      // Build tool list — route googleads to direct connector, rest to Composio.
+      // When Composio's Google Ads integration is fixed (ComposioHQ/composio#3066),
+      // delete the googleads branch and restore the single getComposioToolsForPi() call.
+      const allTools: PiToolDefinition[] = [];
+      const composioProviders = runtime.activeProviders.filter((p) => p !== "googleads");
+
+      if (runtime.activeProviders.includes("googleads")) {
+        const customerId = runtime.providerConfigs.googleads?.customerId as string | undefined;
+        if (customerId) {
+          allTools.push(...getGoogleAdsToolsForPi({ customerId }));
+        } else {
+          logger.warn("Google Ads connection active but no customerId in config — skipping tools");
+        }
+      }
+
+      if (composioProviders.length > 0) {
+        const composioTools = await getComposioToolsForPi({
+          userId: runtime.userId,
+          toolkits: composioProviders,
+        });
+        allTools.push(...composioTools);
+      }
+
+      const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
+
+      // Sub-run delegation tool
+      const MAX_SUB_RUNS = 3;
+      let subRunCount = 0;
+
+      const spawnSubRunTool: PiToolDefinition = {
+        name: "spawn_sub_run",
+        label: "Delegate to Specialist",
+        description:
+          "Delegate a focused sub-task to a specialist. Roles: scout (research & data gathering), " +
+          "analyst (pattern analysis & insights), builder (executing specific actions). " +
+          "Use when a sub-task benefits from focused attention.",
+        parameters: {
+          type: "object",
+          required: ["role", "task"],
+          properties: {
+            role: { type: "string", enum: ["scout", "analyst", "builder"], description: "Specialist role" },
+            task: { type: "string", description: "What the specialist should do" },
+            context: { type: "string", description: "Optional data or context to pass to the specialist" },
+          },
+        },
+        execute: async (_toolCallId, params) => {
+          const role = (params.role as string) ?? "scout";
+          const taskDesc = (params.task as string) ?? "";
+          const context = params.context as string | undefined;
+
+          if (subRunCount >= MAX_SUB_RUNS) {
+            return {
+              content: [{ type: "text" as const, text: `Sub-run limit reached (${MAX_SUB_RUNS}). Cannot delegate further.` }],
+              details: { blocked: true, reason: "maxSubRuns" },
+            };
+          }
+          subRunCount++;
+
+          const startPayload = { role, task: taskDesc, subRunIndex: subRunCount };
+          const startId = await recordEvent(runtime, runId, agent.id, "sub_run_started", startPayload);
+          eventIds.push(startId);
+          emitLiveEvent(startId, "sub_run_started", startPayload);
+
+          const subPrompt = buildSubRunPrompt({
+            role,
+            task: taskDesc,
+            context,
+            agentInstructions: agent.instructions,
+          });
+
+          // Sub-run gets same tools minus spawn_sub_run (prevents recursion)
+          const subTools = allTools.filter((t) => t.name !== "spawn_sub_run");
+
+          try {
+            const subResult = await executePiAgent({
+              systemPrompt: subPrompt,
+              userPrompt: taskDesc,
+              workspacePath,
+              composioTools: subTools,
+              onEvent: async (event) => {
+                const id = await recordEvent(
+                  runtime,
+                  runId,
+                  agent.id,
+                  event.type as "tool_called" | "tool_executed" | "agent_message",
+                  { ...event.payload, subRunRole: role },
+                );
+                eventIds.push(id);
+                emitLiveEvent(id, event.type, { ...event.payload, subRunRole: role });
+                return id;
+              },
+              beforeToolCall: async (toolName, args) => {
+                const toolInput = normalizeToolInput(args);
+                const toolOverrides = (agent.toolConfig as any)?.toolOverrides as Record<string, string> | undefined;
+                const overrideMode = toolOverrides?.[toolName];
+                const policy = evaluatePolicy(
+                  {
+                    toolName,
+                    toolInput,
+                    toolConfig: {
+                      toolName,
+                      slug: toolName,
+                      provider: "",
+                      title: toolName,
+                      description: "",
+                      mode: "write" as const,
+                      enabled: true,
+                      approvalMode: (overrideMode as "auto" | "approval" | "blocked") ?? "auto",
+                    },
+                  },
+                  { now: new Date(), globalApprovalRequired: false, recentToolCalls },
+                );
+                if (policy.result === "auto") return undefined;
+                if (policy.result === "blocked") return { block: true, reason: policy.reason };
+                return handleApprovalRequest({
+                  runtime, agent, runId, toolName, toolInput,
+                  policyReason: policy.reason, eventIds, emitLiveEvent, projectId: payload.projectId,
+                });
+              },
+            });
+
+            const completePayload = { role, success: true, outputLength: subResult.output.length };
+            const completeId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", completePayload);
+            eventIds.push(completeId);
+            emitLiveEvent(completeId, "sub_run_completed", completePayload);
+
+            return {
+              content: [{ type: "text" as const, text: subResult.output || "(No output)" }],
+              details: { role, success: true, durationMs: subResult.durationMs },
+            };
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            const failPayload = { role, success: false, error: errorMsg };
+            const failId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", failPayload);
+            eventIds.push(failId);
+            emitLiveEvent(failId, "sub_run_completed", failPayload);
+
+            return {
+              content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
+              details: { role, success: false, error: errorMsg },
+            };
+          }
+        },
+      };
+
+      allTools.push(spawnSubRunTool);
+
+      logger.info("Prompt assembled", {
+        systemPromptLength: promptBundle.system.length,
+        systemPromptPreview: promptBundle.system.slice(0, 500),
+        userPromptPreview: promptBundle.user.slice(0, 500),
+        skills: promptBundle.selectedSkills.map((s) => s.id),
+        activeProviders: runtime.activeProviders,
+        toolCount: allTools.length,
+        toolNames: allTools.map((t) => t.name),
+        workspacePath,
+      });
+
       const piResult = await executePiAgent({
         systemPrompt: promptBundle.system,
         userPrompt: promptBundle.user,
         workspacePath,
-        composioTools,
+        composioTools: allTools,
         onEvent: async (event) => {
           if (event.type === "tool_executed") {
             recentToolCalls.push({ toolName: event.payload.toolName as string, timestamp: new Date() });
@@ -79,7 +220,7 @@ export const agentRunTask = task({
             runtime,
             runId,
             agent.id,
-            event.type as "tool_called" | "tool_executed",
+            event.type as "tool_called" | "tool_executed" | "agent_message",
             event.payload,
           );
           eventIds.push(id);
@@ -306,7 +447,10 @@ async function recordEvent(
     | "tool_executed"
     | "tool_approval_requested"
     | "tool_approval_resolved"
+    | "agent_message"
     | "finding_recorded"
+    | "sub_run_started"
+    | "sub_run_completed"
     | "lesson_distilled"
     | "run_completed"
     | "run_failed",

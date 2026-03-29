@@ -56,9 +56,12 @@ export const RunEventTypeSchema = z.enum([
   "tool_approval_requested",
   "tool_approval_resolved",
   "tool_executed",
+  "agent_message",
   "finding_recorded",
   "notification_sent",
   "lesson_distilled",
+  "sub_run_started",
+  "sub_run_completed",
   "run_completed",
   "run_failed",
 ]);

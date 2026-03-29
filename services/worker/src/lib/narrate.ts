@@ -16,8 +16,11 @@ export type RunEventType =
   | "tool_approval_requested"
   | "tool_approval_resolved"
   | "notification_sent"
+  | "agent_message"
   | "finding_recorded"
   | "lesson_distilled"
+  | "sub_run_started"
+  | "sub_run_completed"
   | "run_completed"
   | "run_failed";
 
@@ -93,6 +96,11 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
       return `Approval notification sent via ${channel ?? "unknown"} for ${humanizeToolName(name ?? "unknown")}`;
     }
 
+    case "agent_message": {
+      const text = payload.text as string | undefined;
+      return truncate(text ?? "Agent thinking...", 180);
+    }
+
     case "finding_recorded": {
       const text = payload.text as string | undefined;
       return truncate(text ?? "Finding recorded", 180);
@@ -101,6 +109,18 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
     case "lesson_distilled": {
       const scope = payload.scope as string | undefined;
       return `Lesson distilled (scope: ${scope ?? "general"})`;
+    }
+
+    case "sub_run_started": {
+      const role = payload.role as string | undefined;
+      const taskDesc = payload.task as string | undefined;
+      return `${titleCase(role ?? "Specialist")} started: ${truncate(taskDesc ?? "sub-task", 150)}`;
+    }
+
+    case "sub_run_completed": {
+      const role = payload.role as string | undefined;
+      const success = payload.success as boolean | undefined;
+      return `${titleCase(role ?? "Specialist")} ${success !== false ? "completed" : "failed"}`;
     }
 
     case "run_completed": {

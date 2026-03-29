@@ -10,8 +10,14 @@ import {
 } from "~/lib/view-models";
 import { deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agents";
 import { approveAction, rejectAction } from "~/server/approvals";
-import { sendChat } from "~/server/chat";
-import { disconnectProvider, initiateConnection, listConnections } from "~/server/connections";
+import { isDirectProvider } from "~/lib/provider-metadata";
+import {
+  createDirectConnection,
+  disconnectProvider,
+  fetchToolkitSummaries,
+  initiateConnection,
+  listConnections,
+} from "~/server/connections";
 import { getProject } from "~/server/projects";
 import { getRealtimeToken } from "~/server/realtime";
 import { getRunHistory } from "~/server/runs";
@@ -21,12 +27,13 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
     const { projectId, agentId } = params;
     try {
-      const [project, agent, runs, skills, projectConnections] = await Promise.all([
+      const [project, agent, runs, skills, projectConnections, toolkitSummaries] = await Promise.all([
         getProject({ data: { projectId } }),
         getAgent({ data: { agentId, projectId } }),
         getRunHistory({ data: { agentId, projectId, limit: 20 } }),
         listAvailableSkills(),
         listConnections({ data: { projectId } }),
+        fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
       ]);
       return {
         project,
@@ -34,9 +41,10 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         runs: runs ?? [],
         skills: skills ?? [],
         projectConnections: projectConnections ?? [],
+        toolkitSummaries: toolkitSummaries ?? [],
       };
     } catch {
-      return { project: null, agent: null, runs: [], skills: [], projectConnections: [] };
+      return { project: null, agent: null, runs: [], skills: [], projectConnections: [], toolkitSummaries: [] };
     }
   },
   component: AgentDetailPage,
@@ -55,6 +63,16 @@ function AgentDetailPage() {
   const skills = parseSkillViews(loaderData.skills);
   const projectConnections = parseConnectionViews(loaderData.projectConnections);
   const runs = parseRunViews(loaderData.runs);
+
+  // Build provider logo map from Composio toolkit summaries
+  const toolkitSummaries = (loaderData.toolkitSummaries ?? []) as Array<{
+    slug: string;
+    name: string;
+    logo: string | null;
+  }>;
+  const providerLogos = Object.fromEntries(
+    toolkitSummaries.filter((tk) => tk.logo).map((tk) => [tk.slug, tk.logo as string]),
+  );
   const [activeRun, setActiveRun] = useState<{
     runId: string;
     triggerRunId: string;
@@ -81,6 +99,13 @@ function AgentDetailPage() {
   const handleConnect = useCallback(
     async (provider: string) => {
       try {
+        if (isDirectProvider(provider)) {
+          // Direct connections don't need OAuth — create the record immediately
+          await createDirectConnection({ data: { projectId, provider } });
+          void router.invalidate();
+          return;
+        }
+
         const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}`;
         const result = await initiateConnection({ data: { projectId, provider, callbackUrl } });
         const data = result as { redirectUrl?: string };
@@ -91,7 +116,7 @@ function AgentDetailPage() {
         // Connection initiation failed
       }
     },
-    [projectId],
+    [projectId, router],
   );
 
   const handleDisconnect = useCallback(
@@ -151,26 +176,6 @@ function AgentDetailPage() {
     }
   };
 
-  const handleAskDeeper = async (prompt: string, context?: { eventId?: string; runId?: string }) => {
-    setRunError(null);
-    try {
-      const message = context?.runId ? `[Re: run ${context.runId}] ${prompt}` : prompt;
-      const result = await sendChat({ data: { agentId, projectId, message } });
-      const data = result as { startedRunId?: string; triggerRunId?: string };
-      if (data.startedRunId && data.triggerRunId) {
-        void activateRun(data.startedRunId, data.triggerRunId);
-      }
-      void router.invalidate();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setRunError(
-        msg.includes("fetch") || msg.includes("ECONNREFUSED")
-          ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
-          : `Run failed: ${msg}`,
-      );
-    }
-  };
-
   const handleDeleteAgent = async () => {
     await deleteAgent({ data: { agentId, projectId } });
     await router.invalidate();
@@ -191,6 +196,7 @@ function AgentDetailPage() {
       onRunNow={handleRunNow}
       onConnect={handleConnect}
       onDisconnect={handleDisconnect}
+      providerLogos={providerLogos}
       onUpdateAgent={async (updates) => {
         await updateAgentConfig({
           data: {
@@ -213,7 +219,10 @@ function AgentDetailPage() {
         void router.invalidate();
       }}
       runs={runs}
-      onAskDeeper={handleAskDeeper}
+      onRunTriggered={async (runId, triggerRunId) => {
+        void activateRun(runId, triggerRunId);
+        void router.invalidate();
+      }}
       onApprove={async (actionId, reason) => {
         await approveAction({ data: { actionId, projectId, reason } });
       }}

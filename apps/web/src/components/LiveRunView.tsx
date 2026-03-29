@@ -29,7 +29,10 @@ interface LiveRunViewProps {
 const EVENT_BORDER_COLORS: Record<string, string> = {
   tool_called: COLORS.accent,
   tool_executed: COLORS.accent,
+  agent_message: COLORS.textSecondary,
   finding_recorded: COLORS.green,
+  sub_run_started: COLORS.accent,
+  sub_run_completed: COLORS.green,
   tool_approval_requested: COLORS.orange,
   tool_approval_resolved: COLORS.orange,
   run_completed: COLORS.green,
@@ -44,15 +47,19 @@ function getBorderColor(type: string): string {
 
 function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red" | "gray" {
   if (type === "tool_called" || type === "tool_executed") return "blue";
-  if (type === "finding_recorded" || type === "run_completed") return "green";
+  if (type === "finding_recorded" || type === "run_completed" || type === "sub_run_completed") return "green";
+  if (type === "sub_run_started") return "blue";
   if (type === "tool_approval_requested" || type === "tool_approval_resolved") return "yellow";
   if (type === "run_failed") return "red";
+  if (type === "agent_message") return "gray";
   return "gray";
 }
 
 function getEventIcon(type: string) {
   if (type === "tool_called" || type === "tool_executed") return Lightning;
   if (type === "finding_recorded" || type === "run_completed") return Check;
+  if (type === "sub_run_started") return CircleNotch;
+  if (type === "sub_run_completed") return Check;
   if (type === "run_failed") return Warning;
   if (type.includes("approval")) return ArrowRight;
   return ArrowRight;

@@ -121,6 +121,7 @@ export interface ConnectionView {
   status: string;
   createdAt: number;
   connectedAccountId?: string | null;
+  config?: Record<string, unknown>;
 }
 
 export interface AgentView {

@@ -2,38 +2,12 @@
 
 ## Table of Contents
 
-1. [Agentic Loop (Multi-Turn)](#agentic-loop-multi-turn)
-2. [Sequential Tool Execution](#sequential-tool-execution)
-3. [followUp vs steer](#followup-vs-steer)
-4. [Background Agent Pattern](#background-agent-pattern)
-5. [Capturing Agent Output](#capturing-agent-output)
-6. [Creating Child Agents](#creating-child-agents)
-7. [Structured Output](#structured-output)
-
-## Agentic Loop (Multi-Turn)
-
-**`session.prompt()` runs the full agent loop internally:**
-```
-agent_start → [turn_start → LLM response + tool execution → turn_end]* → agent_end
-```
-
-It continues looping turns until the LLM stops making tool calls (i.e., produces only text). You do NOT need to build your own loop — a single `await session.prompt(task)` handles multi-turn autonomously.
-
-**If the agent stops prematurely** (describes future actions but doesn't execute them), the cause is usually:
-- The model itself decided to stop (weak models may narrate instead of act)
-- Token/context limits were hit
-- The model provider returned a `stop` reason instead of `tool_use`
-
-**To debug early stops**, subscribe to `turn_start`/`turn_end` events and count turns:
-```typescript
-session.subscribe((e) => {
-  if (e.type === "turn_start") console.log(`Turn ${e.turnIndex} starting`);
-  if (e.type === "turn_end") console.log(`Turn ${e.turnIndex} ended, tools: ${e.toolResults?.length ?? 0}`);
-  if (e.type === "agent_end") console.log(`Agent done after ${e.messages?.length} messages`);
-});
-```
-
-**Anti-pattern:** Building a manual "Continue." loop around `prompt()`. The internal loop already handles this — re-prompting creates a new agent cycle that reprocesses the entire context.
+1. [Sequential Tool Execution](#sequential-tool-execution)
+2. [followUp vs steer](#followup-vs-steer)
+3. [Background Agent Pattern](#background-agent-pattern)
+4. [Capturing Agent Output](#capturing-agent-output)
+5. [Creating Child Agents](#creating-child-agents)
+6. [Structured Output](#structured-output)
 
 ## Sequential Tool Execution
 

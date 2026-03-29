@@ -284,6 +284,54 @@ export const listConnections = createServerFn({ method: "GET" })
     return jsonSafe(rows.map(buildConnectionView));
   });
 
+export const createDirectConnection = createServerFn({ method: "POST" })
+  .inputValidator((input: { projectId: string; provider: string; config?: Record<string, unknown> }) => input)
+  .handler(async ({ data }) => {
+    const { db } = getProjectDeps(data.projectId);
+
+    // Check if an active connection already exists for this provider
+    const existing = getLatestConnection(db, data.projectId, data.provider, "active");
+    if (existing) {
+      return jsonSafe({ success: true, connectionId: existing.id, existing: true });
+    }
+
+    const connId = crypto.randomUUID().slice(0, 8);
+    const now = Date.now();
+    db.insert(connections)
+      .values({
+        id: connId,
+        projectId: data.projectId,
+        provider: data.provider,
+        composioEntityId: null,
+        status: "active",
+        config: data.config ? JSON.stringify(data.config) : "{}",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    return jsonSafe({ success: true, connectionId: connId, existing: false });
+  });
+
+export const updateConnectionConfig = createServerFn({ method: "POST" })
+  .inputValidator((input: { projectId: string; provider: string; config: Record<string, unknown> }) => input)
+  .handler(async ({ data }) => {
+    const { db } = getProjectDeps(data.projectId);
+    const latest = getLatestConnection(db, data.projectId, data.provider, "active");
+    if (!latest) {
+      return jsonSafe({ success: false, error: "No active connection found" });
+    }
+
+    const existing = latest.config ? JSON.parse(latest.config) : {};
+    const merged = { ...existing, ...data.config };
+    db.update(connections)
+      .set({ config: JSON.stringify(merged), updatedAt: Date.now() })
+      .where(eq(connections.id, latest.id))
+      .run();
+
+    return jsonSafe({ success: true });
+  });
+
 function getLatestConnection(db: ProjectDb, projectId: string, provider: string, status?: string) {
   return listConnectionsForProvider(db, projectId, provider, status).at(-1);
 }

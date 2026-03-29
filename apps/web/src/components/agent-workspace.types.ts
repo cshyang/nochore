@@ -9,7 +9,7 @@ import type {
   ToolConfigView,
 } from "~/lib/types";
 
-export type WorkspaceTab = "activity" | "objective" | "tools" | "chat" | "memory";
+export type WorkspaceTab = "activity" | "chat" | "memory" | "settings";
 
 export interface ActiveRunState {
   runId: string;
@@ -35,7 +35,7 @@ export interface AgentWorkspaceProps {
   onDeleteAgent?: () => void;
   onRunNow?: () => Promise<{ runId?: string } | undefined>;
   onUpdateAgent?: (updates: Partial<AgentWorkspaceUpdate>) => Promise<void> | void;
-  onAskDeeper?: (prompt: string, context?: { eventId?: string; runId?: string }) => void;
+  onRunTriggered?: (runId: string, triggerRunId: string) => void;
   availableSkills?: SkillView[];
   skills?: SkillView[];
   projectConnections?: ConnectionView[];
@@ -49,4 +49,5 @@ export interface AgentWorkspaceProps {
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  providerLogos?: Record<string, string>;
 }

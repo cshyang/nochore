@@ -21,7 +21,7 @@ For extensions and subagent orchestration, see **pi-extensions-expert**.
 
 ```typescript
 import { getModel, stream, complete } from "@mariozechner/pi-ai";
-const model = getModel("anthropic", "claude-sonnet-4-6");
+const model = getModel("anthropic", "Codex-sonnet-4-6");
 
 const s = stream(model, {
   messages: [{ role: "user", content: "Generate JSON", timestamp: Date.now() }],
@@ -111,7 +111,6 @@ Individual imports: `readTool, bashTool, editTool, writeTool, grepTool, findTool
 
 | Mistake | Fix |
 |---------|-----|
-| Manual "Continue." loop around `prompt()` | `prompt()` already loops internally (turn_start → tools → turn_end → repeat). Don't re-prompt. See `references/agent-patterns.md` |
 | Return raw string from tool | Always return `{ content: [{ type: "text", text }], details: {} }` |
 | Expect followUp to trigger new turns | Call `prompt()` again to process queued followUp |
 | Forget `session.dispose()` in pi-coding-agent | Always dispose sessions |
@@ -129,7 +128,7 @@ Individual imports: `readTool, bashTool, editTool, writeTool, grepTool, findTool
 | System prompt | `~/.pi/agent/SYSTEM.md` | `.pi/SYSTEM.md` |
 | Skills | `~/.pi/agent/skills/` | `.pi/skills/` |
 | Prompts | `~/.pi/agent/prompts/` | `.pi/prompts/` |
-| Context | walked from cwd up: `AGENTS.md`, `CLAUDE.md` | |
+| Context | walked from cwd up: `AGENTS.md`, `AGENTS.md` | |
 
 ## References
 

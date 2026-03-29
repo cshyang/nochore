@@ -19,4 +19,11 @@ export default defineConfig({
     },
   },
   dirs: ["./services/worker/src/triggers"],
+  build: {
+    external: [
+      "@composio/core",
+      "@composio/vercel",
+      "google-ads-api",
+    ],
+  },
 });

@@ -113,24 +113,8 @@ export const launchAgent = createServerFn({ method: "POST" })
       throw new Error("Agent not found");
     }
 
-    const activeProviders = new Set(
-      db
-        .select()
-        .from(connections)
-        .where(eq(connections.projectId, projectId))
-        .all()
-        .filter((connection) => connection.status === "active")
-        .map((connection) => connection.provider),
-    );
-    const missingProviders = agent.toolConfig.requiredProviders.filter(
-      (provider) => !activeProviders.has(provider.provider),
-    );
-    if (missingProviders.length > 0) {
-      throw new Error(
-        `Missing required connections: ${missingProviders.map((provider) => provider.provider).join(", ")}`,
-      );
-    }
-
+    // Connections are project-level and managed in Settings.
+    // The agent works with whatever providers are connected at runtime.
     await agentRepository.update(agentId, { status: "live" });
     const { runId, triggerRunId } = await queueManualRun(projectId, agentId, "launch");
 

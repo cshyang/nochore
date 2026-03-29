@@ -86,6 +86,7 @@ const ConnectionViewSchema = z.object({
   status: z.string(),
   createdAt: z.number(),
   connectedAccountId: z.string().nullable().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
 });
 
 const AgentViewSchema = z.object({

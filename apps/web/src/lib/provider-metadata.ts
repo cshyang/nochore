@@ -2,6 +2,7 @@ export interface ProviderMetadata {
   name: string;
   icon: string;
   defaultReason?: string;
+  connectionType?: "composio" | "direct";
 }
 
 export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
@@ -9,6 +10,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: "Google Ads",
     icon: "📊",
     defaultReason: "Read campaign performance and adjust paid media execution",
+    connectionType: "direct",
   },
   meta: {
     name: "Meta Ads",
@@ -45,7 +47,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     icon: "🐙",
     defaultReason: "Inspect repository and deployment activity when required",
   },
-  googlesearchconsole: {
+  google_search_console: {
     name: "Search Console",
     icon: "🔍",
     defaultReason: "Use search visibility and query data in analysis",
@@ -76,24 +78,14 @@ export const CONNECTABLE_PROVIDER_SLUGS = [
   "shopify",
   "stripe",
   "github",
-  "googlesearchconsole",
+  "google_search_console",
   "tiktok",
   "hubspot",
   "jira",
 ] as const;
 
-export const TOOLKIT_CATALOG_PROVIDER_SLUGS = [
-  "googleads",
-  "meta",
-  "slack",
-  "gmail",
-  "ga4",
-  "shopify",
-  "stripe",
-  "github",
-  "googlesearchconsole",
-  "tiktok",
-] as const;
+/** Providers whose tool metadata (names, logos) we fetch from Composio. Same as connectable list. */
+export const TOOLKIT_CATALOG_PROVIDER_SLUGS = CONNECTABLE_PROVIDER_SLUGS;
 
 export function getProviderMetadata(provider: string): ProviderMetadata {
   return PROVIDER_METADATA[provider] ?? {
@@ -108,6 +100,10 @@ export function getProviderName(provider: string): string {
 
 export function getProviderDefaultReason(provider: string): string {
   return getProviderMetadata(provider).defaultReason ?? `Required for ${getProviderName(provider)} integrations`;
+}
+
+export function isDirectProvider(provider: string): boolean {
+  return getProviderMetadata(provider).connectionType === "direct";
 }
 
 function humanizeProvider(value: string): string {

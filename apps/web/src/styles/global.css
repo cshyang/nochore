@@ -229,6 +229,43 @@ body::before {
 .prose a:hover {
   text-decoration: underline;
 }
+.prose h2,
+.prose h3 {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  margin: 1em 0 0.4em;
+}
+.prose h2 {
+  font-size: 1.1em;
+}
+.prose h3 {
+  font-size: 1em;
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.9em;
+}
+.prose th,
+.prose td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.prose th {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  background: var(--surface);
+}
+.prose td {
+  color: var(--text-secondary);
+}
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
 
 /* ── Keyframes ── */
 @keyframes spin {

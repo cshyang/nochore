@@ -50,6 +50,8 @@ export function getAgentDeps(projectId: string, agentId: string) {
 export interface AgentRow {
   id: string;
   projectId: string;
+  name: string;
+  description: string;
   config: AgentConfig;
   createdAt: Date;
   updatedAt: Date;
@@ -122,6 +124,8 @@ function toAgentRow(row: typeof agents.$inferSelect): AgentRow {
   return {
     id: row.id,
     projectId: row.projectId,
+    name: row.name,
+    description: row.description,
     config: {
       instructions: row.instructions,
       skills: parseSkills(row.skills),

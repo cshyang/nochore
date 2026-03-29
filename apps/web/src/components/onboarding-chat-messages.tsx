@@ -2,6 +2,7 @@ import { CaretRight, Lightning, MagnifyingGlass, Sparkle } from "@phosphor-icons
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { OptionCards, PaginatedCard, parseOptions } from "~/components/onboarding-chat-options";
 import type { OnboardingMessage, RequestInputToolInput } from "~/components/onboarding-chat-types";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
@@ -19,6 +20,10 @@ function getPartToolName(part: Record<string, unknown>): string | null {
 const TOOL_LABELS: Record<string, { verb: string; done: string; icon: "search" | "bolt" }> = {
   search_tools: { verb: "Searching for tools", done: "Found tools", icon: "search" },
   create_agent: { verb: "Creating your agent", done: "Agent created", icon: "bolt" },
+  trigger_run: { verb: "Starting a run", done: "Run queued", icon: "bolt" },
+  review_findings: { verb: "Reviewing findings", done: "Findings loaded", icon: "search" },
+  add_provider: { verb: "Adding connection", done: "Connection added", icon: "bolt" },
+  update_config: { verb: "Updating configuration", done: "Config updated", icon: "bolt" },
 };
 
 function ReasoningBlock({ text, state }: { text: string; state: string }) {
@@ -159,7 +164,7 @@ function renderPart(part: Record<string, unknown>, index: number): ReactNode {
           fontFamily: TYPE.body,
         }}
       >
-        <Markdown>{text}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
       </div>
     );
   }

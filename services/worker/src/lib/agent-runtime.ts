@@ -26,6 +26,7 @@ export interface WorkerRuntime {
   composio: Composio;
   userId: string;
   activeProviders: string[];
+  providerConfigs: Record<string, Record<string, unknown>>;
 }
 
 export interface PromptBundle {
@@ -43,6 +44,8 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
   const db = createDb(getProjectDbPath(projectId));
   const composio = await createComposioClient();
 
+  const { providers, configs } = await listActiveProvidersWithConfig(db, projectId);
+
   return {
     db,
     agentRepository: new AgentRepository(db),
@@ -51,7 +54,8 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
     runRepository: new RunRepository(db),
     composio,
     userId: getComposioUserId(projectId),
-    activeProviders: await listActiveProviders(db, projectId),
+    activeProviders: providers,
+    providerConfigs: configs,
   };
 }
 
@@ -93,8 +97,14 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
       "Execution rules:",
       "- Use tools when they are relevant to the current task.",
       "- If a tool call is denied, do not retry the same call unless new context justifies it.",
-      "- Keep the final response concise and evidence-based.",
+      "- When you have completed your analysis, call submit_report with the full report in markdown. This is mandatory — the run is not complete until submit_report is called.",
       "- Prefer findings, actions, and lessons over generic narration.",
+      "",
+      "Delegation:",
+      "- You can delegate focused sub-tasks to specialists using spawn_sub_run.",
+      "- Roles: scout (research & data gathering), analyst (pattern analysis & insights), builder (executing specific actions).",
+      "- Use delegation when a sub-task benefits from focused attention. You receive the specialist's output and synthesize the final result.",
+      "- Do not delegate simple tool calls — only multi-step sub-tasks that require focused reasoning.",
     ].join("\n"),
   ]
     .filter((section) => section.trim().length > 0)
@@ -120,7 +130,39 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
   };
 }
 
-async function listActiveProviders(db: ReturnType<typeof createDb>, projectId: string): Promise<string[]> {
+const SPECIALIST_ROLES: Record<string, string> = {
+  scout:
+    "You are a research specialist. Your job is to gather data, explore, and surface what's relevant. " +
+    "Use tools to fetch data. Report what you found factually — no speculation, no filler.",
+  analyst:
+    "You are an analysis specialist. Given data or findings, identify patterns, anomalies, and actionable insights. " +
+    "Be quantitative and specific. Support claims with numbers.",
+  builder:
+    "You are an execution specialist. When given a specific action to take, execute it precisely using the available tools. " +
+    "Confirm what you did and report any errors.",
+};
+
+export function buildSubRunPrompt(params: {
+  role: string;
+  task: string;
+  context?: string;
+  agentInstructions: string;
+}): string {
+  const rolePrompt = SPECIALIST_ROLES[params.role] ?? SPECIALIST_ROLES.scout;
+  const sections = [
+    rolePrompt,
+    params.agentInstructions ? `## Agent Context\n${params.agentInstructions}` : "",
+    `## Your Task\n${params.task}`,
+    params.context ? `## Context\n${params.context}` : "",
+    "When you have completed your work, call submit_report with your findings.",
+  ].filter((s) => s.length > 0);
+  return sections.join("\n\n");
+}
+
+async function listActiveProvidersWithConfig(
+  db: ReturnType<typeof createDb>,
+  projectId: string,
+): Promise<{ providers: string[]; configs: Record<string, Record<string, unknown>> }> {
   const rows = db
     .select()
     .from(connections)
@@ -128,5 +170,16 @@ async function listActiveProviders(db: ReturnType<typeof createDb>, projectId: s
     .all()
     .filter((row) => row.status === "active");
 
-  return Array.from(new Set(rows.map((row) => row.provider)));
+  const providers = Array.from(new Set(rows.map((row) => row.provider)));
+  const configs: Record<string, Record<string, unknown>> = {};
+  for (const row of rows) {
+    if (row.config) {
+      try {
+        configs[row.provider] = JSON.parse(row.config) as Record<string, unknown>;
+      } catch {
+        // Invalid JSON in config — skip
+      }
+    }
+  }
+  return { providers, configs };
 }

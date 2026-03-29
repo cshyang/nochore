@@ -1,7 +1,8 @@
-import { BookOpen, ChatCircle, Play } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Play } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentWorkspaceProps, WorkspaceTab } from "~/components/agent-workspace.types";
 import { AgentWorkspaceActivityPane } from "~/components/agent-workspace-activity";
+import { AgentChatPane } from "~/components/agent-chat-pane";
 import {
   AgentWorkspaceHeader,
   type ChecklistItem,
@@ -22,7 +23,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onDeleteAgent,
     onRunNow,
     onUpdateAgent,
-    onAskDeeper,
+    onRunTriggered,
     onConnect,
     onDisconnect,
     requiredProviders = [],
@@ -31,6 +32,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     runError,
     onApprove,
     onReject,
+    providerLogos = {},
   } = props;
 
   const availableSkills = props.availableSkills ?? props.skills ?? [];
@@ -39,6 +41,15 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
   const [tab, setTab] = useState<WorkspaceTab>("activity");
+  const chatRunCompleteRef = useRef<(() => void) | null>(null);
+
+  // B+ auto-follow-up: when a chat-triggered run completes, notify the chat
+  const handleLiveRunCompleteWithChat = useCallback(() => {
+    onLiveRunComplete?.();
+    if (tab === "chat" && chatRunCompleteRef.current) {
+      chatRunCompleteRef.current();
+    }
+  }, [onLiveRunComplete, tab]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [goingLive, setGoingLive] = useState(false);
@@ -87,13 +98,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           label: "Name your agent",
           done: hasName,
           hint: "Give it a memorable name",
-          action: !hasName ? { label: "Edit", onClick: () => setTab("objective") } : undefined,
+          action: !hasName ? { label: "Edit", onClick: () => setTab("settings") } : undefined,
         },
         {
           label: "Write instructions",
           done: hasInstructions,
           hint: "Tell it what to monitor and optimize",
-          action: !hasInstructions ? { label: "Edit", onClick: () => setTab("objective") } : undefined,
+          action: !hasInstructions ? { label: "Edit", onClick: () => setTab("settings") } : undefined,
         },
         {
           label: "Connect required tools",
@@ -102,13 +113,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             missingProviders.length > 0
               ? `${missingProviders.map((provider) => humanize(provider.provider)).join(", ")} not connected`
               : undefined,
-          action: !hasToolsConnected ? { label: "Connect", onClick: () => setTab("tools") } : undefined,
+          action: !hasToolsConnected ? { label: "Connect", onClick: () => setTab("settings") } : undefined,
         },
         {
           label: "Set a run schedule",
           done: hasSchedule,
           hint: "Or keep manual if you prefer",
-          action: !hasSchedule ? { label: "Set", onClick: () => setTab("objective") } : undefined,
+          action: !hasSchedule ? { label: "Set", onClick: () => setTab("settings") } : undefined,
         },
       ]
     : [];
@@ -198,7 +209,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             selectedRunId={selectedRunId}
             onSelectRun={setSelectedRunId}
             activeRun={activeRun}
-            onLiveRunComplete={onLiveRunComplete}
+            onLiveRunComplete={handleLiveRunCompleteWithChat}
             runError={runError}
             onRunNow={wrappedOnRunNow}
             checklistItems={checklistItems}
@@ -209,20 +220,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           />
         ) : null}
 
-        {tab === "objective" ? (
-          <div className="aw-panel-enter">
-            <AgentWorkspaceSettingsPanel
-              agent={agent}
-              skills={availableSkills}
-              connections={projectConnections}
-              requiredProviders={mergedRequiredProviders}
-              onUpdateAgent={handleSave}
-              section="objective"
-            />
-          </div>
-        ) : null}
-
-        {tab === "tools" ? (
+        {tab === "settings" ? (
           <div className="aw-panel-enter">
             <AgentWorkspaceSettingsPanel
               agent={agent}
@@ -232,38 +230,20 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onUpdateAgent={handleSave}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
-              section="tools"
+              providerLogos={providerLogos}
             />
           </div>
         ) : null}
 
         {tab === "chat" ? (
-          <div className="aw-panel-enter" style={placeholderPanelStyle}>
-            <div style={placeholderIconStyle}>
-              <ChatCircle size={20} weight="bold" color={COLORS.accent} />
-            </div>
-            <div style={placeholderTitleStyle}>Talk to {agent.name}</div>
-            <div style={placeholderBodyStyle}>
-              Ask about findings, request deeper analysis on a specific run, or give new instructions. The agent uses
-              its full context to respond.
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 360 }}>
-              {[
-                "What did you find in the last run?",
-                "Which keywords are wasting the most spend?",
-                "Run a deeper analysis on yesterday's data",
-              ].map((prompt) => (
-                <button
-                  type="button"
-                  key={prompt}
-                  className="btn"
-                  onClick={() => onAskDeeper?.(prompt)}
-                  style={promptButtonStyle}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+          <div className="aw-panel-enter" style={{ height: "100%", minHeight: 0 }}>
+            <AgentChatPane
+              agent={agent}
+              projectId={project.id}
+              runs={runs}
+              onRunTriggered={onRunTriggered}
+              registerRunCompleteHandler={(handler) => { chatRunCompleteRef.current = handler; }}
+            />
           </div>
         ) : null}
 
@@ -320,15 +300,3 @@ const placeholderBodyStyle = {
   marginBottom: 24,
 };
 
-const promptButtonStyle = {
-  background: COLORS.surface,
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: RADIUS.md,
-  color: COLORS.textSecondary,
-  fontSize: TYPE.scale.sm,
-  fontFamily: TYPE.body,
-  padding: "10px 16px",
-  cursor: "pointer",
-  textAlign: "left" as const,
-  transition: `all ${MOTION.duration} ${MOTION.ease}`,
-};
