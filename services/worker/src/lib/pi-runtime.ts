@@ -34,6 +34,8 @@ export interface PiAgentConfig {
   workspacePath: string;
   composioTools: PiToolDefinition[];
   onEvent: (event: { type: string; payload: Record<string, unknown> }) => Promise<string>;
+  /** Native pi-coding-agent hook — runs before every tool call. Return { block, reason } to prevent execution. */
+  beforeToolCall?: (toolName: string, args: unknown) => Promise<{ block: boolean; reason?: string } | undefined>;
 }
 
 export interface PiAgentResult {
@@ -43,8 +45,8 @@ export interface PiAgentResult {
 }
 
 function createPiModel() {
-  const provider = process.env.LLM_PROVIDER ?? "zai";
-  const modelName = process.env.LLM_MODEL ?? "glm-5-turbo";
+  const provider = process.env.AGENT_LLM_PROVIDER ?? process.env.LLM_PROVIDER ?? "zai";
+  const modelName = process.env.AGENT_LLM_MODEL ?? process.env.LLM_MODEL ?? "glm-5-turbo";
 
   return getModel(provider as any, modelName as any);
 }
@@ -69,6 +71,14 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
 
   // systemPrompt is a read-only getter — _baseSystemPrompt is the internal setter
   (session as any)._baseSystemPrompt = config.systemPrompt;
+
+  // Wire native pre-tool hook for approval gates
+  if (config.beforeToolCall) {
+    const hook = config.beforeToolCall;
+    (session as any).agent.setBeforeToolCall(async (context: any) => {
+      return hook(context.toolCall.name, context.args);
+    });
+  }
 
   let output = "";
   const toolCalls: PiAgentResult["toolCalls"] = [];

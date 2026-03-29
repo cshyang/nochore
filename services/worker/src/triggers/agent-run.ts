@@ -1,4 +1,5 @@
-import { logger, metadata, task } from "@trigger.dev/sdk/v3";
+import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
+import { evaluatePolicy } from "../../../../packages/harness/src/policy";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories";
 import type { RunSummary, RunTrigger } from "../../../../packages/harness/src/types";
 import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
@@ -62,6 +63,8 @@ export const agentRunTask = task({
       workspacePath,
     });
 
+    const recentToolCalls: Array<{ toolName: string; timestamp: Date }> = [];
+
     try {
       const piResult = await executePiAgent({
         systemPrompt: promptBundle.system,
@@ -69,6 +72,9 @@ export const agentRunTask = task({
         workspacePath,
         composioTools,
         onEvent: async (event) => {
+          if (event.type === "tool_executed") {
+            recentToolCalls.push({ toolName: event.payload.toolName as string, timestamp: new Date() });
+          }
           const id = await recordEvent(
             runtime,
             runId,
@@ -79,6 +85,45 @@ export const agentRunTask = task({
           eventIds.push(id);
           emitLiveEvent(id, event.type, event.payload);
           return id;
+        },
+        beforeToolCall: async (toolName, args) => {
+          const toolInput = normalizeToolInput(args);
+          const toolOverrides = (agent.toolConfig as any)?.toolOverrides as Record<string, string> | undefined;
+          const overrideMode = toolOverrides?.[toolName];
+
+          const policy = evaluatePolicy(
+            {
+              toolName,
+              toolInput,
+              toolConfig: {
+                toolName,
+                slug: toolName,
+                provider: "",
+                title: toolName,
+                description: "",
+                mode: "write" as const,
+                enabled: true,
+                approvalMode: (overrideMode as "auto" | "approval" | "blocked") ?? "auto",
+              },
+            },
+            { now: new Date(), globalApprovalRequired: false, recentToolCalls },
+          );
+
+          if (policy.result === "auto") return undefined;
+          if (policy.result === "blocked") return { block: true, reason: policy.reason };
+
+          // Human approval needed — create token, persist, notify, checkpoint
+          return handleApprovalRequest({
+            runtime,
+            agent,
+            runId,
+            toolName,
+            toolInput,
+            policyReason: policy.reason,
+            eventIds,
+            emitLiveEvent,
+            projectId: payload.projectId,
+          });
         },
       });
 
@@ -179,6 +224,77 @@ async function ensureRunRecord(
   });
 }
 
+async function handleApprovalRequest(params: {
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  agent: AgentRecord;
+  runId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  policyReason: string;
+  eventIds: string[];
+  emitLiveEvent: (id: string, type: string, payload: Record<string, unknown>) => void;
+  projectId: string;
+}): Promise<{ block: boolean; reason?: string } | undefined> {
+  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, emitLiveEvent, projectId } = params;
+  const approvalId = crypto.randomUUID();
+
+  const token = await wait.createToken({
+    idempotencyKey: `approval-${runId}-${approvalId}`,
+    timeout: "24h",
+    tags: [projectId, agent.id, runId, approvalId, toolName],
+  });
+
+  const approvalRecordId = await runtime.approvalRepository.create({
+    runId,
+    agentId: agent.id,
+    approvalId,
+    waitTokenId: token.id,
+    toolName,
+    toolInput,
+    createdAt: new Date(),
+  });
+
+  const reqPayload = { approvalId: approvalRecordId, toolName, input: toolInput, reason: policyReason };
+  const reqId = await recordEvent(runtime, runId, agent.id, "tool_approval_requested", reqPayload);
+  eventIds.push(reqId);
+  emitLiveEvent(approvalRecordId, "tool_approval_requested", reqPayload);
+
+  await runtime.runRepository.markWaitingForApproval(runId);
+  metadata.set("status", "waiting_for_approval");
+
+  // Container checkpoints here — resumes when human responds
+  let decision: { decision: string; reason?: string };
+  try {
+    decision = (await wait.forToken<{ decision: string; reason?: string }>(token).unwrap()) ?? {
+      decision: "rejected",
+      reason: "Token completed without data",
+    };
+  } catch (err) {
+    decision = { decision: "rejected", reason: err instanceof Error ? err.message : String(err) };
+  }
+
+  const status = decision.decision === "approved" ? "approved" : "rejected";
+  const reason = decision.reason ?? policyReason;
+
+  await runtime.approvalRepository.markResolved(approvalRecordId, status, reason, new Date());
+
+  const resPayload = { approvalId: approvalRecordId, toolName, status, reason };
+  const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
+  eventIds.push(resId);
+  emitLiveEvent(resId, "tool_approval_resolved", resPayload);
+
+  await runtime.runRepository.markRunning(runId);
+  metadata.set("status", "running");
+
+  if (status === "approved") return undefined;
+  return { block: true, reason };
+}
+
+function normalizeToolInput(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return input as Record<string, unknown>;
+}
+
 async function recordEvent(
   runtime: Awaited<ReturnType<typeof createWorkerRuntime>>,
   runId: string,
@@ -188,6 +304,8 @@ async function recordEvent(
     | "prompt_built"
     | "tool_called"
     | "tool_executed"
+    | "tool_approval_requested"
+    | "tool_approval_resolved"
     | "finding_recorded"
     | "lesson_distilled"
     | "run_completed"

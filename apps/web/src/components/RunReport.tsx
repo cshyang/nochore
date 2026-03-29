@@ -1,7 +1,7 @@
 import { CheckCircle, CircleNotch, Play, WarningCircle } from "@phosphor-icons/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Badge } from "~/components/Badge";
+import { type ChecklistItem, DraftChecklist } from "~/components/agent-workspace-chrome";
 import { Button } from "~/components/Button";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 
@@ -36,14 +36,9 @@ interface RunReportProps {
   run: ReportRun | null;
   hasRuns: boolean;
   onRunNow?: () => void;
-  /** Pending approval for this run, if any */
-  pendingApproval?: {
-    id: string;
-    toolName?: string;
-    reason?: string;
-  } | null;
-  onApprove?: (id: string) => void;
-  onReject?: (id: string) => void;
+  checklistItems?: ChecklistItem[];
+  onGoLive?: () => void;
+  goingLive?: boolean;
 }
 
 function extractFinding(run: ReportRun): string | null {
@@ -71,63 +66,70 @@ function humanize(value: string): string {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
-export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, onReject }: RunReportProps) {
+export function RunReport({ run, hasRuns, onRunNow, checklistItems, onGoLive, goingLive }: RunReportProps) {
+  const hasDraftChecklist = checklistItems && checklistItems.length > 0;
+
   // Empty state: no runs at all
   if (!hasRuns || !run) {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "80px 24px",
-          textAlign: "center",
-          flex: 1,
-        }}
-      >
+      <div style={{ flex: 1, padding: "24px 0" }}>
+        {hasDraftChecklist && onGoLive ? (
+          <DraftChecklist items={checklistItems} onGoLive={onGoLive} goingLive={goingLive ?? false} />
+        ) : null}
+
         <div
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: RADIUS.lg,
-            background: COLORS.accentDim,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 16,
+            padding: hasDraftChecklist ? "40px 24px" : "80px 24px",
+            textAlign: "center",
           }}
         >
-          <Play size={20} weight="bold" color={COLORS.accent} />
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: RADIUS.lg,
+              background: COLORS.accentDim,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Play size={20} weight="bold" color={COLORS.accent} />
+          </div>
+          <div
+            style={{
+              fontSize: TYPE.scale.md,
+              fontWeight: TYPE.weight.semibold,
+              color: COLORS.text,
+              fontFamily: TYPE.display,
+              marginBottom: 6,
+            }}
+          >
+            No runs yet
+          </div>
+          <div
+            style={{
+              fontSize: TYPE.scale.base,
+              color: COLORS.textSecondary,
+              maxWidth: 440,
+              lineHeight: TYPE.leading.normal,
+              marginBottom: 20,
+            }}
+          >
+            Your agent hasn't run yet. Click "Run now" to see it in action.
+          </div>
+          {onRunNow && (
+            <Button onClick={onRunNow}>
+              <Play size={13} weight="bold" />
+              Start first run
+            </Button>
+          )}
         </div>
-        <div
-          style={{
-            fontSize: TYPE.scale.md,
-            fontWeight: TYPE.weight.semibold,
-            color: COLORS.text,
-            fontFamily: TYPE.display,
-            marginBottom: 6,
-          }}
-        >
-          No runs yet
-        </div>
-        <div
-          style={{
-            fontSize: TYPE.scale.base,
-            color: COLORS.textSecondary,
-            maxWidth: 440,
-            lineHeight: TYPE.leading.normal,
-            marginBottom: 20,
-          }}
-        >
-          Your agent hasn't run yet. Click "Run now" to see it in action.
-        </div>
-        {onRunNow && (
-          <Button onClick={onRunNow}>
-            <Play size={13} weight="bold" />
-            Start first run
-          </Button>
-        )}
       </div>
     );
   }
@@ -177,7 +179,6 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
   if (status === "failed" && !finding) {
     return (
       <div style={{ flex: 1, padding: "24px 0" }}>
-        {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
         <div
           style={{
             display: "flex",
@@ -215,7 +216,6 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
   if (!finding) {
     return (
       <div style={{ flex: 1, padding: "24px 0" }}>
-        {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
         <div
           style={{
             display: "flex",
@@ -252,63 +252,11 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
   // Main report view — finding as markdown
   return (
     <div style={{ flex: 1, padding: "24px 0", minWidth: 0 }}>
-      {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
       <div className="run-report-md">
         <style>{markdownStyles}</style>
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{finding}</ReactMarkdown>
       </div>
       <RunMeta run={run} />
-    </div>
-  );
-}
-
-function ApprovalCard({
-  approval,
-  onApprove,
-  onReject,
-}: {
-  approval: { id: string; toolName?: string; reason?: string };
-  onApprove?: (id: string) => void;
-  onReject?: (id: string) => void;
-}) {
-  return (
-    <div
-      style={{
-        padding: 16,
-        marginBottom: 20,
-        background: COLORS.orangeSubtle,
-        border: `1px solid ${COLORS.orangeBorder}`,
-        borderRadius: RADIUS.sm,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Badge color="orange">Approval needed</Badge>
-          {approval.toolName && (
-            <span style={{ fontSize: TYPE.scale.sm, color: COLORS.text, fontWeight: TYPE.weight.medium }}>
-              {humanize(approval.toolName)}
-            </span>
-          )}
-        </div>
-        {approval.reason && (
-          <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
-            {approval.reason}
-          </div>
-        )}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <Button size="sm" onClick={() => onApprove?.(approval.id)}>
-          Approve
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => onReject?.(approval.id)}>
-          Reject
-        </Button>
-      </div>
     </div>
   );
 }

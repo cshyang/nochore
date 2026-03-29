@@ -1,8 +1,7 @@
-import { ArrowRight, Check, CircleNotch, Lightning, Warning, X } from "@phosphor-icons/react";
+import { ArrowRight, Check, CircleNotch, Lightning, Warning } from "@phosphor-icons/react";
 import { useRealtimeRun } from "@trigger.dev/react-hooks";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Badge } from "~/components/Badge";
-import { Button } from "~/components/Button";
 import { COLORS, RADIUS } from "~/lib/colors";
 
 type LiveEvent = {
@@ -82,14 +81,13 @@ const pulseKeyframes = `
 }
 `;
 
-export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onApprove, onReject }: LiveRunViewProps) {
+export function LiveRunView({ triggerRunId, accessToken, runId, onComplete }: LiveRunViewProps) {
   const { run, error } = useRealtimeRun(triggerRunId, {
     accessToken,
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const completeFiredRef = useRef(false);
-  const [approvalStates, setApprovalStates] = useState<Record<string, "approving" | "rejecting">>({});
   const [, setTick] = useState(0);
 
   const meta = (run?.metadata ?? {}) as RunMetadata;
@@ -126,40 +124,6 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onAp
     const interval = setInterval(() => setTick((t) => t + 1), 5000);
     return () => clearInterval(interval);
   }, [status]);
-
-  const handleApprove = useCallback(
-    async (eventId: string) => {
-      if (!onApprove) return;
-      setApprovalStates((prev) => ({ ...prev, [eventId]: "approving" }));
-      try {
-        await onApprove(eventId, "Approved from live view");
-      } finally {
-        setApprovalStates((prev) => {
-          const next = { ...prev };
-          delete next[eventId];
-          return next;
-        });
-      }
-    },
-    [onApprove],
-  );
-
-  const handleReject = useCallback(
-    async (eventId: string) => {
-      if (!onReject) return;
-      setApprovalStates((prev) => ({ ...prev, [eventId]: "rejecting" }));
-      try {
-        await onReject(eventId, "Rejected from live view");
-      } finally {
-        setApprovalStates((prev) => {
-          const next = { ...prev };
-          delete next[eventId];
-          return next;
-        });
-      }
-    },
-    [onReject],
-  );
 
   if (error) {
     return (
@@ -208,7 +172,6 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onAp
           <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>
             {isActive ? "Live" : isFinished ? (status === "completed" ? "Completed" : "Failed") : "Run"}
           </span>
-          {status === "waiting_for_approval" && <Badge color="yellow">Waiting for approval</Badge>}
           {cycle != null && isActive && <span style={{ fontSize: 12, color: COLORS.textDim }}>Cycle {cycle + 1}</span>}
         </div>
         <span style={{ fontSize: 12, color: COLORS.textDim, fontFamily: "monospace" }}>{runId.slice(0, 12)}</span>
@@ -244,8 +207,6 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onAp
 
         {events.map((event) => {
           const Icon = getEventIcon(event.type);
-          const isApproval = event.type === "tool_approval_requested";
-          const approvalState = approvalStates[event.id];
 
           return (
             <div key={event.id} style={eventCardStyle(event.type)}>
@@ -265,48 +226,6 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onAp
                   </div>
                 </div>
               </div>
-
-              {isApproval && (onApprove || onReject) && (
-                <div style={{ marginTop: 10, display: "flex", gap: 8, paddingLeft: 24 }}>
-                  {onApprove && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(event.id)}
-                      style={{ opacity: approvalState ? 0.6 : 1 }}
-                    >
-                      {approvalState === "approving" ? (
-                        <CircleNotch
-                          size={13}
-                          weight="bold"
-                          style={{ animation: "live-pulse 1s ease-in-out infinite" }}
-                        />
-                      ) : (
-                        <Check size={13} weight="bold" />
-                      )}
-                      Approve
-                    </Button>
-                  )}
-                  {onReject && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleReject(event.id)}
-                      style={{ opacity: approvalState ? 0.6 : 1 }}
-                    >
-                      {approvalState === "rejecting" ? (
-                        <CircleNotch
-                          size={13}
-                          weight="bold"
-                          style={{ animation: "live-pulse 1s ease-in-out infinite" }}
-                        />
-                      ) : (
-                        <X size={13} weight="bold" />
-                      )}
-                      Reject
-                    </Button>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}

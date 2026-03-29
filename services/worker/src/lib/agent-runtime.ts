@@ -1,32 +1,25 @@
 import { readFile } from "node:fs/promises";
-import { anthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { Composio } from "@composio/core";
 import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
-import {
-  createComposioClient,
-  getComposioUserId,
-  sendNotificationTool,
-} from "../../../../packages/harness/src/connections";
+import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
+import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
 import { createDb } from "../../../../packages/harness/src/db/client";
 import { connections } from "../../../../packages/harness/src/db/schema";
 import {
   type AgentRecord,
   AgentRepository,
-  ApprovalRepository,
   LessonRepository,
   RunEventRepository,
   RunRepository,
 } from "../../../../packages/harness/src/repositories";
 import { listPromptSkills, type PromptSkill } from "../../../../packages/harness/src/skills";
-import type { NotificationConfig, RunTrigger } from "../../../../packages/harness/src/types";
+import type { RunTrigger } from "../../../../packages/harness/src/types";
 import { getAgentWorkspacePath, getProjectDbPath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
 
 export interface WorkerRuntime {
   db: ReturnType<typeof createDb>;
   agentRepository: AgentRepository;
-  approvalRepository: ApprovalRepository;
   lessonRepository: LessonRepository;
   runEventRepository: RunEventRepository;
   runRepository: RunRepository;
@@ -43,51 +36,7 @@ export interface PromptBundle {
 }
 
 export async function createModel(modelOverride?: string): Promise<LanguageModel> {
-  const provider = process.env.LLM_PROVIDER ?? "anthropic";
-  const modelName = modelOverride ?? process.env.LLM_MODEL ?? "claude-sonnet-4-20250514";
-
-  switch (provider) {
-    case "zai": {
-      return createCompatibleModel({
-        apiKey: process.env.ZAI_API_KEY,
-        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
-        modelName,
-        providerName: "zai",
-      });
-    }
-    case "openai": {
-      return createCompatibleModel({
-        apiKey: process.env.OPENAI_API_KEY ?? process.env.LLM_API_KEY,
-        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
-        modelName,
-        providerName: "openai",
-      });
-    }
-    case "custom": {
-      return createCompatibleModel({
-        apiKey: process.env.LLM_API_KEY,
-        baseURL: process.env.LLM_BASE_URL ?? "",
-        modelName,
-        providerName: "custom",
-      });
-    }
-    default:
-      return anthropic(modelName);
-  }
-}
-
-function createCompatibleModel(params: {
-  providerName: string;
-  baseURL: string;
-  apiKey: string | undefined;
-  modelName: string;
-}) {
-  const provider = createOpenAICompatible({
-    name: params.providerName,
-    baseURL: params.baseURL,
-    apiKey: params.apiKey,
-  });
-  return provider(params.modelName);
+  return createAiSdkModel(modelOverride);
 }
 
 export async function createWorkerRuntime(projectId: string): Promise<WorkerRuntime> {
@@ -97,7 +46,6 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
   return {
     db,
     agentRepository: new AgentRepository(db),
-    approvalRepository: new ApprovalRepository(db),
     lessonRepository: new LessonRepository(db),
     runEventRepository: new RunEventRepository(db),
     runRepository: new RunRepository(db),
@@ -146,7 +94,7 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
       "- Use tools when they are relevant to the current task.",
       "- If a tool call is denied, do not retry the same call unless new context justifies it.",
       "- Keep the final response concise and evidence-based.",
-      "- Prefer findings, actions, approvals, and lessons over generic narration.",
+      "- Prefer findings, actions, and lessons over generic narration.",
     ].join("\n"),
   ]
     .filter((section) => section.trim().length > 0)
@@ -172,55 +120,6 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
   };
 }
 
-export async function sendApprovalNotification(params: {
-  runtime: WorkerRuntime;
-  agent: AgentRecord;
-  approval: {
-    approvalId: string;
-    toolName: string;
-    toolInput: Record<string, unknown>;
-    waitTokenId: string;
-  };
-}): Promise<"slack" | "in-app" | "email"> {
-  const notificationConfig: NotificationConfig = params.agent.notificationConfig;
-  const slackAvailable = notificationConfig.slack && params.runtime.activeProviders.includes("slack");
-  const emailAvailable =
-    notificationConfig.email &&
-    params.runtime.activeProviders.includes("gmail") &&
-    typeof process.env.NOTIFICATION_EMAIL === "string" &&
-    process.env.NOTIFICATION_EMAIL.length > 0;
-  const approvalDetails = buildApprovalNotificationLines(params.agent, params.approval);
-
-  if (slackAvailable) {
-    await sendNotificationTool({
-      composio: params.runtime.composio,
-      userId: params.runtime.userId,
-      provider: "slack",
-      payload: {
-        channel: process.env.APPROVAL_NOTIFICATION_CHANNEL ?? "#approvals",
-        text: approvalDetails.join("\n"),
-      },
-    });
-    return "slack";
-  }
-
-  if (emailAvailable) {
-    await sendNotificationTool({
-      composio: params.runtime.composio,
-      userId: params.runtime.userId,
-      provider: "gmail",
-      payload: {
-        recipient_email: process.env.NOTIFICATION_EMAIL!,
-        subject: `Approval needed for ${params.agent.name}`,
-        body: approvalDetails.slice(1).join("\n"),
-      },
-    });
-    return "email";
-  }
-
-  return "in-app";
-}
-
 async function listActiveProviders(db: ReturnType<typeof createDb>, projectId: string): Promise<string[]> {
   const rows = db
     .select()
@@ -230,22 +129,4 @@ async function listActiveProviders(db: ReturnType<typeof createDb>, projectId: s
     .filter((row) => row.status === "active");
 
   return Array.from(new Set(rows.map((row) => row.provider)));
-}
-
-function buildApprovalNotificationLines(
-  agent: AgentRecord,
-  approval: {
-    approvalId: string;
-    toolName: string;
-    toolInput: Record<string, unknown>;
-    waitTokenId: string;
-  },
-) {
-  return [
-    `Approval needed for ${agent.name}`,
-    `Approval ID: ${approval.approvalId}`,
-    `Run wait token: ${approval.waitTokenId}`,
-    `Tool: ${approval.toolName}`,
-    `Input: ${JSON.stringify(approval.toolInput)}`,
-  ];
 }
