@@ -1,14 +1,11 @@
 import type { PolicyContext, PolicyDecision, PolicyRequest } from "../types";
 
-export function evaluatePolicy(
-  request: PolicyRequest,
-  context: PolicyContext,
-): PolicyDecision {
+export function evaluatePolicy(request: PolicyRequest, context: PolicyContext): PolicyDecision {
   const toolConfig = request.toolConfig;
   const cooldownMinutes = toolConfig?.cooldownMinutes;
   const budgetThreshold = toolConfig?.budgetThreshold;
 
-  if (!toolConfig || !toolConfig.enabled) {
+  if (!toolConfig?.enabled) {
     return {
       result: "blocked",
       reason: "Tool is disabled for this agent",
@@ -27,8 +24,7 @@ export function evaluatePolicy(
     context.recentToolCalls.some(
       (call) =>
         call.toolName === request.toolName &&
-        context.now.getTime() - call.timestamp.getTime() <
-          cooldownMinutes * 60_000,
+        context.now.getTime() - call.timestamp.getTime() < cooldownMinutes * 60_000,
     )
   ) {
     return {
@@ -38,11 +34,7 @@ export function evaluatePolicy(
   }
 
   const budgetValue = extractBudgetLikeValue(request.toolInput);
-  if (
-    typeof budgetThreshold === "number" &&
-    typeof budgetValue === "number" &&
-    budgetValue > budgetThreshold
-  ) {
+  if (typeof budgetThreshold === "number" && typeof budgetValue === "number" && budgetValue > budgetThreshold) {
     return {
       result: "approval",
       reason: `Requested value exceeds budget threshold of ${budgetThreshold}`,

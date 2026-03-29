@@ -1,7 +1,7 @@
-import type { AgentView, ProjectView } from "../lib/types";
-import type { AgentRecord } from "../../../../packages/harness/src/repositories/agent";
-import type { ApprovalRecord, RunEvent, RunRecord, RunSummary } from "../../../../packages/harness/src/types";
 import type { createDb } from "../../../../packages/harness/src/db/client";
+import type { AgentRecord } from "../../../../packages/harness/src/repositories/agent";
+import type { ApprovalRecord, RunEvent, RunRecord } from "../../../../packages/harness/src/types";
+import type { AgentView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -71,7 +71,10 @@ export function buildAgentView(params: {
   let status: AgentView["status"] = "idle";
   if (pendingCount > 0) {
     status = "attention";
-  } else if (latestRun && (latestRun.status === "queued" || latestRun.status === "running" || latestRun.status === "waiting_for_approval")) {
+  } else if (
+    latestRun &&
+    (latestRun.status === "queued" || latestRun.status === "running" || latestRun.status === "waiting_for_approval")
+  ) {
     status = "running";
   } else if (latestRun?.status === "failed") {
     status = "error";
@@ -86,12 +89,8 @@ export function buildAgentView(params: {
     instructions: params.agent.instructions,
     skills: params.agent.skills,
     schedule: params.agent.schedule,
-    policyRules: Object.values(params.agent.toolConfig.tools).map(
-      (tool) => `${tool.title}: ${tool.approvalMode}`,
-    ),
-    globalApprovalRequired: Object.values(params.agent.toolConfig.tools).some(
-      (tool) => tool.approvalMode !== "auto",
-    ),
+    policyRules: Object.values(params.agent.toolConfig.tools).map((tool) => `${tool.title}: ${tool.approvalMode}`),
+    globalApprovalRequired: Object.values(params.agent.toolConfig.tools).some((tool) => tool.approvalMode !== "auto"),
     scopeStrategy: "static",
     lifecycleStatus: params.agent.status,
     status,
@@ -145,11 +144,7 @@ export function buildProjectView(params: {
   };
 }
 
-export function buildSerializedRun(
-  run: RunRecord,
-  events: RunEvent[],
-  approvals: ApprovalRecord[],
-): SerializedRun {
+export function buildSerializedRun(run: RunRecord, events: RunEvent[], approvals: ApprovalRecord[]): SerializedRun {
   const duration = run.completedAt
     ? run.completedAt.getTime() - run.startedAt.getTime()
     : Math.max(Date.now() - run.startedAt.getTime(), 0);

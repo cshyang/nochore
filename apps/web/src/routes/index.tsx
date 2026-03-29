@@ -1,17 +1,14 @@
-import { useState, useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 import { Homepage } from "~/components/Homepage";
 import { SetupWorkspace } from "~/components/SetupWorkspace";
 import { ToastContainer, type ToastData } from "~/components/Toast";
-import { listProjects, createProject } from "~/server/projects";
+import { createProject, listProjects } from "~/server/projects";
 import { listAvailableSkills } from "~/server/skills";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [projects, skills] = await Promise.all([
-      listProjects(),
-      listAvailableSkills(),
-    ]);
+    const [projects, skills] = await Promise.all([listProjects(), listAvailableSkills()]);
     return { projects, skills };
   },
   component: IndexPage,
@@ -49,10 +46,7 @@ function IndexPage() {
   if (projectList.length === 0) {
     return (
       <>
-        <SetupWorkspace
-          availableSkills={(skills ?? []) as any[]}
-          onCreateProject={handleCreateProject}
-        />
+        <SetupWorkspace availableSkills={(skills ?? []) as any[]} onCreateProject={handleCreateProject} />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     );
@@ -62,9 +56,7 @@ function IndexPage() {
     <>
       <Homepage
         projects={projectList}
-        onSelectProject={(id) =>
-          navigate({ to: "/$projectId", params: { projectId: id } })
-        }
+        onSelectProject={(id) => navigate({ to: "/$projectId", params: { projectId: id } })}
         onCreateProject={handleCreateProject}
       />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

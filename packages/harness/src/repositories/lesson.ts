@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull, or } from "drizzle-orm";
-import { lessons } from "../db/schema";
 import type { createDb } from "../db/client";
+import { lessons } from "../db/schema";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -32,16 +32,19 @@ export class LessonRepository {
 
   async create(input: CreateLessonInput): Promise<string> {
     const id = crypto.randomUUID();
-    this.db.insert(lessons).values({
-      id,
-      agentId: input.agentId,
-      content: input.content,
-      scope: input.scope,
-      confidence: input.confidence,
-      sourceRunEventIds: JSON.stringify(input.sourceRunEventIds),
-      createdAt: input.createdAt.getTime(),
-      expiresAt: input.expiresAt?.getTime() ?? null,
-    }).run();
+    this.db
+      .insert(lessons)
+      .values({
+        id,
+        agentId: input.agentId,
+        content: input.content,
+        scope: input.scope,
+        confidence: input.confidence,
+        sourceRunEventIds: JSON.stringify(input.sourceRunEventIds),
+        createdAt: input.createdAt.getTime(),
+        expiresAt: input.expiresAt?.getTime() ?? null,
+      })
+      .run();
     return id;
   }
 
@@ -50,12 +53,7 @@ export class LessonRepository {
     return this.db
       .select()
       .from(lessons)
-      .where(
-        and(
-          eq(lessons.agentId, agentId),
-          or(isNull(lessons.expiresAt), gt(lessons.expiresAt, now)),
-        ),
-      )
+      .where(and(eq(lessons.agentId, agentId), or(isNull(lessons.expiresAt), gt(lessons.expiresAt, now))))
       .all()
       .map((row) => ({
         id: row.id,

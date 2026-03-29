@@ -1,15 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { ArrowRight, Check, CircleNotch, Lightning, Warning, X } from "@phosphor-icons/react";
 import { useRealtimeRun } from "@trigger.dev/react-hooks";
-import {
-  ArrowRight,
-  Check,
-  CircleNotch,
-  Lightning,
-  Warning,
-  X,
-} from "@phosphor-icons/react";
-import { Button } from "~/components/Button";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "~/components/Badge";
+import { Button } from "~/components/Button";
 import { COLORS, RADIUS } from "~/lib/colors";
 
 type LiveEvent = {
@@ -79,9 +72,7 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 function humanizeType(type: string): string {
-  return type
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 const pulseKeyframes = `
@@ -91,14 +82,7 @@ const pulseKeyframes = `
 }
 `;
 
-export function LiveRunView({
-  triggerRunId,
-  accessToken,
-  runId,
-  onComplete,
-  onApprove,
-  onReject,
-}: LiveRunViewProps) {
+export function LiveRunView({ triggerRunId, accessToken, runId, onComplete, onApprove, onReject }: LiveRunViewProps) {
   const { run, error } = useRealtimeRun(triggerRunId, {
     accessToken,
   });
@@ -116,16 +100,18 @@ export function LiveRunView({
   // 1. Our custom metadata.status (granular: includes "waiting_for_approval")
   // 2. trigger.dev's platform run.status (safety net: fires even if task crashes before our catch block)
   const platformStatus = (run?.status ?? "").toUpperCase();
-  const platformDone = platformStatus === "COMPLETED" || platformStatus === "FAILED" || platformStatus === "CANCELED" || platformStatus === "SYSTEM_FAILURE";
-  const status = platformDone
-    ? (platformStatus === "COMPLETED" ? "completed" : "failed")
-    : (meta.status ?? "running");
+  const platformDone =
+    platformStatus === "COMPLETED" ||
+    platformStatus === "FAILED" ||
+    platformStatus === "CANCELED" ||
+    platformStatus === "SYSTEM_FAILURE";
+  const status = platformDone ? (platformStatus === "COMPLETED" ? "completed" : "failed") : (meta.status ?? "running");
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [events.length]);
+  }, []);
 
   useEffect(() => {
     if ((status === "completed" || status === "failed") && !completeFiredRef.current) {
@@ -222,18 +208,10 @@ export function LiveRunView({
           <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>
             {isActive ? "Live" : isFinished ? (status === "completed" ? "Completed" : "Failed") : "Run"}
           </span>
-          {status === "waiting_for_approval" && (
-            <Badge color="yellow">Waiting for approval</Badge>
-          )}
-          {cycle != null && isActive && (
-            <span style={{ fontSize: 12, color: COLORS.textDim }}>
-              Cycle {cycle + 1}
-            </span>
-          )}
+          {status === "waiting_for_approval" && <Badge color="yellow">Waiting for approval</Badge>}
+          {cycle != null && isActive && <span style={{ fontSize: 12, color: COLORS.textDim }}>Cycle {cycle + 1}</span>}
         </div>
-        <span style={{ fontSize: 12, color: COLORS.textDim, fontFamily: "monospace" }}>
-          {runId.slice(0, 12)}
-        </span>
+        <span style={{ fontSize: 12, color: COLORS.textDim, fontFamily: "monospace" }}>{runId.slice(0, 12)}</span>
       </div>
 
       {isFinished && (
@@ -280,12 +258,8 @@ export function LiveRunView({
                   />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <Badge color={getBadgeColor(event.type)}>
-                        {humanizeType(event.type)}
-                      </Badge>
-                      <span style={{ fontSize: 11, color: COLORS.textDim }}>
-                        {formatRelativeTime(event.timestamp)}
-                      </span>
+                      <Badge color={getBadgeColor(event.type)}>{humanizeType(event.type)}</Badge>
+                      <span style={{ fontSize: 11, color: COLORS.textDim }}>{formatRelativeTime(event.timestamp)}</span>
                     </div>
                     <p style={eventSummaryStyle}>{event.summary}</p>
                   </div>
@@ -301,7 +275,11 @@ export function LiveRunView({
                       style={{ opacity: approvalState ? 0.6 : 1 }}
                     >
                       {approvalState === "approving" ? (
-                        <CircleNotch size={13} weight="bold" style={{ animation: "live-pulse 1s ease-in-out infinite" }} />
+                        <CircleNotch
+                          size={13}
+                          weight="bold"
+                          style={{ animation: "live-pulse 1s ease-in-out infinite" }}
+                        />
                       ) : (
                         <Check size={13} weight="bold" />
                       )}
@@ -316,7 +294,11 @@ export function LiveRunView({
                       style={{ opacity: approvalState ? 0.6 : 1 }}
                     >
                       {approvalState === "rejecting" ? (
-                        <CircleNotch size={13} weight="bold" style={{ animation: "live-pulse 1s ease-in-out infinite" }} />
+                        <CircleNotch
+                          size={13}
+                          weight="bold"
+                          style={{ animation: "live-pulse 1s ease-in-out infinite" }}
+                        />
                       ) : (
                         <X size={13} weight="bold" />
                       )}

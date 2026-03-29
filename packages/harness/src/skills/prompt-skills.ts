@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getRepoRoot } from "../workspace";
 
@@ -14,10 +14,7 @@ export interface PromptSkill {
 
 const PRODUCT_MARKER = "product: true";
 
-export function listPromptSkills(options?: {
-  rootDir?: string;
-  productOnly?: boolean;
-}): PromptSkill[] {
+export function listPromptSkills(options?: { rootDir?: string; productOnly?: boolean }): PromptSkill[] {
   const skillsRoot = options?.rootDir ?? join(getRepoRoot(), ".agents/skills");
   if (!existsSync(skillsRoot)) {
     return [];
@@ -53,7 +50,7 @@ export function listPromptSkills(options?: {
       } satisfies PromptSkill;
     })
     .filter((skill): skill is PromptSkill => skill !== null)
-    .filter((skill) => (options?.productOnly ?? true) ? skill.product : true)
+    .filter((skill) => ((options?.productOnly ?? true) ? skill.product : true))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -61,9 +58,7 @@ export function getPromptSkillById(
   skillId: string,
   options?: { rootDir?: string; productOnly?: boolean },
 ): PromptSkill | null {
-  return (
-    listPromptSkills(options).find((skill) => skill.id === skillId) ?? null
-  );
+  return listPromptSkills(options).find((skill) => skill.id === skillId) ?? null;
 }
 
 function extractName(source: string): string | null {
@@ -77,9 +72,7 @@ function extractName(source: string): string | null {
 }
 
 function extractDescription(source: string): string {
-  const frontmatterDescription = source.match(
-    /description:\s*["']?(.+?)["']?\s*$/m,
-  );
+  const frontmatterDescription = source.match(/description:\s*["']?(.+?)["']?\s*$/m);
   if (frontmatterDescription?.[1]) {
     return frontmatterDescription[1].trim();
   }

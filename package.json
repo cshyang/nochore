@@ -6,12 +6,18 @@
     "packages/*",
     "services/*"
   ],
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "format": "biome format --fix ."
+  },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.62.0",
     "@trigger.dev/sdk": "^4.4.3",
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.9",
     "@trigger.dev/build": "^4.4.3"
   }
 }

@@ -5,4 +5,3 @@ import { jsonSafe } from "./serializable";
 export const listAvailableSkills = createServerFn({ method: "GET" }).handler(async () => {
   return jsonSafe(listPromptSkills());
 });
-

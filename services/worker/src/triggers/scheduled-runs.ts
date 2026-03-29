@@ -30,9 +30,7 @@ export const scheduledAgentRun = schedules.task({
       throw new Error("Schedule missing externalId (agentId)");
     }
 
-    const projectId =
-      (payload as unknown as { metadata?: Record<string, string> }).metadata
-        ?.projectId ?? "";
+    const projectId = (payload as unknown as { metadata?: Record<string, string> }).metadata?.projectId ?? "";
     if (!projectId) {
       throw new Error("Schedule missing projectId in metadata");
     }

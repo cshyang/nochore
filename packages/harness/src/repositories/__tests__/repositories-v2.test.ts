@@ -11,11 +11,13 @@ describe("simplified repositories", () => {
   it("creates, loads, and updates agents with derived workspace paths", async () => {
     const db = createTestDb();
     const now = Date.now();
-    db.insert(projects).values({
-      id: "proj_001",
-      name: "Homescape",
-      createdAt: now,
-    }).run();
+    db.insert(projects)
+      .values({
+        id: "proj_001",
+        name: "Homescape",
+        createdAt: now,
+      })
+      .run();
 
     const repo = new AgentRepository(db);
     const id = await repo.create({
@@ -95,10 +97,7 @@ describe("simplified repositories", () => {
     const runEvents = await repo.listByRun("run_001");
     const agentEvents = await repo.listByAgent("agent_001", 5);
 
-    expect(runEvents.map((event) => event.type)).toEqual([
-      "run_started",
-      "finding_recorded",
-    ]);
+    expect(runEvents.map((event) => event.type)).toEqual(["run_started", "finding_recorded"]);
     expect(agentEvents[0]?.type).toBe("finding_recorded");
   });
 

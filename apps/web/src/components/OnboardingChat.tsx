@@ -1,14 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { ArrowLeft, ArrowRight, CaretRight, Info, Lightning, MagnifyingGlass, Sparkle } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import {
-  Sparkle,
-  ArrowLeft,
-  ArrowRight,
-} from "@phosphor-icons/react";
-import { COLORS, RADIUS, TYPE, MOTION } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
 
 interface OnboardingChatProps {
@@ -21,16 +17,23 @@ interface OnboardingChatProps {
 
 /** Check if a message part is a request_input tool call (static or dynamic) */
 function isRequestInputPart(p: Record<string, unknown>): boolean {
-  return p.type === "tool-request_input" ||
-    (p.type === "dynamic-tool" && p.toolName === "request_input");
+  return p.type === "tool-request_input" || (p.type === "dynamic-tool" && p.toolName === "request_input");
 }
 
-const EXAMPLE_PROMPTS = [
-  "Monitor ad spend",
-  "Score new leads",
-  "Track competitors",
-  "Optimize keywords",
-];
+/** Extract the tool name from any tool part (static `tool-{name}` or dynamic) */
+function getPartToolName(p: Record<string, unknown>): string | null {
+  if (p.type === "dynamic-tool") return p.toolName as string;
+  if (typeof p.type === "string" && String(p.type).startsWith("tool-")) return String(p.type).slice(5); // "tool-search_tools" → "search_tools"
+  return null;
+}
+
+/** Human-friendly labels for server-executed tools */
+const TOOL_LABELS: Record<string, { verb: string; done: string; icon: "search" | "bolt" }> = {
+  search_tools: { verb: "Searching for tools", done: "Found tools", icon: "search" },
+  create_agent: { verb: "Creating your agent", done: "Agent created", icon: "bolt" },
+};
+
+const EXAMPLE_PROMPTS = ["Monitor ad spend", "Score new leads", "Track competitors", "Optimize keywords"];
 
 export function OnboardingChat({
   projectId,
@@ -67,7 +70,7 @@ export function OnboardingChat({
     [redirecting, navigate, projectId],
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, addToolOutput, status } = useChat({
     transport,
     messages: [
       {
@@ -81,12 +84,11 @@ export function OnboardingChat({
         ],
       },
     ],
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onFinish: ({ message: msg }) => {
       for (const part of msg.parts) {
         const p = part as Record<string, unknown>;
-        const isTool =
-          p.type === "dynamic-tool" ||
-          (typeof p.type === "string" && String(p.type).startsWith("tool-"));
+        const isTool = p.type === "dynamic-tool" || (typeof p.type === "string" && String(p.type).startsWith("tool-"));
         if (isTool && p.state === "output-available") {
           const output = p.output as { success?: boolean; agentId?: string } | undefined;
           if (output?.success && output.agentId) {
@@ -120,8 +122,10 @@ export function OnboardingChat({
     }
   }, [messages, redirecting, doRedirect]);
 
-  // Auto-scroll: bring the latest assistant response to the top of the visible area
+  // Auto-scroll: bring the latest assistant response to the top of the visible area.
+  // Re-runs whenever a new message appears (not during streaming of existing messages).
   const latestAssistantRef = useRef<HTMLDivElement>(null);
+  const messageCount = messages.length;
 
   useEffect(() => {
     if (!hasSubmitted) return;
@@ -129,7 +133,6 @@ export function OnboardingChat({
       const container = scrollRef.current;
       const target = latestAssistantRef.current;
       if (container && target) {
-        // Calculate the target's position relative to the scroll container
         const containerRect = container.getBoundingClientRect();
         const targetRect = target.getBoundingClientRect();
         const offset = targetRect.top - containerRect.top + container.scrollTop;
@@ -145,7 +148,7 @@ export function OnboardingChat({
       }
     }, 80);
     return () => clearTimeout(timer);
-  }, [messages, hasSubmitted]);
+  }, [hasSubmitted, messageCount]);
 
   // Auto-focus input
   useEffect(() => {
@@ -159,7 +162,7 @@ export function OnboardingChat({
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     }
-  }, [inputValue]);
+  }, []);
 
   const handleSubmit = useCallback(
     (e?: React.FormEvent) => {
@@ -183,23 +186,51 @@ export function OnboardingChat({
     [handleSubmit],
   );
 
-  const handleExampleClick = useCallback(
-    (prompt: string) => {
-      setInputValue(prompt);
-      // Focus the input so the user can review/edit before submitting
-      inputRef.current?.focus();
-    },
-    [],
-  );
+  const handleExampleClick = useCallback((prompt: string) => {
+    setInputValue(prompt);
+    // Focus the input so the user can review/edit before submitting
+    inputRef.current?.focus();
+  }, []);
+
+  // Use a ref to access messages without adding it as a dependency
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const handleOptionClick = useCallback(
     (value: string) => {
       if (isLoading || redirecting) return;
       if (!hasSubmitted) setHasSubmitted(true);
       setInputValue("");
-      void sendMessage({ text: value });
+
+      // Find pending request_input tool call(s) in the last assistant message
+      const lastAssistant = [...messagesRef.current].reverse().find((m) => m.role === "assistant");
+      const pendingToolParts = lastAssistant?.parts.filter((p) => {
+        const r = p as Record<string, unknown>;
+        return isRequestInputPart(r) && r.state === "input-available";
+      }) as Array<Record<string, unknown>> | undefined;
+
+      if (pendingToolParts && pendingToolParts.length > 0) {
+        // Set output on all pending request_input tool calls
+        // For batched (paginated) cards, value is newline-separated answers
+        const answers = value.split("\n");
+        for (let i = 0; i < pendingToolParts.length; i++) {
+          const toolCallId = pendingToolParts[i].toolCallId as string;
+          const answer = answers[i] ?? "_skipped";
+          addToolOutput({
+            tool: "request_input" as never, // dynamic tool — cast for type safety
+            toolCallId,
+            output: {
+              selectedKeys: answer === "_skipped" ? [] : answer.split(", "),
+              skipped: answer === "_skipped",
+            } as never,
+          });
+        }
+      } else {
+        // No pending tool call — send as regular text (initial briefing, freeform input)
+        void sendMessage({ text: value });
+      }
     },
-    [isLoading, redirecting, hasSubmitted, sendMessage],
+    [isLoading, redirecting, hasSubmitted, sendMessage, addToolOutput],
   );
 
   // Conversation messages (after first submission) — skip the initial greeting
@@ -229,6 +260,7 @@ export function OnboardingChat({
         }}
       >
         <button
+          type="button"
           onClick={onBack}
           style={{
             background: "none",
@@ -284,8 +316,7 @@ export function OnboardingChat({
                 margin: "0 0 32px 0",
               }}
             >
-              <span style={{ color: COLORS.accent }}>✦</span>{" "}
-              What should this agent do?
+              <span style={{ color: COLORS.accent }}>✦</span> What should this agent do?
             </h1>
 
             {/* Hero input */}
@@ -343,12 +374,8 @@ export function OnboardingChat({
                       gap: 6,
                       padding: "6px 16px",
                       borderRadius: RADIUS.lg,
-                      background: inputValue.trim()
-                        ? COLORS.accent
-                        : "transparent",
-                      color: inputValue.trim()
-                        ? COLORS.white
-                        : COLORS.textDim,
+                      background: inputValue.trim() ? COLORS.accent : "transparent",
+                      color: inputValue.trim() ? COLORS.white : COLORS.textDim,
                       border: "none",
                       fontSize: TYPE.scale.sm,
                       fontWeight: TYPE.weight.semibold,
@@ -381,6 +408,7 @@ export function OnboardingChat({
             >
               {EXAMPLE_PROMPTS.map((prompt) => (
                 <button
+                  type="button"
                   key={prompt}
                   className="pill"
                   onClick={() => handleExampleClick(prompt)}
@@ -449,8 +477,7 @@ export function OnboardingChat({
                     margin: 0,
                   }}
                 >
-                  <span style={{ color: COLORS.accent }}>✦</span>{" "}
-                  Setting up your agent
+                  <span style={{ color: COLORS.accent }}>✦</span> Setting up your agent
                 </h2>
               </div>
 
@@ -462,50 +489,30 @@ export function OnboardingChat({
                     msg.role === "assistant" &&
                     !conversationMessages.slice(idx + 1).some((m) => m.role === "assistant");
 
-                  // Find which option the user selected
-                  let selected: string | undefined;
-                  if (msg.role === "assistant" && !isLastAssistant) {
-                    // First: check tool output (structured path)
-                    for (const part of msg.parts) {
-                      const p = part as Record<string, unknown>;
-                      if (
-                        (p.type === "dynamic-tool" ||
-                          (typeof p.type === "string" && String(p.type).startsWith("tool-"))) &&
-                        isRequestInputPart(p as Record<string, unknown>) &&
-                        p.state === "output-available"
-                      ) {
-                        const output = p.output as { selectedKeys?: string[] } | undefined;
-                        if (output?.selectedKeys) {
-                          selected = output.selectedKeys.join(", ");
-                        }
-                      }
-                    }
-                    // Fallback: use next user message text as the selection
-                    if (!selected) {
-                      const nextUser = conversationMessages.slice(idx + 1).find((m) => m.role === "user");
-                      if (nextUser) {
-                        selected = nextUser.parts
-                          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-                          .map((p) => p.text)
-                          .join("")
-                          .trim();
-                      }
-                    }
-                  }
-
                   return (
                     <div key={msg.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
                       <ConversationMessage
                         message={msg}
                         onOptionClick={isLastAssistant ? handleOptionClick : undefined}
-                        selectedKey={selected}
                       />
                     </div>
                   );
                 })}
 
+                {/* Loading heartbeat — visible while any response is in progress */}
                 {isLoading && !redirecting && (
-                  <ThinkingIndicator messages={conversationMessages} />
+                  <div style={{ padding: "10px 0", animation: "fadeIn 0.2s ease both" }}>
+                    <span
+                      style={{
+                        display: "block",
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: COLORS.accent,
+                        animation: "heartbeat 1.2s ease-in-out infinite",
+                      }}
+                    />
+                  </div>
                 )}
 
                 {redirecting && (
@@ -596,12 +603,8 @@ export function OnboardingChat({
                         gap: 6,
                         padding: "6px 16px",
                         borderRadius: RADIUS.lg,
-                        background: inputValue.trim()
-                          ? COLORS.accent
-                          : "transparent",
-                        color: inputValue.trim()
-                          ? COLORS.white
-                          : COLORS.textDim,
+                        background: inputValue.trim() ? COLORS.accent : "transparent",
+                        color: inputValue.trim() ? COLORS.white : COLORS.textDim,
                         border: "none",
                         fontSize: TYPE.scale.sm,
                         fontWeight: TYPE.weight.semibold,
@@ -630,92 +633,156 @@ export function OnboardingChat({
 }
 
 // ---------------------------------------------------------------------------
-// ThinkingIndicator — pulsing dot + ephemeral reasoning text with shimmer
+// ReasoningBlock — inline collapsible thinking (Claude-style)
+// Streaming: pulsing dot + live text. Done: collapsed "Thought for a moment" toggle.
 // ---------------------------------------------------------------------------
 
-function ThinkingIndicator({
-  messages,
-}: {
-  messages: Array<{ role: string; parts: Array<{ type: string; text?: string; reasoning?: string; state?: string }> }>;
-}) {
+function ReasoningBlock({ text, state }: { text: string; state: string }) {
+  const [expanded, setExpanded] = useState(state === "streaming");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isStreaming = state === "streaming";
 
-  // Extract the latest streaming reasoning text from the last assistant message
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const reasoningPart = lastAssistant?.parts
-    .slice()
-    .reverse()
-    .find((p) => p.type === "reasoning" && p.state === "streaming");
-  const reasoningText = reasoningPart?.text ?? reasoningPart?.reasoning ?? "";
+  // Auto-expand when streaming, auto-collapse when done
+  useEffect(() => {
+    setExpanded(isStreaming);
+  }, [isStreaming]);
 
-  // Auto-scroll to bottom as reasoning streams in
+  // Auto-scroll while streaming — `text` in deps is intentional (triggers scroll on each chunk)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: text change drives scroll
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [reasoningText]);
+    if (el && isStreaming) el.scrollTop = el.scrollHeight;
+  }, [text, isStreaming]);
 
   return (
     <div
       style={{
-        borderLeft: `2px solid ${COLORS.accent}`,
+        borderLeft: `2px solid ${isStreaming ? COLORS.accent : COLORS.border}`,
         borderRadius: `0 ${RADIUS.md}px ${RADIUS.md}px 0`,
         background: COLORS.surface,
-        padding: "10px 14px",
+        padding: expanded ? "10px 14px" : "0 14px",
+        marginBottom: 8,
+        transition: `all ${MOTION.duration} ${MOTION.ease}`,
         animation: "fadeIn 0.2s ease both",
       }}
     >
-      {/* Header: pulsing dot + label */}
-      <div
+      {/* Header — clickable toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
         style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
-          marginBottom: reasoningText ? 8 : 0,
+          padding: "10px 0",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          width: "100%",
+          textAlign: "left",
         }}
       >
+        {isStreaming ? (
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: COLORS.accent,
+              flexShrink: 0,
+              animation: "heartbeat 1.2s ease-in-out infinite",
+            }}
+          />
+        ) : (
+          <CaretRight
+            size={12}
+            weight="bold"
+            style={{
+              color: COLORS.textDim,
+              flexShrink: 0,
+              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: `transform ${MOTION.duration} ${MOTION.ease}`,
+            }}
+          />
+        )}
         <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: COLORS.accent,
-            flexShrink: 0,
-            animation: "heartbeat 1.2s ease-in-out infinite",
-          }}
-        />
-        <span
-          className="thinking-shimmer"
+          className={isStreaming ? "thinking-shimmer" : undefined}
           style={{
             fontSize: TYPE.scale.xs,
             fontFamily: TYPE.body,
             fontWeight: TYPE.weight.medium,
             letterSpacing: TYPE.tracking.wide,
             textTransform: "uppercase" as const,
+            color: isStreaming ? undefined : COLORS.textDim,
           }}
         >
-          Thinking
+          {isStreaming ? "Thinking" : "Thought for a moment"}
         </span>
-      </div>
-      {/* Streaming reasoning text */}
-      {reasoningText && (
+      </button>
+      {/* Reasoning text — collapsible */}
+      {expanded && text && (
         <div
           ref={scrollRef}
           style={{
-            maxHeight: 120,
-            overflowY: "auto",
             fontSize: TYPE.scale.xs,
             fontFamily: TYPE.body,
             color: COLORS.textDim,
             lineHeight: TYPE.leading.loose,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
-            maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+            paddingBottom: 6,
           }}
         >
-          {reasoningText}
+          {text}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ToolActivityRow — compact status row for server-executed tools
+// ---------------------------------------------------------------------------
+
+function ToolActivityRow({ toolName, state, output }: { toolName: string; state: string; output: unknown }) {
+  const label = TOOL_LABELS[toolName];
+  if (!label) return null; // unknown tool — skip
+
+  const isDone = state === "output-available";
+  const isError = state === "output-error";
+  const isWorking = !isDone && !isError;
+
+  // Summarize search_tools output
+  let summary = label.done;
+  if (isDone && toolName === "search_tools" && Array.isArray(output)) {
+    summary = `Found ${output.length} tool${output.length === 1 ? "" : "s"}`;
+  }
+
+  const Icon = label.icon === "search" ? MagnifyingGlass : Lightning;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 0",
+        fontSize: TYPE.scale.sm,
+        fontFamily: TYPE.body,
+        color: COLORS.textDim,
+        animation: "fadeIn 0.2s ease both",
+      }}
+    >
+      <Icon
+        size={14}
+        weight="bold"
+        style={{
+          color: isError ? COLORS.red : COLORS.accent,
+          flexShrink: 0,
+          ...(isWorking ? { animation: "pulse 1.5s ease-in-out infinite" } : {}),
+        }}
+      />
+      <span>{isWorking ? `${label.verb}...` : isError ? `${label.verb} failed` : summary}</span>
     </div>
   );
 }
@@ -732,12 +799,13 @@ function parseOptions(text: string): {
   isMultiSelect: boolean;
 } {
   const options: Array<{ key: string; label: string }> = [];
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = OPTION_RE.exec(text);
 
-  while ((match = OPTION_RE.exec(text)) !== null) {
+  while (match !== null) {
     // Strip markdown bold markers from option labels
     const label = match[2].replace(/\*\*(.+?)\*\*/g, "$1");
     options.push({ key: match[1], label });
+    match = OPTION_RE.exec(text);
   }
   OPTION_RE.lastIndex = 0;
 
@@ -746,7 +814,10 @@ function parseOptions(text: string): {
     return { body: text, options: [], isMultiSelect: false };
   }
 
-  const body = text.replace(OPTION_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+  const body = text
+    .replace(OPTION_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   OPTION_RE.lastIndex = 0;
 
   // Detect multi-select from the message text
@@ -778,28 +849,20 @@ interface RequestInputToolInput {
 function ConversationMessage({
   message,
   onOptionClick,
-  selectedKey,
 }: {
-  message: { role: string; parts: Array<{ type: string; text?: string }> };
+  message: { role: string; parts: Array<Record<string, unknown>> };
   onOptionClick?: (value: string) => void;
-  selectedKey?: string;
 }) {
   const isUser = message.role === "user";
+  const parts = message.parts;
 
-  const textContent = message.parts
-    .filter((part): part is { type: "text"; text: string } => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-
-  // Collect ALL request_input tool calls in this message
-  const toolParts = (message.parts as unknown as Array<Record<string, unknown>>).filter(
-    (p) => isRequestInputPart(p as Record<string, unknown>),
-  );
-
-  if (!textContent.trim() && toolParts.length === 0) return null;
-
-  // User messages — right-aligned chip
+  // ── User messages — right-aligned chip ──────────────────────────────
   if (isUser) {
+    const textContent = parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text as string)
+      .join("");
+    if (!textContent.trim()) return null;
     return (
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <div
@@ -822,114 +885,267 @@ function ConversationMessage({
     );
   }
 
-  // Extract tool inputs
-  const toolInputs: RequestInputToolInput[] = toolParts
-    .map((p) => p.input as RequestInputToolInput | undefined)
-    .filter((input): input is RequestInputToolInput => !!input);
-
-  // For single tool call, fall back to regex if no tool input
-  const singleToolInput = toolInputs[0];
-  const toolOptions = singleToolInput?.options ?? [];
-  const { body: regexBody, options: regexOptions, isMultiSelect: regexMulti } =
-    toolOptions.length > 0
-      ? { body: textContent, options: [] as Array<{ key: string; label: string }>, isMultiSelect: false }
-      : parseOptions(textContent);
-
+  // ── Assistant messages — render parts in order ──────────────────────
   const isActive = !!onOptionClick;
   const isPast = !isActive;
 
-  // Past message: collapsed summary
-  if (isPast && toolParts.length > 0) {
-    // Resolve what was selected
-    let resolvedSelectedKey = selectedKey;
-    if (!resolvedSelectedKey && toolParts[0]?.state === "output-available") {
-      const output = toolParts[0].output as { selectedKeys?: string[] } | undefined;
-      if (output?.selectedKeys) resolvedSelectedKey = output.selectedKeys.join(", ");
-    }
+  // Collect request_input tool parts for option rendering — only when fully generated
+  const requestInputParts = parts.filter(
+    (p) => isRequestInputPart(p) && (p.state === "input-available" || p.state === "output-available"),
+  );
+  const requestInputs: RequestInputToolInput[] = requestInputParts
+    .map((p) => p.input as RequestInputToolInput | undefined)
+    .filter((input): input is RequestInputToolInput => !!input);
 
-    if (toolInputs.length > 1) {
-      // Batched: show collapsed summary
-      const answeredCount = resolvedSelectedKey
-        ? resolvedSelectedKey.split("\n").filter((l) => l.trim()).length
-        : 0;
-      return (
-        <div>
-          {textContent.trim() && (
-            <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
-              <Markdown>{textContent}</Markdown>
+  // For past messages with request_input tools, show each answer as a collapsed artifact
+  if (isPast && requestInputParts.length > 0) {
+    const nonRequestParts = parts.filter((p) => !isRequestInputPart(p));
+    return (
+      <div>
+        {nonRequestParts.map((p, i) => renderPart(p, i))}
+        {requestInputParts.map((part) => {
+          const input = (part as Record<string, unknown>).input as RequestInputToolInput | undefined;
+          const output = (part as Record<string, unknown>).output as
+            | { selectedKeys?: string[]; skipped?: boolean }
+            | undefined;
+          const question = input?.question ?? "";
+          const selectedKeys = output?.selectedKeys ?? [];
+          const answer = output?.skipped
+            ? "Skipped"
+            : resolveSelectedLabel(selectedKeys.join(", "), input?.options ?? []);
+          return (
+            <div
+              key={`past-${(part as Record<string, unknown>).toolCallId}`}
+              style={{
+                marginTop: 8,
+                fontSize: TYPE.scale.sm,
+                color: COLORS.textDim,
+                fontFamily: TYPE.body,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ color: COLORS.accent }}>☑</span>
+              {question} → <span style={{ color: COLORS.text }}>{answer}</span>
             </div>
-          )}
-          <div style={{ marginTop: 8, fontSize: TYPE.scale.sm, color: COLORS.textDim, fontFamily: TYPE.body, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: COLORS.accent }}>☑</span>
-            {answeredCount > 0 ? `${answeredCount} questions answered` : "Questions answered"}
-          </div>
-        </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Active message (or message with no request_input tools): render all parts in order,
+  // then append option cards at the end
+  const renderedParts: React.ReactNode[] = [];
+  // Accumulate consecutive text parts into a single markdown block
+  let textBuf = "";
+  let lastTextState: string | undefined;
+
+  const flushText = () => {
+    if (!textBuf.trim()) {
+      textBuf = "";
+      return;
+    }
+    const isStreaming = lastTextState === "streaming";
+    renderedParts.push(
+      <div
+        key={`text-${renderedParts.length}`}
+        className="prose"
+        style={{
+          fontSize: TYPE.scale.md,
+          lineHeight: TYPE.leading.loose,
+          color: COLORS.textSecondary,
+          fontFamily: TYPE.body,
+        }}
+      >
+        <Markdown>{textBuf.trim()}</Markdown>
+        {isStreaming && (
+          <span
+            style={{
+              display: "inline-block",
+              width: 2,
+              height: "1.1em",
+              background: COLORS.accent,
+              marginLeft: 1,
+              verticalAlign: "text-bottom",
+              animation: "blink 1s step-end infinite",
+            }}
+          />
+        )}
+      </div>,
+    );
+    textBuf = "";
+    lastTextState = undefined;
+  };
+
+  for (const part of parts) {
+    if (part.type === "text") {
+      textBuf += part.text as string;
+      lastTextState = part.state as string | undefined;
+      continue;
+    }
+    // Flush accumulated text before non-text parts
+    flushText();
+
+    if (part.type === "reasoning") {
+      renderedParts.push(renderPart(part, renderedParts.length));
+    } else if (part.type === "step-start") {
+      renderedParts.push(renderPart(part, renderedParts.length));
+    } else if (isRequestInputPart(part) && part.state === "output-available") {
+      // Answered tool call — render inline as collapsed artifact
+      const input = part.input as RequestInputToolInput | undefined;
+      const output = part.output as { selectedKeys?: string[]; skipped?: boolean } | undefined;
+      const question = input?.question ?? "";
+      const selectedKeys = output?.selectedKeys ?? [];
+      const answer = output?.skipped
+        ? "Skipped"
+        : resolveSelectedLabel(selectedKeys.join(", "), input?.options ?? []);
+      renderedParts.push(
+        <div
+          key={`answered-${part.toolCallId}`}
+          style={{
+            marginTop: 8,
+            fontSize: TYPE.scale.sm,
+            color: COLORS.textDim,
+            fontFamily: TYPE.body,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span style={{ color: COLORS.accent }}>☑</span>
+          {question} → <span style={{ color: COLORS.text }}>{answer}</span>
+        </div>,
+      );
+    } else if (isRequestInputPart(part)) {
+      // Pending tool call — skip, rendered below as active card(s)
+    } else {
+      // Tool activity (search_tools, create_agent, etc.)
+      const toolName = getPartToolName(part);
+      if (toolName && TOOL_LABELS[toolName]) {
+        renderedParts.push(renderPart(part, renderedParts.length));
+      }
+    }
+  }
+  flushText(); // flush any trailing text
+
+  // If nothing rendered and no option cards, bail
+  if (renderedParts.length === 0 && requestInputParts.length === 0) return null;
+
+  // Render pending request_input parts as active card(s)
+  // (answered parts were already rendered inline in the parts loop above)
+  const pendingParts = requestInputParts.filter((p) => p.state === "input-available");
+  const pendingInputs: RequestInputToolInput[] = pendingParts
+    .map((p) => p.input as RequestInputToolInput | undefined)
+    .filter((input): input is RequestInputToolInput => !!input);
+  if (isActive && pendingInputs.length > 1) {
+    renderedParts.push(<PaginatedCard key="paginated" steps={pendingInputs} onComplete={onOptionClick} />);
+  } else if (pendingParts.length > 0) {
+    const singleInput = pendingInputs[0];
+    const textContent = parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text as string)
+      .join("");
+    const toolOptions = singleInput?.options ?? [];
+    const { options: regexOptions, isMultiSelect: regexMulti } =
+      toolOptions.length > 0
+        ? { options: [] as Array<{ key: string; label: string }>, isMultiSelect: false }
+        : parseOptions(textContent);
+    const finalOptions = toolOptions.length > 0 ? toolOptions : regexOptions;
+    const finalMultiSelect = toolOptions.length > 0 ? (singleInput?.multiSelect ?? false) : regexMulti;
+
+    const question = singleInput?.question;
+    if (question && !textContent.includes(question)) {
+      renderedParts.push(
+        <div
+          key="tool-question"
+          className="prose"
+          style={{
+            fontSize: TYPE.scale.md,
+            lineHeight: TYPE.leading.loose,
+            color: COLORS.textSecondary,
+            fontFamily: TYPE.body,
+          }}
+        >
+          <Markdown>{question}</Markdown>
+        </div>,
       );
     }
 
-    // Single past card: collapsed single-line
-    const question = singleToolInput?.question ?? regexBody;
-    const answer = resolvedSelectedKey || "Skipped";
-    const resolvedAnswer = resolveSelectedLabel(answer, singleToolInput?.options ?? regexOptions);
-    return (
-      <div>
-        {textContent.trim() && textContent !== question && (
-          <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
-            <Markdown>{textContent}</Markdown>
-          </div>
-        )}
-        <div style={{ marginTop: 8, fontSize: TYPE.scale.sm, color: COLORS.textDim, fontFamily: TYPE.body, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: COLORS.accent }}>☑</span>
-          {question} → <span style={{ color: COLORS.text }}>{resolvedAnswer}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Active message: paginated card (or single card)
-  if (toolInputs.length > 1) {
-    return (
-      <div>
-        {textContent.trim() && (
-          <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
-            <Markdown>{textContent}</Markdown>
-          </div>
-        )}
-        <PaginatedCard steps={toolInputs} onComplete={onOptionClick} />
-      </div>
-    );
-  }
-
-  // Single active card
-  const finalBody = toolOptions.length > 0 ? (singleToolInput?.question ?? textContent) : regexBody;
-  const finalOptions = toolOptions.length > 0 ? toolOptions : regexOptions;
-  const finalMultiSelect = toolOptions.length > 0 ? (singleToolInput?.multiSelect ?? false) : regexMulti;
-
-  return (
-    <div>
-      {finalBody && (
-        <div className="prose" style={{ fontSize: TYPE.scale.md, lineHeight: TYPE.leading.loose, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
-          <Markdown>{finalBody}</Markdown>
-        </div>
-      )}
-      {finalOptions.length > 0 && (
+    if (finalOptions.length > 0) {
+      renderedParts.push(
         <OptionCards
+          key="options"
           options={finalOptions}
           isMultiSelect={finalMultiSelect}
-          allowCustom={singleToolInput?.allowCustom}
-          skippable={singleToolInput?.skippable}
+          allowCustom={singleInput?.allowCustom}
+          skippable={singleInput?.skippable}
           onOptionClick={onOptionClick}
-        />
-      )}
-    </div>
-  );
+        />,
+      );
+    }
+  }
+
+  return <div>{renderedParts}</div>;
+}
+
+/** Render a single non-text, non-request_input part */
+function renderPart(part: Record<string, unknown>, idx: number): React.ReactNode {
+  if (part.type === "reasoning") {
+    const text = (part.text as string) ?? (part.reasoning as string) ?? "";
+    const state = (part.state as string) ?? "done";
+    if (!text) return null;
+    return <ReasoningBlock key={`reasoning-${idx}`} text={text} state={state} />;
+  }
+
+  if (part.type === "step-start") {
+    return (
+      <div
+        key={`step-${idx}`}
+        style={{
+          height: 1,
+          background: COLORS.border,
+          margin: "8px 0",
+          opacity: 0.5,
+        }}
+      />
+    );
+  }
+
+  if (part.type === "text") {
+    // Standalone text render (used in past collapsed messages)
+    const text = part.text as string;
+    if (!text?.trim()) return null;
+    return (
+      <div
+        key={`text-${idx}`}
+        className="prose"
+        style={{
+          fontSize: TYPE.scale.md,
+          lineHeight: TYPE.leading.loose,
+          color: COLORS.textSecondary,
+          fontFamily: TYPE.body,
+        }}
+      >
+        <Markdown>{text}</Markdown>
+      </div>
+    );
+  }
+
+  // Tool activity row
+  const toolName = getPartToolName(part);
+  if (toolName && TOOL_LABELS[toolName]) {
+    return (
+      <ToolActivityRow key={`tool-${idx}`} toolName={toolName} state={part.state as string} output={part.output} />
+    );
+  }
+
+  return null;
 }
 
 /** Resolve a selectedKey back to a human-readable label */
-function resolveSelectedLabel(
-  selected: string,
-  options: Array<{ key: string; label: string }>,
-): string {
+function resolveSelectedLabel(selected: string, options: Array<{ key: string; label: string }>): string {
   const keyToLabel = new Map(options.map((o) => [o.key, o.label]));
   // Try full match first
   if (keyToLabel.has(selected)) return keyToLabel.get(selected)!;
@@ -955,20 +1171,31 @@ function PaginatedCard({
   onComplete?: (value: string) => void;
 }) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<Map<number, { keys: string[]; customText?: string; skipped?: boolean }>>(new Map);
+  const [answers, setAnswers] = useState<Map<number, { keys: string[]; customText?: string; skipped?: boolean }>>(
+    new Map(),
+  );
 
   const step = steps[currentStep];
   const isLast = currentStep === steps.length - 1;
   const currentAnswer = answers.get(currentStep);
-  const hasAnswer = currentAnswer && (currentAnswer.keys.length > 0 || currentAnswer.customText || currentAnswer.skipped);
+  const _hasAnswer =
+    currentAnswer && (currentAnswer.keys.length > 0 || currentAnswer.customText || currentAnswer.skipped);
 
-  const handleStepAnswer = (keys: string[], customText?: string) => {
-    setAnswers((prev) => {
-      const next = new Map(prev);
-      next.set(currentStep, { keys, customText });
-      return next;
-    });
-  };
+  const handleStepAnswer = useCallback(
+    (keys: string[], customText?: string) => {
+      setAnswers((prev) => {
+        // Avoid re-render if values haven't changed (breaks potential effect loops)
+        const existing = prev.get(currentStep);
+        const sameKeys = existing?.keys.join(",") === keys.join(",");
+        const sameCustom = (existing?.customText ?? undefined) === (customText ?? undefined);
+        if (sameKeys && sameCustom) return prev;
+        const next = new Map(prev);
+        next.set(currentStep, { keys, customText });
+        return next;
+      });
+    },
+    [currentStep],
+  );
 
   const handleSkip = () => {
     setAnswers((prev) => {
@@ -1020,11 +1247,35 @@ function PaginatedCard({
       }}
     >
       {/* Header with question + progress */}
-      <div style={{ padding: "14px 16px 10px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <span style={{ fontSize: TYPE.scale.base, fontFamily: TYPE.body, fontWeight: TYPE.weight.medium, color: COLORS.text, lineHeight: TYPE.leading.snug }}>
+      <div
+        style={{
+          padding: "14px 16px 10px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+        }}
+      >
+        <span
+          style={{
+            fontSize: TYPE.scale.base,
+            fontFamily: TYPE.body,
+            fontWeight: TYPE.weight.medium,
+            color: COLORS.text,
+            lineHeight: TYPE.leading.snug,
+          }}
+        >
           {step.question}
         </span>
-        <span style={{ fontSize: TYPE.scale.xs, fontFamily: TYPE.body, color: COLORS.textDim, flexShrink: 0, whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            fontSize: TYPE.scale.xs,
+            fontFamily: TYPE.body,
+            color: COLORS.textDim,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+          }}
+        >
           {currentStep + 1} / {steps.length}
         </span>
       </div>
@@ -1044,6 +1295,61 @@ function PaginatedCard({
         isLast={isLast}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InfoTooltip — "i" icon with hover tooltip for option descriptions
+// ---------------------------------------------------------------------------
+
+function InfoTooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <span
+      role="tooltip"
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
+      <Info
+        size={16}
+        weight="regular"
+        style={{
+          color: COLORS.textDim,
+          cursor: "help",
+          transition: `color ${MOTION.duration} ${MOTION.ease}`,
+          ...(show ? { color: COLORS.textSecondary } : {}),
+        }}
+      />
+      {show && (
+        <span
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            right: 0,
+            background: COLORS.surfaceHover,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: RADIUS.md,
+            padding: "8px 12px",
+            fontSize: TYPE.scale.xs,
+            fontFamily: TYPE.body,
+            fontWeight: TYPE.weight.regular,
+            color: COLORS.textSecondary,
+            lineHeight: TYPE.leading.normal,
+            whiteSpace: "normal",
+            width: 240,
+            zIndex: 10,
+            pointerEvents: "none",
+            animation: "fadeIn 0.15s ease both",
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -1097,12 +1403,16 @@ function OptionCards({
     }
   }, [toggled, customActive, customText, isPaginated, onSelectionChange]);
 
-  // Reset state when paginated step changes
+  // Stable key derived from option keys — only changes on step navigation, not on
+  // every parent re-render. Using initialKeys (an array ref) as a dep would cause an
+  // infinite loop: sync effect → parent re-render → new initialKeys ref → reset → sync → …
+  const optionsKey = options.map((o) => o.key).join(",");
   useEffect(() => {
     setToggled(new Set(initialKeys ?? options.filter((o) => o.selected).map((o) => o.key)));
     setCustomActive(initialKeys?.includes("_custom") ?? false);
     setCustomText(initialCustomText ?? "");
-  }, [options, initialKeys, initialCustomText]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   const handleToggle = (key: string) => {
     if (!isActive) return;
@@ -1114,7 +1424,10 @@ function OptionCards({
         else next.add(key);
         return next;
       });
-      if (customActive) { setCustomActive(false); setCustomText(""); }
+      if (customActive) {
+        setCustomActive(false);
+        setCustomText("");
+      }
     } else {
       // Single-select in non-paginated mode: send immediately
       if (!isPaginated) {
@@ -1124,7 +1437,10 @@ function OptionCards({
       }
       // Single-select in paginated mode: save locally
       setToggled(new Set([key]));
-      if (customActive) { setCustomActive(false); setCustomText(""); }
+      if (customActive) {
+        setCustomActive(false);
+        setCustomText("");
+      }
     }
   };
 
@@ -1164,21 +1480,28 @@ function OptionCards({
 
   const hasSelection = toggled.size > 0 || (customActive && customText.trim().length > 0);
   const showFooter = isActive && (isMultiSelect || isPaginated || skippable || (customActive && customText.trim()));
-  const totalOptions = options.length + (allowCustom ? 1 : 0);
+  const _totalOptions = options.length + (allowCustom ? 1 : 0);
 
   return (
-    <div style={isPaginated ? {} : {
-      marginTop: 14,
-      background: COLORS.surface,
-      border: `1px solid ${COLORS.border}`,
-      borderRadius: RADIUS.lg,
-      overflow: "hidden",
-    }}>
+    <div
+      style={
+        isPaginated
+          ? {}
+          : {
+              marginTop: 14,
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: RADIUS.lg,
+              overflow: "hidden",
+            }
+      }
+    >
       {options.map((opt, idx) => {
         const isOn = toggled.has(opt.key);
         const isLastOption = !allowCustom && idx === options.length - 1 && !showFooter;
         return (
           <button
+            type="button"
             key={opt.key}
             className={isActive ? "btn" : undefined}
             onClick={() => handleToggle(opt.key)}
@@ -1191,6 +1514,7 @@ function OptionCards({
               padding: "14px 16px",
               background: isOn ? COLORS.accentDim : "transparent",
               border: "none",
+              borderLeft: `3px solid ${isOn ? COLORS.accent : "transparent"}`,
               borderBottom: isLastOption ? "none" : `1px solid ${COLORS.border}`,
               color: COLORS.text,
               fontSize: TYPE.scale.base,
@@ -1200,23 +1524,58 @@ function OptionCards({
               transition: `all ${MOTION.duration} ${MOTION.ease}`,
               textAlign: "left",
             }}
-            onMouseEnter={(e) => { if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : COLORS.surfaceHover; }}
-            onMouseLeave={(e) => { if (isActive) e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent"; }}
+            onMouseEnter={(e) => {
+              if (!isActive) return;
+              e.currentTarget.style.background = isOn ? COLORS.accentDim : COLORS.surfaceHover;
+              if (!isOn) e.currentTarget.style.borderLeftColor = COLORS.accent;
+              const indicator = e.currentTarget.querySelector("[data-indicator]") as HTMLElement | null;
+              if (indicator && !isOn) {
+                indicator.style.borderColor = COLORS.accent;
+                indicator.style.background = COLORS.accent;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) return;
+              e.currentTarget.style.background = isOn ? COLORS.accentDim : "transparent";
+              if (!isOn) e.currentTarget.style.borderLeftColor = "transparent";
+              const indicator = e.currentTarget.querySelector("[data-indicator]") as HTMLElement | null;
+              if (indicator && !isOn) {
+                indicator.style.borderColor = COLORS.textDim;
+                indicator.style.background = "transparent";
+              }
+            }}
           >
-            <span style={{
-              width: 18, height: 18,
-              borderRadius: isMultiSelect ? 4 : "50%",
-              border: isOn ? "none" : `2px solid ${COLORS.textDim}`,
-              background: isOn ? COLORS.accent : "transparent",
-              color: COLORS.white, fontSize: 11,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-              transition: `all ${MOTION.duration} ${MOTION.ease}`,
-            }}>
+            <span
+              data-indicator
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: isMultiSelect ? 4 : "50%",
+                border: isOn ? "none" : `2px solid ${COLORS.textDim}`,
+                background: isOn ? COLORS.accent : "transparent",
+                color: COLORS.white,
+                fontSize: 11,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                transition: `all ${MOTION.duration} ${MOTION.ease}`,
+              }}
+            >
               {isOn ? "✓" : ""}
             </span>
-            <span style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug }} title={opt.description ?? undefined}>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                lineHeight: TYPE.leading.snug,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
               {opt.label}
+              {opt.description && <InfoTooltip text={opt.description} />}
             </span>
           </button>
         );
@@ -1224,7 +1583,8 @@ function OptionCards({
 
       {/* "Something else" row with inline text input */}
       {allowCustom && isActive && (
-        <div
+        <button
+          type="button"
           key="_custom"
           className="btn"
           onClick={!customActive ? handleCustomClick : undefined}
@@ -1235,25 +1595,31 @@ function OptionCards({
             width: "100%",
             padding: "14px 16px",
             background: customActive ? COLORS.accentDim : "transparent",
+            border: "none",
             borderBottom: showFooter ? `1px solid ${COLORS.border}` : "none",
             cursor: customActive ? "default" : "pointer",
             transition: `all ${MOTION.duration} ${MOTION.ease}`,
+            textAlign: "left",
           }}
-          onMouseEnter={(e) => { if (!customActive) e.currentTarget.style.background = COLORS.surfaceHover; }}
-          onMouseLeave={(e) => { if (!customActive) e.currentTarget.style.background = customActive ? COLORS.accentDim : "transparent"; }}
+          onMouseEnter={(e) => {
+            if (!customActive) e.currentTarget.style.background = COLORS.surfaceHover;
+          }}
+          onMouseLeave={(e) => {
+            if (!customActive) e.currentTarget.style.background = "transparent";
+          }}
         >
-          <span style={{
-            width: 18, height: 18,
-            borderRadius: isMultiSelect ? 4 : "50%",
-            border: customActive ? "none" : `2px solid ${COLORS.textDim}`,
-            background: customActive ? COLORS.accent : "transparent",
-            color: COLORS.white, fontSize: 11,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-            transition: `all ${MOTION.duration} ${MOTION.ease}`,
-          }}>
-            {customActive ? "✓" : ""}
-          </span>
+          <span
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              border: `2px solid ${customActive ? COLORS.accent : COLORS.borderStrong}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          />
           {customActive ? (
             <input
               ref={customInputRef}
@@ -1263,21 +1629,25 @@ function OptionCards({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && customText.trim()) handleConfirm();
               }}
-              placeholder="Something else..."
+              placeholder="E.g., Generate a daily report..."
               style={{
-                flex: 1, minWidth: 0,
-                background: "transparent", border: "none", outline: "none",
-                color: COLORS.text, fontSize: TYPE.scale.base,
-                fontFamily: TYPE.body, fontWeight: TYPE.weight.medium,
-                lineHeight: TYPE.leading.snug,
+                flex: 1,
+                minWidth: 0,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: COLORS.text,
+                fontSize: TYPE.scale.base,
+                fontFamily: TYPE.body,
+                padding: 0,
               }}
             />
           ) : (
-            <span style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug, color: COLORS.textDim }}>
+            <span style={{ flex: 1, minWidth: 0, lineHeight: TYPE.leading.snug, color: COLORS.textSecondary }}>
               Something else...
             </span>
           )}
-        </div>
+        </button>
       )}
 
       {/* Footer: Skip / Confirm|Next|Submit */}
@@ -1293,6 +1663,7 @@ function OptionCards({
         >
           {skippable && (
             <button
+              type="button"
               className="btn"
               onClick={handleSkip}
               style={{
@@ -1306,13 +1677,18 @@ function OptionCards({
                 fontFamily: TYPE.body,
                 cursor: "pointer",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.text; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textDim; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = COLORS.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = COLORS.textDim;
+              }}
             >
               Skip
             </button>
           )}
           <button
+            type="button"
             className="btn"
             onClick={handleConfirm}
             disabled={!hasSelection}
@@ -1328,12 +1704,14 @@ function OptionCards({
               cursor: hasSelection ? "pointer" : "default",
               transition: `all ${MOTION.duration} ${MOTION.ease}`,
             }}
-            onMouseEnter={(e) => { if (hasSelection) e.currentTarget.style.background = COLORS.accentBright; }}
-            onMouseLeave={(e) => { if (hasSelection) e.currentTarget.style.background = COLORS.accent; }}
+            onMouseEnter={(e) => {
+              if (hasSelection) e.currentTarget.style.background = COLORS.accentBright;
+            }}
+            onMouseLeave={(e) => {
+              if (hasSelection) e.currentTarget.style.background = COLORS.accent;
+            }}
           >
-            {isPaginated
-              ? (isLast ? "Submit" : "Next")
-              : `Confirm${toggled.size > 0 ? ` (${toggled.size})` : ""}`}
+            {isPaginated ? (isLast ? "Submit" : "Next") : `Confirm${toggled.size > 0 ? ` (${toggled.size})` : ""}`}
           </button>
         </div>
       )}

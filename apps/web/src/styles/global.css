@@ -4,86 +4,116 @@
    ═══════════════════════════════════════════════════ */
 
 /* Fonts: Satoshi (headings) + General Sans (body) via Fontshare */
-@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&f[]=general-sans@400,500,600&display=swap');
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&f[]=general-sans@400,500,600&display=swap");
 
 /* ── Design Tokens ── */
 
 :root {
   /* ── Palette: Warm neutrals with plum undertone ── */
-  --bg:             #0E0D12;
-  --bg-raised:      #15141A;
-  --surface:        #1B1A21;
-  --surface-hover:  #222128;
-  --border:         #2B2935;
-  --border-strong:  #3A3845;
+  --bg: #0e0d12;
+  --bg-raised: #15141a;
+  --surface: #1b1a21;
+  --surface-hover: #222128;
+  --border: #2b2935;
+  --border-strong: #3a3845;
 
   /* ── Text: Warm off-whites, never pure white ── */
-  --text:           #ECEAF2;
-  --text-secondary: #9B97AB;
-  --text-dim:       #6B6780;
+  --text: #eceaf2;
+  --text-secondary: #9b97ab;
+  --text-dim: #6b6780;
 
   /* ── Accent: Periwinkle blue — balanced, clear, distinctive ── */
-  --accent:         #5A7ACD;
-  --accent-bright:  #7090E0;
-  --accent-dim:     rgba(90, 122, 205, 0.14);
-  --accent-subtle:  rgba(90, 122, 205, 0.06);
+  --accent: #5a7acd;
+  --accent-bright: #7090e0;
+  --accent-dim: rgba(90, 122, 205, 0.14);
+  --accent-subtle: rgba(90, 122, 205, 0.06);
   --accent-surface: rgba(90, 122, 205, 0.04);
-  --accent-border:  rgba(90, 122, 205, 0.18);
+  --accent-border: rgba(90, 122, 205, 0.18);
 
   /* ── Semantic: Present, not shouting ── */
-  --orange:         #E0905A;
-  --orange-dim:     rgba(224, 144, 90, 0.12);
-  --orange-subtle:  rgba(224, 144, 90, 0.05);
-  --orange-border:  rgba(224, 144, 90, 0.22);
-  --green:          #6CB48A;
-  --green-dim:      rgba(108, 180, 138, 0.10);
-  --green-subtle:   rgba(108, 180, 138, 0.05);
-  --green-border:   rgba(108, 180, 138, 0.20);
-  --red:            #D97272;
-  --red-dim:        rgba(217, 114, 114, 0.10);
-  --red-subtle:     rgba(217, 114, 114, 0.05);
-  --red-border:     rgba(217, 114, 114, 0.20);
+  --orange: #e0905a;
+  --orange-dim: rgba(224, 144, 90, 0.12);
+  --orange-subtle: rgba(224, 144, 90, 0.05);
+  --orange-border: rgba(224, 144, 90, 0.22);
+  --green: #6cb48a;
+  --green-dim: rgba(108, 180, 138, 0.1);
+  --green-subtle: rgba(108, 180, 138, 0.05);
+  --green-border: rgba(108, 180, 138, 0.2);
+  --red: #d97272;
+  --red-dim: rgba(217, 114, 114, 0.1);
+  --red-subtle: rgba(217, 114, 114, 0.05);
+  --red-border: rgba(217, 114, 114, 0.2);
 
   /* ── Functional: Tool mode colors ── */
-  --read:           #7CA8C4;
-  --read-dim:       rgba(124, 168, 196, 0.10);
-  --write:          #C49B7C;
-  --write-dim:      rgba(196, 155, 124, 0.10);
+  --read: #7ca8c4;
+  --read-dim: rgba(124, 168, 196, 0.1);
+  --write: #c49b7c;
+  --write-dim: rgba(196, 155, 124, 0.1);
 
   /* ── Spacing: 8px grid ── */
-  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;
-  --sp-5: 24px; --sp-6: 32px; --sp-8: 48px;  --sp-10: 64px;
-  --sp-12: 80px; --sp-16: 120px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+  --sp-10: 64px;
+  --sp-12: 80px;
+  --sp-16: 120px;
 
   /* ── Type ── */
-  --font-display: 'Satoshi', system-ui, sans-serif;
-  --font-body:    'General Sans', system-ui, sans-serif;
-  --font-mono:    'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --font-display: "Satoshi", system-ui, sans-serif;
+  --font-body: "General Sans", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Consolas", monospace;
 
-  --text-xs:   0.6875rem;  --text-sm:   0.8125rem;  --text-base: 0.875rem;
-  --text-md:   1rem;        --text-lg:   1.25rem;     --text-xl:   1.875rem;
-  --text-2xl:  2.75rem;     --text-3xl:  3.5rem;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.875rem;
+  --text-2xl: 2.75rem;
+  --text-3xl: 3.5rem;
 
-  --leading-tight: 1.15; --leading-snug: 1.3; --leading-normal: 1.6; --leading-loose: 1.75;
-  --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600; --weight-bold: 700;
-  --tracking-tight: -0.03em; --tracking-normal: 0; --tracking-wide: 0.06em;
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.6;
+  --leading-loose: 1.75;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --tracking-tight: -0.03em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
 
   /* ── Radii ── */
-  --radius-sm: 3px; --radius-md: 6px; --radius-lg: 8px; --radius-pill: 99px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 99px;
 
   /* ── Motion ── */
-  --ease:          cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration:      0.15s;
+  --duration: 0.15s;
   --duration-slow: 0.3s;
 }
 
 /* ── Reset ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 /* ── Base ── */
-html, body {
+html,
+body {
   height: 100%;
   font-family: var(--font-body);
   font-size: var(--text-base);
@@ -95,7 +125,12 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-display);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
@@ -109,7 +144,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ── Grain texture ── */
 body::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -124,13 +159,13 @@ body::before {
 
 /* Button press — just enough to feel the click */
 .btn:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   transition-duration: 0.05s;
 }
 
 /* Pill selector — hover lifts border, active presses */
 .pill:hover {
-  border-color: var(--text-dim) !important;
+  border-color: var(--text-dim);
 }
 .pill:active {
   transform: translateY(1px);
@@ -138,14 +173,15 @@ body::before {
 }
 
 /* Input/textarea focus ring */
-.input:focus, .textarea:focus {
-  border-color: var(--accent) !important;
+.input:focus,
+.textarea:focus {
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-subtle);
 }
 
 /* Hero input — focus lifts the outer container border */
 .hero-input:focus-within {
-  border-color: var(--accent) !important;
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-subtle);
 }
 
@@ -167,7 +203,8 @@ body::before {
 .prose em {
   font-style: italic;
 }
-.prose ul, .prose ol {
+.prose ul,
+.prose ol {
   margin: 0.4em 0;
   padding-left: 1.4em;
 }
@@ -195,34 +232,64 @@ body::before {
 
 /* ── Keyframes ── */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 @keyframes heartbeat {
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50%      { transform: scale(1.3); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
 }
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* Thinking shimmer — text gets a sliding gradient mask */
 .thinking-shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--text-dim) 0%,
-    var(--text-secondary) 40%,
-    var(--text-dim) 80%
-  );
+  background: linear-gradient(90deg, var(--text-dim) 0%, var(--text-secondary) 40%, var(--text-dim) 80%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -232,10 +299,12 @@ body::before {
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 }

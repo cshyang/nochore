@@ -1,12 +1,8 @@
-import {
-  createFileRoute,
-  Outlet,
-  useNavigate,
-} from "@tanstack/react-router";
-import { COLORS } from "~/lib/colors";
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { ProjectSidebar } from "~/components/ProjectSidebar";
-import { getProject } from "~/server/projects";
+import { COLORS } from "~/lib/colors";
 import type { ProjectView } from "~/lib/types";
+import { getProject } from "~/server/projects";
 
 export const Route = createFileRoute("/$projectId")({
   loader: async ({ params }) => {
@@ -22,11 +18,7 @@ function ProjectLayout() {
   const project = rawProject as ProjectView | null;
 
   if (!project) {
-    return (
-      <div style={{ padding: 48, color: COLORS.text }}>
-        Project not found.
-      </div>
-    );
+    return <div style={{ padding: 48, color: COLORS.text }}>Project not found.</div>;
   }
 
   return (

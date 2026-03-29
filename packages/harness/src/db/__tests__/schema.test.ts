@@ -1,16 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "../client";
-import {
-  projects,
-  agents,
-  agentEvents,
-  lessons,
-  runs,
-  pendingActions,
-  chatMessages,
-  connections,
-} from "../schema";
-import { eq, and } from "drizzle-orm";
+import { agentEvents, agents, chatMessages, connections, lessons, pendingActions, projects, runs } from "../schema";
 
 describe("Database schema", () => {
   let db: ReturnType<typeof createTestDb>;
@@ -30,11 +21,7 @@ describe("Database schema", () => {
           createdAt: Date.now(),
         })
         .run();
-      const result = db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, "proj_001"))
-        .all();
+      const result = db.select().from(projects).where(eq(projects.id, "proj_001")).all();
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe("Acme Corp");
     });
@@ -43,9 +30,7 @@ describe("Database schema", () => {
   describe("agents", () => {
     it("inserts and queries an agent", () => {
       // First insert project (foreign key)
-      db.insert(projects)
-        .values({ id: "proj_001", name: "Test", createdAt: Date.now() })
-        .run();
+      db.insert(projects).values({ id: "proj_001", name: "Test", createdAt: Date.now() }).run();
       db.insert(agents)
         .values({
           id: "agent_001",
@@ -58,11 +43,7 @@ describe("Database schema", () => {
           updatedAt: Date.now(),
         })
         .run();
-      const result = db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, "agent_001"))
-        .all();
+      const result = db.select().from(agents).where(eq(agents.id, "agent_001")).all();
       expect(result).toHaveLength(1);
     });
   });
@@ -97,11 +78,7 @@ describe("Database schema", () => {
           },
         ])
         .run();
-      const result = db
-        .select()
-        .from(agentEvents)
-        .where(eq(agentEvents.agentId, "agent_001"))
-        .all();
+      const result = db.select().from(agentEvents).where(eq(agentEvents.agentId, "agent_001")).all();
       expect(result).toHaveLength(2);
     });
 
@@ -126,11 +103,7 @@ describe("Database schema", () => {
           },
         ])
         .run();
-      const result = db
-        .select()
-        .from(agentEvents)
-        .where(eq(agentEvents.type, "skill_output"))
-        .all();
+      const result = db.select().from(agentEvents).where(eq(agentEvents.type, "skill_output")).all();
       expect(result).toHaveLength(1);
     });
   });
@@ -162,9 +135,7 @@ describe("Database schema", () => {
       const result = db
         .select()
         .from(lessons)
-        .where(
-          and(eq(lessons.agentId, "agent_001"), eq(lessons.scope, "budget"))
-        )
+        .where(and(eq(lessons.agentId, "agent_001"), eq(lessons.scope, "budget")))
         .all();
       expect(result).toHaveLength(1);
       expect(result[0].content).toBe("Budget protected Q2");
@@ -195,11 +166,7 @@ describe("Database schema", () => {
           },
         ])
         .run();
-      const all = db
-        .select()
-        .from(lessons)
-        .where(eq(lessons.agentId, "agent_001"))
-        .all();
+      const all = db.select().from(lessons).where(eq(lessons.agentId, "agent_001")).all();
       expect(all).toHaveLength(2);
       expect(all.find((l) => l.id === "les_001")?.expiresAt).toBeTruthy();
       expect(all.find((l) => l.id === "les_002")?.expiresAt).toBeNull();
@@ -218,11 +185,7 @@ describe("Database schema", () => {
           result: JSON.stringify({ proposals: 2, executed: 1 }),
         })
         .run();
-      const result = db
-        .select()
-        .from(runs)
-        .where(eq(runs.agentId, "agent_001"))
-        .all();
+      const result = db.select().from(runs).where(eq(runs.agentId, "agent_001")).all();
       expect(result).toHaveLength(1);
     });
   });
@@ -242,11 +205,7 @@ describe("Database schema", () => {
           createdAt: Date.now(),
         })
         .run();
-      const result = db
-        .select()
-        .from(pendingActions)
-        .where(eq(pendingActions.status, "pending"))
-        .all();
+      const result = db.select().from(pendingActions).where(eq(pendingActions.status, "pending")).all();
       expect(result).toHaveLength(1);
     });
   });
@@ -257,15 +216,17 @@ describe("Database schema", () => {
       db.insert(chatMessages)
         .values([
           { id: "msg_001", agentId: "agent_001", role: "user", content: "Why did CPL spike?", createdAt: now },
-          { id: "msg_002", agentId: "agent_001", role: "assistant", content: "CPL spiked due to...", createdAt: now + 1000 },
+          {
+            id: "msg_002",
+            agentId: "agent_001",
+            role: "assistant",
+            content: "CPL spiked due to...",
+            createdAt: now + 1000,
+          },
           { id: "msg_003", agentId: "agent_002", role: "user", content: "Different agent", createdAt: now },
         ])
         .run();
-      const result = db
-        .select()
-        .from(chatMessages)
-        .where(eq(chatMessages.agentId, "agent_001"))
-        .all();
+      const result = db.select().from(chatMessages).where(eq(chatMessages.agentId, "agent_001")).all();
       expect(result).toHaveLength(2);
     });
 
@@ -280,11 +241,7 @@ describe("Database schema", () => {
           createdAt: Date.now(),
         })
         .run();
-      const result = db
-        .select()
-        .from(chatMessages)
-        .where(eq(chatMessages.role, "tool"))
-        .all();
+      const result = db.select().from(chatMessages).where(eq(chatMessages.role, "tool")).all();
       expect(result).toHaveLength(1);
       expect(result[0].toolCallId).toBe("call_abc123");
     });
@@ -292,9 +249,7 @@ describe("Database schema", () => {
 
   describe("connections", () => {
     it("inserts and queries a connection", () => {
-      db.insert(projects)
-        .values({ id: "proj_001", name: "Test", createdAt: Date.now() })
-        .run();
+      db.insert(projects).values({ id: "proj_001", name: "Test", createdAt: Date.now() }).run();
       db.insert(connections)
         .values({
           id: "conn_001",
@@ -306,11 +261,7 @@ describe("Database schema", () => {
           createdAt: Date.now(),
         })
         .run();
-      const result = db
-        .select()
-        .from(connections)
-        .where(eq(connections.provider, "google_ads"))
-        .all();
+      const result = db.select().from(connections).where(eq(connections.provider, "google_ads")).all();
       expect(result).toHaveLength(1);
     });
   });

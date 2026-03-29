@@ -1,11 +1,5 @@
+import { ArrowRight, CheckCircle, CircleNotch, FolderSimplePlus, Sparkle } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowRight,
-  CheckCircle,
-  CircleNotch,
-  FolderSimplePlus,
-  Sparkle,
-} from "@phosphor-icons/react";
 import { COLORS, RADIUS } from "~/lib/colors";
 import type { SkillView } from "~/lib/types";
 
@@ -14,10 +8,7 @@ type SetupWorkspaceProps = {
   onCreateProject?: (name: string) => Promise<void>;
 };
 
-export function SetupWorkspace({
-  availableSkills,
-  onCreateProject,
-}: SetupWorkspaceProps) {
+export function SetupWorkspace({ availableSkills, onCreateProject }: SetupWorkspaceProps) {
   const [projectName, setProjectName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,8 +106,8 @@ export function SetupWorkspace({
                 lineHeight: 1.6,
               }}
             >
-              Projects give your agents a shared workspace for goals, approvals, and runs.
-              Start with a single project now—you can add more as your workflows grow.
+              Projects give your agents a shared workspace for goals, approvals, and runs. Start with a single project
+              now—you can add more as your workflows grow.
             </p>
           </div>
 
@@ -157,21 +148,16 @@ export function SetupWorkspace({
               }}
             />
             <button
+              type="button"
               onClick={() => void handleSubmit()}
               disabled={!projectName.trim() || submitting || !onCreateProject}
               style={{
                 border: "none",
                 borderRadius: RADIUS.md,
                 padding: "10px 14px",
-                background:
-                  !projectName.trim() || submitting || !onCreateProject
-                    ? COLORS.border
-                    : COLORS.accent,
+                background: !projectName.trim() || submitting || !onCreateProject ? COLORS.border : COLORS.accent,
                 color: COLORS.white,
-                cursor:
-                  !projectName.trim() || submitting || !onCreateProject
-                    ? "not-allowed"
-                    : "pointer",
+                cursor: !projectName.trim() || submitting || !onCreateProject ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
@@ -197,12 +183,7 @@ export function SetupWorkspace({
               "Use skills to shape what each agent can do safely.",
             ].map((item) => (
               <div key={item} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <CheckCircle
-                  size={18}
-                  weight="duotone"
-                  color={COLORS.green}
-                  style={{ marginTop: 2, flexShrink: 0 }}
-                />
+                <CheckCircle size={18} weight="duotone" color={COLORS.green} style={{ marginTop: 2, flexShrink: 0 }} />
                 <span style={{ color: COLORS.textSecondary, lineHeight: 1.5 }}>{item}</span>
               </div>
             ))}

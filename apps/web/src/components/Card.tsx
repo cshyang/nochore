@@ -1,4 +1,4 @@
-import { COLORS, RADIUS, MOTION } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS } from "~/lib/colors";
 
 export function Card({
   children,
@@ -9,8 +9,11 @@ export function Card({
   style?: React.CSSProperties;
   onClick?: () => void;
 }) {
+  const Component = onClick ? "button" : "div";
+
   return (
-    <div
+    <Component
+      type={onClick ? "button" : undefined}
       onClick={onClick}
       style={{
         background: COLORS.surface,
@@ -19,16 +22,19 @@ export function Card({
         overflow: "hidden",
         cursor: onClick ? "pointer" : "default",
         transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
+        textAlign: onClick ? "left" : undefined,
+        width: onClick ? "100%" : undefined,
+        display: onClick ? "block" : undefined,
         ...style,
       }}
-      onMouseEnter={(e) =>
-        onClick && (e.currentTarget.style.borderColor = COLORS.borderStrong)
-      }
-      onMouseLeave={(e) =>
-        onClick && (e.currentTarget.style.borderColor = COLORS.border)
-      }
+      onMouseEnter={(e) => {
+        if (onClick) e.currentTarget.style.borderColor = COLORS.borderStrong;
+      }}
+      onMouseLeave={(e) => {
+        if (onClick) e.currentTarget.style.borderColor = COLORS.border;
+      }}
     >
       {children}
-    </div>
+    </Component>
   );
 }

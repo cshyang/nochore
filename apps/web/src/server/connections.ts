@@ -224,7 +224,8 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
       // composio.tools.* is the SDK wrapper for execution — no list() method.
       const results = await Promise.all(
         SUPPORTED_PROVIDERS.map((provider) =>
-          catalogClient.tools.list({ toolkit_slug: provider, limit: 50 })
+          catalogClient.tools
+            .list({ toolkit_slug: provider, limit: 50 })
             .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
             .catch(() => [] as ComposioToolMeta[]),
         ),
@@ -238,47 +239,58 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
 
 export const fetchToolkitSummaries = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
-  .handler(async (): Promise<Array<{
-    slug: string;
-    name: string;
-    description: string;
-    categories: string[];
-    logo: string | null;
-  }>> => {
-    try {
-      const composio = await createComposioClient();
+  .handler(
+    async (): Promise<
+      Array<{
+        slug: string;
+        name: string;
+        description: string;
+        categories: string[];
+        logo: string | null;
+      }>
+    > => {
+      try {
+        const composio = await createComposioClient();
 
-      const results = await Promise.allSettled(
-        SUPPORTED_PROVIDERS.map((slug) =>
-          composio.toolkits.get(slug).then((tk) => ({
-            slug: tk.slug,
-            name: tk.name,
-            description: (tk as unknown as { meta?: { description?: string } }).meta?.description ?? "",
-            categories: ((tk as unknown as { meta?: { categories?: Array<{ slug: string; name: string }> } }).meta?.categories ?? []).map((c) => c.name),
-            logo: (tk as unknown as { meta?: { logo?: string } }).meta?.logo ?? null,
-          })),
-        ),
-      );
+        const results = await Promise.allSettled(
+          SUPPORTED_PROVIDERS.map((slug) =>
+            composio.toolkits.get(slug).then((tk) => ({
+              slug: tk.slug,
+              name: tk.name,
+              description: (tk as unknown as { meta?: { description?: string } }).meta?.description ?? "",
+              categories: (
+                (tk as unknown as { meta?: { categories?: Array<{ slug: string; name: string }> } }).meta?.categories ??
+                []
+              ).map((c) => c.name),
+              logo: (tk as unknown as { meta?: { logo?: string } }).meta?.logo ?? null,
+            })),
+          ),
+        );
 
-      return results
-        .filter((r): r is PromiseFulfilledResult<{ slug: string; name: string; description: string; categories: string[]; logo: string | null }> =>
-          r.status === "fulfilled",
-        )
-        .map((r) => r.value);
-    } catch {
-      return [];
-    }
-  });
+        return results
+          .filter(
+            (
+              r,
+            ): r is PromiseFulfilledResult<{
+              slug: string;
+              name: string;
+              description: string;
+              categories: string[];
+              logo: string | null;
+            }> => r.status === "fulfilled",
+          )
+          .map((r) => r.value);
+      } catch {
+        return [];
+      }
+    },
+  );
 
 export const listConnections = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
   .handler(async ({ data }) => {
     const { db } = getProjectDeps(data.projectId);
-    const rows = db
-      .select()
-      .from(connections)
-      .where(eq(connections.projectId, data.projectId))
-      .all();
+    const rows = db.select().from(connections).where(eq(connections.projectId, data.projectId)).all();
 
     return jsonSafe(
       rows.map((row) => ({
@@ -290,44 +302,20 @@ export const listConnections = createServerFn({ method: "GET" })
     );
   });
 
-function getLatestConnection(
-  db: ProjectDb,
-  projectId: string,
-  provider: string,
-  status?: string,
-) {
+function getLatestConnection(db: ProjectDb, projectId: string, provider: string, status?: string) {
   return listConnectionsForProvider(db, projectId, provider, status).at(-1);
 }
 
-function listConnectionsForProvider(
-  db: ProjectDb,
-  projectId: string,
-  provider: string,
-  status?: string,
-) {
+function listConnectionsForProvider(db: ProjectDb, projectId: string, provider: string, status?: string) {
   const filter = status
-    ? and(
-      eq(connections.projectId, projectId),
-      eq(connections.provider, provider),
-      eq(connections.status, status),
-    )
-    : and(
-      eq(connections.projectId, projectId),
-      eq(connections.provider, provider),
-    );
+    ? and(eq(connections.projectId, projectId), eq(connections.provider, provider), eq(connections.status, status))
+    : and(eq(connections.projectId, projectId), eq(connections.provider, provider));
 
-  return db
-    .select()
-    .from(connections)
-    .where(filter)
-    .all();
+  return db.select().from(connections).where(filter).all();
 }
 
 function setConnectionStatus(db: ProjectDb, connectionId: string, status: string) {
-  db.update(connections)
-    .set({ status, updatedAt: Date.now() })
-    .where(eq(connections.id, connectionId))
-    .run();
+  db.update(connections).set({ status, updatedAt: Date.now() }).where(eq(connections.id, connectionId)).run();
 }
 
 function setProviderConnectionStatus(

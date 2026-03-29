@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ComposioConnectionManager,
   createComposioClient,
-  getComposioToolsForChat,
   DEFAULT_DATA_TYPE_MAPPINGS,
+  getComposioToolsForChat,
 } from "../composio";
 
 // ---------------------------------------------------------------------------
@@ -26,9 +26,9 @@ function createMockComposio(overrides?: {
         },
       );
 
-  const mockSessionTools = vi.fn().mockResolvedValue(
-    overrides?.sessionTools ?? { GOOGLEADS_SEARCH: { description: "mock" } },
-  );
+  const mockSessionTools = vi
+    .fn()
+    .mockResolvedValue(overrides?.sessionTools ?? { GOOGLEADS_SEARCH: { description: "mock" } });
 
   return {
     tools: { execute: mockExecute },
@@ -89,14 +89,11 @@ describe("ComposioConnectionManager", () => {
       await manager.fetch("search_terms");
 
       expect(mockComposio.tools.execute).toHaveBeenCalledOnce();
-      expect(mockComposio.tools.execute).toHaveBeenCalledWith(
-        "GOOGLEADS_SEARCH_TERMS_REPORT",
-        {
-          arguments: { dateRange: "LAST_30_DAYS" },
-          userId: testUserId,
-          dangerouslySkipVersionCheck: true,
-        },
-      );
+      expect(mockComposio.tools.execute).toHaveBeenCalledWith("GOOGLEADS_SEARCH_TERMS_REPORT", {
+        arguments: { dateRange: "LAST_30_DAYS" },
+        userId: testUserId,
+        dangerouslySkipVersionCheck: true,
+      });
     });
 
     it("returns the data from the Composio response", async () => {
@@ -110,20 +107,15 @@ describe("ComposioConnectionManager", () => {
     it("calls execute with empty arguments when no defaultParams", async () => {
       await manager.fetch("ad_metrics");
 
-      expect(mockComposio.tools.execute).toHaveBeenCalledWith(
-        "GOOGLEADS_CAMPAIGN_PERFORMANCE",
-        {
-          arguments: {},
-          userId: testUserId,
-          dangerouslySkipVersionCheck: true,
-        },
-      );
+      expect(mockComposio.tools.execute).toHaveBeenCalledWith("GOOGLEADS_CAMPAIGN_PERFORMANCE", {
+        arguments: {},
+        userId: testUserId,
+        dangerouslySkipVersionCheck: true,
+      });
     });
 
     it("throws for unmapped data type", async () => {
-      await expect(manager.fetch("nonexistent")).rejects.toThrow(
-        /no composio mapping for data type: nonexistent/i,
-      );
+      await expect(manager.fetch("nonexistent")).rejects.toThrow(/no composio mapping for data type: nonexistent/i);
     });
 
     it("does not call composio.tools.execute for unmapped type", async () => {
@@ -146,14 +138,11 @@ describe("ComposioConnectionManager", () => {
       });
 
       expect(mockComposio.tools.execute).toHaveBeenCalledOnce();
-      expect(mockComposio.tools.execute).toHaveBeenCalledWith(
-        "GOOGLEADS_PAUSE_AD",
-        {
-          arguments: { customerId: "123" },
-          userId: testUserId,
-          dangerouslySkipVersionCheck: true,
-        },
-      );
+      expect(mockComposio.tools.execute).toHaveBeenCalledWith("GOOGLEADS_PAUSE_AD", {
+        arguments: { customerId: "123" },
+        userId: testUserId,
+        dangerouslySkipVersionCheck: true,
+      });
 
       expect(result.status).toBe("executed");
       expect(result.executedAt).toBeInstanceOf(Date);
@@ -266,9 +255,7 @@ describe("DEFAULT_DATA_TYPE_MAPPINGS", () => {
   });
 
   it("search_terms maps to GOOGLEADS_SEARCH_TERMS_REPORT", () => {
-    expect(DEFAULT_DATA_TYPE_MAPPINGS.search_terms!.toolSlug).toBe(
-      "GOOGLEADS_SEARCH_TERMS_REPORT",
-    );
+    expect(DEFAULT_DATA_TYPE_MAPPINGS.search_terms!.toolSlug).toBe("GOOGLEADS_SEARCH_TERMS_REPORT");
   });
 });
 

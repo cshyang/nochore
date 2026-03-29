@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,16 +34,8 @@ describe("prompt skill discovery", () => {
       ].join("\n"),
       "utf-8",
     );
-    await writeFile(
-      path.join(productSkillDir, "knowledge", "heuristics.md"),
-      "# Heuristics\n",
-      "utf-8",
-    );
-    await writeFile(
-      path.join(internalSkillDir, "SKILL.md"),
-      "# Internal Helper\n\nInternal only.",
-      "utf-8",
-    );
+    await writeFile(path.join(productSkillDir, "knowledge", "heuristics.md"), "# Heuristics\n", "utf-8");
+    await writeFile(path.join(internalSkillDir, "SKILL.md"), "# Internal Helper\n\nInternal only.", "utf-8");
 
     const skills = listPromptSkills({ rootDir: root });
     expect(skills).toHaveLength(1);
@@ -57,11 +49,7 @@ describe("prompt skill discovery", () => {
 
     const skillDir = path.join(root, "ops-playbook");
     await mkdir(skillDir, { recursive: true });
-    await writeFile(
-      path.join(skillDir, "SKILL.md"),
-      "# Ops Playbook\n\nUse for internal operations.",
-      "utf-8",
-    );
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Ops Playbook\n\nUse for internal operations.", "utf-8");
 
     const allSkills = listPromptSkills({ rootDir: root, productOnly: false });
     const skill = getPromptSkillById("ops-playbook", {

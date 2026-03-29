@@ -6,11 +6,11 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, convertToModelMessages, hasToolCall, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
+import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from "ai";
 import { z } from "zod";
-import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
+import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
 
 /** Maps user-facing permission labels to internal autonomy keys. */
 const PERMISSION_TO_AUTONOMY: Record<string, string> = {
@@ -62,7 +62,6 @@ async function createModel() {
         providerName: "openai",
       });
     }
-    case "anthropic":
     default: {
       const { createAnthropic } = await import("@ai-sdk/anthropic");
       const anthropic = createAnthropic();
@@ -86,16 +85,16 @@ async function createCompatibleModel(params: {
   return provider(params.modelName);
 }
 
-function resolveSkillIds(
-  modelSkills: string[],
-  available: Array<{ id: string; name: string }>,
-): string[] {
+function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; name: string }>): string[] {
   if (!modelSkills.length || !available.length) return [];
   const resolved: string[] = [];
   for (const raw of modelSkills) {
     const lower = normalizeSkillToken(raw);
     const exact = available.find((s) => s.id === raw);
-    if (exact) { resolved.push(exact.id); continue; }
+    if (exact) {
+      resolved.push(exact.id);
+      continue;
+    }
     const fuzzy = available.find((s) => {
       const normId = normalizeSkillToken(s.id);
       const normName = normalizeSkillToken(s.name);
@@ -110,16 +109,21 @@ function normalizeSkillToken(value: string) {
   return value.toLowerCase().replace(/[-_\s]/g, "");
 }
 
-function stripUiOnlyToolParts(messages: IncomingMessage[]) {
+/** Strip request_input tool parts that haven't been answered yet (no output).
+ *  Parts with output-available are kept — convertToModelMessages turns them
+ *  into proper tool-call + tool-result pairs so the model sees the full Q&A. */
+function stripUnansweredToolParts(messages: IncomingMessage[]) {
   return messages
     .map((message) => ({
       ...message,
       parts: message.parts.filter((part) => {
         const record = part as MessagePart;
         const type = record.type as string | undefined;
-        if (type === "tool-request_input") return false;
-        if (type === "dynamic-tool" && record.toolName === "request_input") return false;
-        return true;
+        const isRequestInput =
+          type === "tool-request_input" || (type === "dynamic-tool" && record.toolName === "request_input");
+        if (!isRequestInput) return true;
+        // Keep only tool parts that have been answered
+        return record.state === "output-available";
       }),
     }))
     .filter((message) => message.parts.length > 0);
@@ -129,7 +133,7 @@ export const Route = createFileRoute("/api/onboard")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = await request.json() as OnboardingRequestBody;
+        const body = (await request.json()) as OnboardingRequestBody;
         const {
           messages: rawMessages,
           projectId,
@@ -141,23 +145,25 @@ export const Route = createFileRoute("/api/onboard")({
         const model = await createModel();
         const system = buildOnboardingSystemPrompt({ availableSkills, existingConnections, toolkitSummaries });
 
-        const cleanedMessages = stripUiOnlyToolParts(rawMessages);
-        const modelMessages = await convertToModelMessages(
-          cleanedMessages as UIMessage[],
-        );
+        const cleanedMessages = stripUnansweredToolParts(rawMessages);
+        const modelMessages = await convertToModelMessages(cleanedMessages as UIMessage[]);
 
         const createAgentSchema = z.object({
           name: z.string().min(1).describe("A short, memorable agent name"),
           description: z.string().min(1).describe("A concise one-sentence summary of what the agent does"),
-          instructions: z.string().min(1).describe(
-            "Detailed operational instructions (markdown). This becomes the agent's system prompt. " +
-            "Be specific: what data to pull, what patterns to look for, how to format findings, " +
-            "what thresholds trigger action.",
-          ),
+          instructions: z
+            .string()
+            .min(1)
+            .describe(
+              "Detailed operational instructions (markdown). This becomes the agent's system prompt. " +
+                "Be specific: what data to pull, what patterns to look for, how to format findings, " +
+                "what thresholds trigger action.",
+            ),
           skills: z.array(z.string()).default([]).describe("Skill IDs from available skills"),
           toolSlugs: z.array(z.string()).default([]).describe("Tool slugs confirmed by the user"),
           schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
-          permissionLevel: z.enum(["ask before acting", "ask before making changes", "act independently"])
+          permissionLevel: z
+            .enum(["ask before acting", "ask before making changes", "act independently"])
             .describe("How much freedom the agent has"),
         });
 
@@ -208,17 +214,9 @@ export const Route = createFileRoute("/api/onboard")({
                   .describe("Show a Skip button — use when the question is optional"),
               }),
               outputSchema: z.object({
-                selectedKeys: z
-                  .array(z.string())
-                  .describe("The key(s) the user selected"),
-                customText: z
-                  .string()
-                  .optional()
-                  .describe("The user's freeform text when they chose 'Something else'"),
-                skipped: z
-                  .boolean()
-                  .optional()
-                  .describe("True when the user clicked Skip"),
+                selectedKeys: z.array(z.string()).describe("The key(s) the user selected"),
+                customText: z.string().optional().describe("The user's freeform text when they chose 'Something else'"),
+                skipped: z.boolean().optional().describe("True when the user clicked Skip"),
               }),
               // No execute — UI-only tool, rendered client-side.
             },
@@ -230,11 +228,16 @@ export const Route = createFileRoute("/api/onboard")({
                 "You can filter by toolkit (platform) or search by keyword.",
               inputSchema: z.object({
                 query: z.string().optional().describe("Search query (e.g. 'campaign performance', 'send message')"),
-                toolkits: z.array(z.string()).optional().describe("Filter by toolkit slugs (e.g. ['googleads', 'slack'])"),
+                toolkits: z
+                  .array(z.string())
+                  .optional()
+                  .describe("Filter by toolkit slugs (e.g. ['googleads', 'slack'])"),
               }),
               execute: async (input: { query?: string; toolkits?: string[] }) => {
                 try {
-                  const { createComposioClient } = await import("../../../../packages/harness/src/connections/composio");
+                  const { createComposioClient } = await import(
+                    "../../../../packages/harness/src/connections/composio"
+                  );
                   const composio = await createComposioClient();
 
                   const tools = await composio.tools.getRawComposioTools({
@@ -262,27 +265,30 @@ export const Route = createFileRoute("/api/onboard")({
               inputSchema: createAgentSchema,
               execute: async (input: CreateAgentInput) => {
                 const { createAgent } = await import("~/server/agents");
-                const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections/composio");
+                const { createComposioClient, getComposioUserId } = await import(
+                  "../../../../packages/harness/src/connections/composio"
+                );
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
                 // Derive providers from confirmed tool slugs
                 const composio = await createComposioClient();
-                const userId = getComposioUserId(projectId);
+                const _userId = getComposioUserId(projectId);
 
                 // Look up which toolkit each tool belongs to
-                const toolMeta = await composio.tools.getRawComposioTools({
+                const toolMeta = (await composio.tools.getRawComposioTools({
                   tools: input.toolSlugs,
-                }) as Array<{ slug: string; name: string; description: string; toolkit?: { slug: string; name: string; logo?: string } }>;
+                })) as Array<{
+                  slug: string;
+                  name: string;
+                  description: string;
+                  toolkit?: { slug: string; name: string; logo?: string };
+                }>;
 
-                const providerBySlug = new Map(
-                  toolMeta.map((t) => [t.slug, t.toolkit?.slug ?? ""]),
-                );
-                const providers = [...new Set(
-                  input.toolSlugs
-                    .map((slug) => providerBySlug.get(slug))
-                    .filter((p): p is string => !!p),
-                )];
+                const providerBySlug = new Map(toolMeta.map((t) => [t.slug, t.toolkit?.slug ?? ""]));
+                const providers = [
+                  ...new Set(input.toolSlugs.map((slug) => providerBySlug.get(slug)).filter((p): p is string => !!p)),
+                ];
 
                 const requiredProviders = providers.map((p) => ({
                   provider: p,

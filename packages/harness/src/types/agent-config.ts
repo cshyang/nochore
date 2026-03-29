@@ -52,13 +52,7 @@ export type NotificationConfig = z.infer<typeof NotificationConfigSchema>;
 // Agent schedule & status
 // ---------------------------------------------------------------------------
 
-export const AgentScheduleSchema = z.enum([
-  "hourly",
-  "6hours",
-  "daily",
-  "weekly",
-  "manual",
-]);
+export const AgentScheduleSchema = z.enum(["hourly", "6hours", "daily", "weekly", "manual"]);
 export type AgentSchedule = z.infer<typeof AgentScheduleSchema>;
 
 export const AgentStatusSchema = z.enum(["draft", "live"]);

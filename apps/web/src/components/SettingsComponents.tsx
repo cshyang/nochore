@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { COLORS, RADIUS, MOTION, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 
 // ---------------------------------------------------------------------------
 // SectionHeading — group label that sits ABOVE the card
@@ -89,7 +89,8 @@ export function SettingsRow({
       }}
     >
       {/* Header row — always visible */}
-      <div
+      <button
+        type="button"
         onClick={() => {
           if (onClick) onClick();
           else if (isExpandable) setExpanded(!expanded);
@@ -101,6 +102,11 @@ export function SettingsRow({
           padding: "14px 16px",
           cursor: isClickable ? "pointer" : "default",
           transition: `background ${MOTION.duration} ${MOTION.ease}`,
+          background: "none",
+          border: "none",
+          width: "100%",
+          textAlign: "left",
+          fontFamily: "inherit",
         }}
         onMouseEnter={(e) => {
           if (isClickable) e.currentTarget.style.background = COLORS.surfaceHover;
@@ -129,9 +135,7 @@ export function SettingsRow({
 
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>
-            {title}
-          </div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>{title}</div>
           {description && (
             <div
               style={{
@@ -149,17 +153,23 @@ export function SettingsRow({
         </div>
 
         {/* Value */}
-        {value && (
-          <span style={{ fontSize: 13, color: COLORS.textSecondary, flexShrink: 0 }}>
-            {value}
-          </span>
-        )}
+        {value && <span style={{ fontSize: 13, color: COLORS.textSecondary, flexShrink: 0 }}>{value}</span>}
 
         {/* Trailing element (e.g., toggle) — always visible, stops click propagation */}
         {trailing && (
-          <span onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              flexShrink: 0,
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          >
             {trailing}
-          </span>
+          </button>
         )}
 
         {/* Chevron */}
@@ -176,7 +186,7 @@ export function SettingsRow({
             ›
           </span>
         )}
-      </div>
+      </button>
 
       {/* Expanded content */}
       {isExpandable && expanded && (

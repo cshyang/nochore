@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { COLORS } from "~/lib/colors";
-import { ProjectView } from "~/lib/types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
 import { ProgressBar } from "~/components/ProgressBar";
+import { COLORS } from "~/lib/colors";
+import type { ProjectView } from "~/lib/types";
 
 interface SubAccount {
   id: string;
@@ -62,12 +62,20 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
         { id: "111-222-4444", name: "Acme - EU", selected: true },
         { id: "111-222-5555", name: "Acme - APAC", selected: false },
       ],
-      permissions: { level: "read-write", scopes: ["campaigns.read", "campaigns.write", "reports.read", "keywords.write"] },
+      permissions: {
+        level: "read-write",
+        scopes: ["campaigns.read", "campaigns.write", "reports.read", "keywords.write"],
+      },
       agentUsage: [
         { agent: "Ad Spend Guardian", permission: "read-write", lastUsed: "2h ago" },
         { agent: "Content Scheduler", permission: "read-only", lastUsed: "1h ago" },
       ],
-      health: { uptime: "99.8%", lastCheck: "5 min ago", apiQuota: { used: 12400, limit: 50000 }, tokenExpiry: "Auto-refreshed" },
+      health: {
+        uptime: "99.8%",
+        lastCheck: "5 min ago",
+        apiQuota: { used: 12400, limit: 50000 },
+        tokenExpiry: "Auto-refreshed",
+      },
     },
     {
       id: "slack",
@@ -84,7 +92,12 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
         { agent: "Ad Spend Guardian", permission: "write", lastUsed: "2h ago" },
         { agent: "Lead Qualifier", permission: "write", lastUsed: "1h ago" },
       ],
-      health: { uptime: "100%", lastCheck: "3 min ago", apiQuota: { used: 340, limit: 10000 }, tokenExpiry: "Auto-refreshed" },
+      health: {
+        uptime: "100%",
+        lastCheck: "3 min ago",
+        apiQuota: { used: 340, limit: 10000 },
+        tokenExpiry: "Auto-refreshed",
+      },
     },
     {
       id: "hubspot",
@@ -97,10 +110,14 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
       account: { name: "Acme CRM", id: "hub-acme-001", type: "CRM Portal" },
       subAccounts: null,
       permissions: { level: "read-only", scopes: ["contacts.read", "deals.read"] },
-      agentUsage: [
-        { agent: "Lead Qualifier", permission: "read-only", lastUsed: "6h ago" },
-      ],
-      health: { uptime: "94.2%", lastCheck: "8 min ago", apiQuota: { used: 48200, limit: 50000 }, tokenExpiry: "API key (no expiry)", warning: "API quota at 96% \u2014 agents may be throttled soon" },
+      agentUsage: [{ agent: "Lead Qualifier", permission: "read-only", lastUsed: "6h ago" }],
+      health: {
+        uptime: "94.2%",
+        lastCheck: "8 min ago",
+        apiQuota: { used: 48200, limit: 50000 },
+        tokenExpiry: "API key (no expiry)",
+        warning: "API quota at 96% \u2014 agents may be throttled soon",
+      },
     },
   ];
 
@@ -119,13 +136,17 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
             Shared across all agents in {project.icon} {project.name}
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowAddModal(!showAddModal)}>+ Add connection</Button>
+        <Button size="sm" onClick={() => setShowAddModal(!showAddModal)}>
+          + Add connection
+        </Button>
       </div>
 
       {/* Add connection modal */}
       {showAddModal && (
         <Card style={{ marginBottom: 16, borderColor: COLORS.accent }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text, marginBottom: 12 }}>Connect a new service</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text, marginBottom: 12 }}>
+            Connect a new service
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {[
               { icon: "\u{1F4CA}", name: "Google Ads", type: "OAuth" },
@@ -138,23 +159,43 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
               { icon: "\u{1F4CB}", name: "Jira", type: "OAuth" },
               { icon: "\u{1F50D}", name: "Search Console", type: "OAuth" },
             ].map((svc) => (
-              <div key={svc.name} style={{
-                padding: "10px 12px", borderRadius: 8, background: COLORS.surfaceHover, cursor: "pointer",
-                display: "flex", alignItems: "center", gap: 8, transition: "background 0.15s",
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.border)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = COLORS.surfaceHover)}
+              <button
+                type="button"
+                key={svc.name}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: COLORS.surfaceHover,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  transition: "background 0.15s",
+                  border: "none",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+                onClick={() => {
+                  // Handle selection here
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = COLORS.border;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = COLORS.surfaceHover;
+                }}
               >
                 <span style={{ fontSize: 18 }}>{svc.icon}</span>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{svc.name}</div>
                   <div style={{ fontSize: 12, color: COLORS.textDim }}>{svc.type}</div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: COLORS.textDim }}>
-            500+ integrations available via Composio · <span style={{ color: COLORS.accentBright, cursor: "pointer" }}>Browse all →</span>
+            500+ integrations available via Composio ·{" "}
+            <span style={{ color: COLORS.accentBright, cursor: "pointer" }}>Browse all →</span>
           </div>
         </Card>
       )}
@@ -168,9 +209,20 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
           return (
             <Card key={conn.id} style={{ padding: 0, overflow: "hidden" }}>
               {/* Connection header — always visible */}
-              <div
+              <button
+                type="button"
                 onClick={() => setExpandedConn(isExpanded ? null : conn.id)}
-                style={{ padding: "16px 24px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16 }}
+                style={{
+                  padding: "16px 24px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  background: "none",
+                  border: "none",
+                  width: "100%",
+                  textAlign: "left",
+                }}
               >
                 <span style={{ fontSize: 24 }}>{conn.icon}</span>
                 <div style={{ flex: 1 }}>
@@ -184,19 +236,46 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Badge color={conn.permissions.level === "read-write" ? "accent" : conn.permissions.level === "write" ? "blue" : "gray"}>
+                  <Badge
+                    color={
+                      conn.permissions.level === "read-write"
+                        ? "accent"
+                        : conn.permissions.level === "write"
+                          ? "blue"
+                          : "gray"
+                    }
+                  >
                     {conn.permissions.level}
                   </Badge>
-                  <span style={{ color: COLORS.textDim, transform: isExpanded ? "rotate(90deg)" : "rotate(0)", transition: "transform 0.15s ease", display: "inline-block" }}>{"\u25B6"}</span>
+                  <span
+                    style={{
+                      color: COLORS.textDim,
+                      transform: isExpanded ? "rotate(90deg)" : "rotate(0)",
+                      transition: "transform 0.15s ease",
+                      display: "inline-block",
+                    }}
+                  >
+                    {"\u25B6"}
+                  </span>
                 </div>
-              </div>
+              </button>
 
               {/* Expanded details */}
               {isExpanded && (
                 <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "16px 24px" }}>
                   {/* Health warning */}
                   {conn.health.warning && (
-                    <div style={{ padding: "10px 14px", background: COLORS.orangeDim, borderRadius: 8, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        background: COLORS.orangeDim,
+                        borderRadius: 8,
+                        marginBottom: 16,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
                       <span style={{ fontSize: 14 }}>{"\u26A0\uFE0F"}</span>
                       <span style={{ fontSize: 13, color: COLORS.orange }}>{conn.health.warning}</span>
                     </div>
@@ -205,7 +284,17 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
                     {/* Health stats */}
                     <div>
-                      <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Health</div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: COLORS.textDim,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                          marginBottom: 12,
+                        }}
+                      >
+                        Health
+                      </div>
                       <div style={{ display: "grid", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                           <span style={{ color: COLORS.textSecondary }}>Uptime</span>
@@ -222,13 +311,25 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                         <div style={{ fontSize: 13 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                             <span style={{ color: COLORS.textSecondary }}>API quota</span>
-                            <span style={{ color: conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.orange : COLORS.text }}>
-                              {(conn.health.apiQuota.used / 1000).toFixed(1)}k / {(conn.health.apiQuota.limit / 1000).toFixed(0)}k
+                            <span
+                              style={{
+                                color:
+                                  conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9
+                                    ? COLORS.orange
+                                    : COLORS.text,
+                              }}
+                            >
+                              {(conn.health.apiQuota.used / 1000).toFixed(1)}k /{" "}
+                              {(conn.health.apiQuota.limit / 1000).toFixed(0)}k
                             </span>
                           </div>
                           <ProgressBar
                             value={(conn.health.apiQuota.used / conn.health.apiQuota.limit) * 100}
-                            color={conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9 ? COLORS.orange : COLORS.accent}
+                            color={
+                              conn.health.apiQuota.used / conn.health.apiQuota.limit > 0.9
+                                ? COLORS.orange
+                                : COLORS.accent
+                            }
                           />
                         </div>
                       </div>
@@ -236,7 +337,17 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
 
                     {/* Connection details */}
                     <div>
-                      <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Details</div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: COLORS.textDim,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                          marginBottom: 12,
+                        }}
+                      >
+                        Details
+                      </div>
                       <div style={{ display: "grid", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                           <span style={{ color: COLORS.textSecondary }}>Auth type</span>
@@ -261,20 +372,45 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
                   {/* Sub-accounts (the "which account?" problem) */}
                   {conn.subAccounts && (
                     <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: COLORS.textDim,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                          marginBottom: 12,
+                        }}
+                      >
                         Sub-accounts
                       </div>
                       <div style={{ background: COLORS.bg, borderRadius: 8, padding: 12 }}>
                         {conn.subAccounts.map((sub) => (
-                          <div key={sub.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
+                          <div
+                            key={sub.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "8px 4px",
+                              borderBottom: `1px solid ${COLORS.border}`,
+                            }}
+                          >
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <div style={{
-                                width: 20, height: 20, borderRadius: 4,
-                                border: `2px solid ${sub.selected ? COLORS.accent : COLORS.borderStrong}`,
-                                background: sub.selected ? COLORS.accent : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 12, color: COLORS.white, cursor: "pointer",
-                              }}>
+                              <div
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: 4,
+                                  border: `2px solid ${sub.selected ? COLORS.accent : COLORS.borderStrong}`,
+                                  background: sub.selected ? COLORS.accent : "transparent",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: 12,
+                                  color: COLORS.white,
+                                  cursor: "pointer",
+                                }}
+                              >
                                 {sub.selected ? "\u2713" : ""}
                               </div>
                               <div>
@@ -294,24 +430,80 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
 
                   {/* Per-agent permission overrides */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.textDim,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 12,
+                      }}
+                    >
                       Agent access
                     </div>
                     <div style={{ background: COLORS.bg, borderRadius: 8, overflow: "hidden" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 0, padding: "8px 12px", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr auto auto",
+                          gap: 0,
+                          padding: "8px 12px",
+                          borderBottom: `1px solid ${COLORS.border}`,
+                        }}
+                      >
                         <span style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase" }}>Agent</span>
-                        <span style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", textAlign: "center", width: 100 }}>Permission</span>
-                        <span style={{ fontSize: 12, color: COLORS.textDim, textTransform: "uppercase", textAlign: "right", width: 80 }}>Last used</span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: COLORS.textDim,
+                            textTransform: "uppercase",
+                            textAlign: "center",
+                            width: 100,
+                          }}
+                        >
+                          Permission
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: COLORS.textDim,
+                            textTransform: "uppercase",
+                            textAlign: "right",
+                            width: 80,
+                          }}
+                        >
+                          Last used
+                        </span>
                       </div>
                       {conn.agentUsage.map((usage) => (
-                        <div key={usage.agent} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 0, padding: "10px 12px", borderBottom: `1px solid ${COLORS.border}`, alignItems: "center" }}>
+                        <div
+                          key={usage.agent}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr auto auto",
+                            gap: 0,
+                            padding: "10px 12px",
+                            borderBottom: `1px solid ${COLORS.border}`,
+                            alignItems: "center",
+                          }}
+                        >
                           <span style={{ fontSize: 13, color: COLORS.text }}>{usage.agent}</span>
                           <div style={{ textAlign: "center", width: 100 }}>
-                            <Badge color={usage.permission === "read-write" ? "accent" : usage.permission === "write" ? "blue" : "gray"}>
+                            <Badge
+                              color={
+                                usage.permission === "read-write"
+                                  ? "accent"
+                                  : usage.permission === "write"
+                                    ? "blue"
+                                    : "gray"
+                              }
+                            >
                               {usage.permission}
                             </Badge>
                           </div>
-                          <span style={{ fontSize: 12, color: COLORS.textDim, textAlign: "right", width: 80 }}>{usage.lastUsed}</span>
+                          <span style={{ fontSize: 12, color: COLORS.textDim, textAlign: "right", width: 80 }}>
+                            {usage.lastUsed}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -322,9 +514,15 @@ export function ProjectConnections({ project }: ProjectConnectionsProps) {
 
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 8, paddingTop: 8, borderTop: `1px solid ${COLORS.border}` }}>
-                    <Button size="sm" variant="secondary">Reconnect</Button>
-                    <Button size="sm" variant="secondary">Edit scopes</Button>
-                    <Button size="sm" variant="ghost" style={{ color: COLORS.red, marginLeft: "auto" }}>Disconnect</Button>
+                    <Button size="sm" variant="secondary">
+                      Reconnect
+                    </Button>
+                    <Button size="sm" variant="secondary">
+                      Edit scopes
+                    </Button>
+                    <Button size="sm" variant="ghost" style={{ color: COLORS.red, marginLeft: "auto" }}>
+                      Disconnect
+                    </Button>
                   </div>
                 </div>
               )}

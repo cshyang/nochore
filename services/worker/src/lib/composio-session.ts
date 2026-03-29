@@ -22,10 +22,7 @@ function getComposio(): Composio {
  * buildRuntimeTools → double-wrap). Composio is now the source of truth for
  * what tools exist and how they work.
  */
-export async function getSessionTools(params: {
-  userId: string;
-  toolkits: string[];
-}): Promise<ToolSet> {
+export async function getSessionTools(params: { userId: string; toolkits: string[] }): Promise<ToolSet> {
   const composio = getComposio();
 
   const session = await composio.create(params.userId, {

@@ -28,12 +28,7 @@ export async function approveActionWithResolution(params: {
     };
   }
 
-  await approvalRepository.markResolved(
-    approval.id,
-    params.decision,
-    params.reason,
-    new Date(),
-  );
+  await approvalRepository.markResolved(approval.id, params.decision, params.reason, new Date());
   await runEventRepository.append({
     runId: approval.runId,
     agentId: approval.agentId,
@@ -67,4 +62,3 @@ export async function approveActionWithResolution(params: {
     triggered: false,
   };
 }
-

@@ -14,13 +14,7 @@ const colorMap: Record<BadgeColor, { bg: string; text: string }> = {
   write: { bg: COLORS.writeDim, text: COLORS.write },
 };
 
-export function Badge({
-  color = "gray",
-  children,
-}: {
-  color?: BadgeColor;
-  children: React.ReactNode;
-}) {
+export function Badge({ color = "gray", children }: { color?: BadgeColor; children: React.ReactNode }) {
   const c = colorMap[color] || colorMap.gray;
   return (
     <span

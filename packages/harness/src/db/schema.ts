@@ -1,10 +1,4 @@
-import {
-  index,
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -30,9 +24,7 @@ export const agents = sqliteTable(
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [
-    index("idx_agents_project").on(table.projectId),
-  ],
+  (table) => [index("idx_agents_project").on(table.projectId)],
 );
 
 export const runs = sqliteTable(
@@ -48,9 +40,7 @@ export const runs = sqliteTable(
     summary: text("summary"),
     triggerRunId: text("trigger_run_id"),
   },
-  (table) => [
-    index("idx_runs_agent_started").on(table.agentId, table.startedAt),
-  ],
+  (table) => [index("idx_runs_agent_started").on(table.agentId, table.startedAt)],
 );
 
 export const runEvents = sqliteTable(
@@ -103,9 +93,7 @@ export const lessons = sqliteTable(
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at"),
   },
-  (table) => [
-    index("idx_lessons_agent_scope").on(table.agentId, table.scope),
-  ],
+  (table) => [index("idx_lessons_agent_scope").on(table.agentId, table.scope)],
 );
 
 export const connections = sqliteTable(
@@ -120,7 +108,5 @@ export const connections = sqliteTable(
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [
-    index("idx_connections_project_provider").on(table.projectId, table.provider),
-  ],
+  (table) => [index("idx_connections_project_provider").on(table.projectId, table.provider)],
 );

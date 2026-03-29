@@ -1,4 +1,4 @@
-import { COLORS, RADIUS, MOTION } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS } from "~/lib/colors";
 
 export function ProgressBar({
   value,

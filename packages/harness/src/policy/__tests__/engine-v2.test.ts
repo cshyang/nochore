@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePolicy } from "../engine";
 import type { ToolConfigEntry } from "../../types";
+import { evaluatePolicy } from "../engine";
 
-function makeToolConfig(
-  patch: Partial<ToolConfigEntry> = {},
-): ToolConfigEntry {
+function makeToolConfig(patch: Partial<ToolConfigEntry> = {}): ToolConfigEntry {
   return {
     toolName: "googleads_adjust_budget",
     slug: "GOOGLEADS_ADJUST_BUDGET",

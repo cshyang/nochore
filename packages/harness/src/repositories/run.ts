@@ -1,12 +1,12 @@
 import { desc, eq } from "drizzle-orm";
-import { runs } from "../db/schema";
 import type { createDb } from "../db/client";
+import { runs } from "../db/schema";
 import {
-  RunStatusSchema,
-  RunSummarySchema,
   type RunRecord,
   type RunStatus,
+  RunStatusSchema,
   type RunSummary,
+  RunSummarySchema,
   type RunTriggerType,
 } from "../types";
 
@@ -26,14 +26,17 @@ export class RunRepository {
 
   async create(input: CreateRunInput): Promise<string> {
     const id = input.id ?? crypto.randomUUID();
-    this.db.insert(runs).values({
-      id,
-      agentId: input.agentId,
-      triggerType: input.triggerType,
-      status: input.status ?? "queued",
-      startedAt: input.startedAt.getTime(),
-      triggerRunId: input.triggerRunId ?? null,
-    }).run();
+    this.db
+      .insert(runs)
+      .values({
+        id,
+        agentId: input.agentId,
+        triggerType: input.triggerType,
+        status: input.status ?? "queued",
+        startedAt: input.startedAt.getTime(),
+        triggerRunId: input.triggerRunId ?? null,
+      })
+      .run();
     return id;
   }
 
@@ -50,21 +53,29 @@ export class RunRepository {
   }
 
   async complete(id: string, completedAt: Date, summary: RunSummary): Promise<void> {
-    this.db.update(runs).set({
-      status: "completed",
-      completedAt: completedAt.getTime(),
-      error: null,
-      summary: JSON.stringify(RunSummarySchema.parse(summary)),
-    }).where(eq(runs.id, id)).run();
+    this.db
+      .update(runs)
+      .set({
+        status: "completed",
+        completedAt: completedAt.getTime(),
+        error: null,
+        summary: JSON.stringify(RunSummarySchema.parse(summary)),
+      })
+      .where(eq(runs.id, id))
+      .run();
   }
 
   async fail(id: string, completedAt: Date, error: string, summary?: RunSummary): Promise<void> {
-    this.db.update(runs).set({
-      status: "failed",
-      completedAt: completedAt.getTime(),
-      error,
-      summary: summary ? JSON.stringify(RunSummarySchema.parse(summary)) : null,
-    }).where(eq(runs.id, id)).run();
+    this.db
+      .update(runs)
+      .set({
+        status: "failed",
+        completedAt: completedAt.getTime(),
+        error,
+        summary: summary ? JSON.stringify(RunSummarySchema.parse(summary)) : null,
+      })
+      .where(eq(runs.id, id))
+      .run();
   }
 
   async getById(id: string): Promise<RunRecord | null> {
@@ -73,11 +84,7 @@ export class RunRepository {
   }
 
   async getByAgent(agentId: string, limit?: number): Promise<RunRecord[]> {
-    let query = this.db
-      .select()
-      .from(runs)
-      .where(eq(runs.agentId, agentId))
-      .orderBy(desc(runs.startedAt));
+    let query = this.db.select().from(runs).where(eq(runs.agentId, agentId)).orderBy(desc(runs.startedAt));
 
     if (typeof limit === "number") {
       query = query.limit(limit) as typeof query;

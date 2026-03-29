@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
-import { runEvents } from "../db/schema";
 import type { createDb } from "../db/client";
-import { RunEventSchema, type RunEvent, type RunEventType } from "../types";
+import { runEvents } from "../db/schema";
+import { type RunEvent, RunEventSchema, type RunEventType } from "../types";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -18,29 +18,35 @@ export class RunEventRepository {
 
   async append(input: CreateRunEventInput): Promise<string> {
     const id = crypto.randomUUID();
-    this.db.insert(runEvents).values({
-      id,
-      runId: input.runId,
-      agentId: input.agentId,
-      timestamp: input.timestamp.getTime(),
-      type: input.type,
-      payload: JSON.stringify(input.payload),
-    }).run();
-    return id;
-  }
-
-  async appendMany(inputs: CreateRunEventInput[]): Promise<void> {
-    if (inputs.length === 0) return;
-    this.db.insert(runEvents).values(
-      inputs.map((input) => ({
-        id: crypto.randomUUID(),
+    this.db
+      .insert(runEvents)
+      .values({
+        id,
         runId: input.runId,
         agentId: input.agentId,
         timestamp: input.timestamp.getTime(),
         type: input.type,
         payload: JSON.stringify(input.payload),
-      })),
-    ).run();
+      })
+      .run();
+    return id;
+  }
+
+  async appendMany(inputs: CreateRunEventInput[]): Promise<void> {
+    if (inputs.length === 0) return;
+    this.db
+      .insert(runEvents)
+      .values(
+        inputs.map((input) => ({
+          id: crypto.randomUUID(),
+          runId: input.runId,
+          agentId: input.agentId,
+          timestamp: input.timestamp.getTime(),
+          type: input.type,
+          payload: JSON.stringify(input.payload),
+        })),
+      )
+      .run();
   }
 
   async listByRun(runId: string): Promise<RunEvent[]> {

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ProjectHome } from "~/components/ProjectHome";
-import { getProject, deleteProject } from "~/server/projects";
 import type { ProjectView } from "~/lib/types";
+import { deleteProject, getProject } from "~/server/projects";
 
 export const Route = createFileRoute("/$projectId/")({
   loader: async ({ params }) => {

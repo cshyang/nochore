@@ -1,4 +1,4 @@
-import { COLORS, RADIUS, MOTION } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS } from "~/lib/colors";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "success";
 type ButtonSize = "sm" | "md" | "lg";
@@ -60,6 +60,7 @@ export function Button({
 }) {
   return (
     <button
+      type="button"
       className="btn"
       onClick={onClick}
       style={{ ...base, ...sizes[size], ...variants[variant], ...style }}

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs/promises";
-import * as path from "path";
 import * as os from "os";
+import * as path from "path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorkspaceStore } from "../store";
 import { initializeWorkspace } from "../templates";
 
@@ -16,11 +16,7 @@ async function createTmpWorkspace(): Promise<string> {
   return dir;
 }
 
-async function writeFixture(
-  basePath: string,
-  relativePath: string,
-  content: string
-): Promise<void> {
+async function writeFixture(basePath: string, relativePath: string, content: string): Promise<void> {
   const fullPath = path.join(basePath, relativePath);
   await fs.mkdir(path.dirname(fullPath), { recursive: true });
   await fs.writeFile(fullPath, content, "utf-8");
@@ -58,9 +54,7 @@ describe("WorkspaceStore", () => {
     it("throws for a non-.md file", async () => {
       await writeFixture(tmpDir, "config.yaml", "key: value");
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.readFile("config.yaml")).rejects.toThrow(
-        /only .md files/i
-      );
+      await expect(store.readFile("config.yaml")).rejects.toThrow(/only .md files/i);
     });
 
     it("reads .md files in subdirectories", async () => {
@@ -72,23 +66,17 @@ describe("WorkspaceStore", () => {
 
     it("throws on path traversal with '..'", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.readFile("../secret.md")).rejects.toThrow(
-        /invalid path/i
-      );
+      await expect(store.readFile("../secret.md")).rejects.toThrow(/invalid path/i);
     });
 
     it("throws on absolute path starting with '/'", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.readFile("/etc/passwd.md")).rejects.toThrow(
-        /invalid path/i
-      );
+      await expect(store.readFile("/etc/passwd.md")).rejects.toThrow(/invalid path/i);
     });
 
     it("throws on path containing null bytes", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.readFile("file\0.md")).rejects.toThrow(
-        /invalid path/i
-      );
+      await expect(store.readFile("file\0.md")).rejects.toThrow(/invalid path/i);
     });
   });
 
@@ -100,10 +88,7 @@ describe("WorkspaceStore", () => {
       await fs.mkdir(path.join(tmpDir, "scratchpad"), { recursive: true });
       const store = new WorkspaceStore(tmpDir);
       await store.writeFile("scratchpad/notes.md", "# Notes\nSome content");
-      const content = await fs.readFile(
-        path.join(tmpDir, "scratchpad/notes.md"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(tmpDir, "scratchpad/notes.md"), "utf-8");
       expect(content).toBe("# Notes\nSome content");
     });
 
@@ -111,70 +96,50 @@ describe("WorkspaceStore", () => {
       await fs.mkdir(path.join(tmpDir, "reports"), { recursive: true });
       const store = new WorkspaceStore(tmpDir);
       await store.writeFile("reports/weekly.md", "# Weekly Report");
-      const content = await fs.readFile(
-        path.join(tmpDir, "reports/weekly.md"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(tmpDir, "reports/weekly.md"), "utf-8");
       expect(content).toBe("# Weekly Report");
     });
 
     it("creates parent directories if they do not exist", async () => {
       const store = new WorkspaceStore(tmpDir);
       await store.writeFile("scratchpad/deep/nested/file.md", "content");
-      const content = await fs.readFile(
-        path.join(tmpDir, "scratchpad/deep/nested/file.md"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(tmpDir, "scratchpad/deep/nested/file.md"), "utf-8");
       expect(content).toBe("content");
     });
 
     it("throws when writing to root (e.g. KNOWLEDGE.md)", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("KNOWLEDGE.md", "hacked")
-      ).rejects.toThrow(/not writable/i);
+      await expect(store.writeFile("KNOWLEDGE.md", "hacked")).rejects.toThrow(/not writable/i);
     });
 
     it("throws when writing to AGENT.md at root", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.writeFile("AGENT.md", "hacked")).rejects.toThrow(
-        /not writable/i
-      );
+      await expect(store.writeFile("AGENT.md", "hacked")).rejects.toThrow(/not writable/i);
     });
 
     it("throws when writing to an arbitrary subdirectory", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("skills/config.md", "hacked")
-      ).rejects.toThrow(/not writable/i);
+      await expect(store.writeFile("skills/config.md", "hacked")).rejects.toThrow(/not writable/i);
     });
 
     it("throws on path traversal with '..'", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("scratchpad/../AGENT.md", "hacked")
-      ).rejects.toThrow(/invalid path/i);
+      await expect(store.writeFile("scratchpad/../AGENT.md", "hacked")).rejects.toThrow(/invalid path/i);
     });
 
     it("throws on absolute path starting with '/'", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("/tmp/evil.md", "hacked")
-      ).rejects.toThrow(/invalid path/i);
+      await expect(store.writeFile("/tmp/evil.md", "hacked")).rejects.toThrow(/invalid path/i);
     });
 
     it("throws on path containing null bytes", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("scratchpad/\0evil.md", "hacked")
-      ).rejects.toThrow(/invalid path/i);
+      await expect(store.writeFile("scratchpad/\0evil.md", "hacked")).rejects.toThrow(/invalid path/i);
     });
 
     it("throws for non-.md files", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(
-        store.writeFile("scratchpad/data.json", "{}")
-      ).rejects.toThrow(/only .md files/i);
+      await expect(store.writeFile("scratchpad/data.json", "{}")).rejects.toThrow(/only .md files/i);
     });
   });
 
@@ -233,9 +198,7 @@ describe("WorkspaceStore", () => {
 
     it("throws on path traversal", async () => {
       const store = new WorkspaceStore(tmpDir);
-      await expect(store.exists("../outside.md")).rejects.toThrow(
-        /invalid path/i
-      );
+      await expect(store.exists("../outside.md")).rejects.toThrow(/invalid path/i);
     });
   });
 
@@ -305,23 +268,14 @@ describe("initializeWorkspace", () => {
     expect(skillsStat.isDirectory()).toBe(true);
 
     // Check default files exist and have content
-    const agentMd = await fs.readFile(
-      path.join(wsPath, "AGENT.md"),
-      "utf-8"
-    );
+    const agentMd = await fs.readFile(path.join(wsPath, "AGENT.md"), "utf-8");
     expect(agentMd).toContain("Ad Guardian");
     expect(agentMd).toContain("Monitor wasted ad spend");
 
-    const policyMd = await fs.readFile(
-      path.join(wsPath, "POLICY.md"),
-      "utf-8"
-    );
+    const policyMd = await fs.readFile(path.join(wsPath, "POLICY.md"), "utf-8");
     expect(policyMd.length).toBeGreaterThan(0);
 
-    const knowledgeMd = await fs.readFile(
-      path.join(wsPath, "KNOWLEDGE.md"),
-      "utf-8"
-    );
+    const knowledgeMd = await fs.readFile(path.join(wsPath, "KNOWLEDGE.md"), "utf-8");
     expect(knowledgeMd.length).toBeGreaterThan(0);
   });
 
@@ -341,18 +295,11 @@ describe("initializeWorkspace", () => {
   it("does not overwrite existing files", async () => {
     const wsPath = path.join(tmpDir, "agent_workspace");
     await fs.mkdir(wsPath, { recursive: true });
-    await fs.writeFile(
-      path.join(wsPath, "AGENT.md"),
-      "# Custom Agent",
-      "utf-8"
-    );
+    await fs.writeFile(path.join(wsPath, "AGENT.md"), "# Custom Agent", "utf-8");
 
     await initializeWorkspace(wsPath, "New Name", "New intent");
 
-    const agentMd = await fs.readFile(
-      path.join(wsPath, "AGENT.md"),
-      "utf-8"
-    );
+    const agentMd = await fs.readFile(path.join(wsPath, "AGENT.md"), "utf-8");
     expect(agentMd).toBe("# Custom Agent");
   });
 });

@@ -6,16 +6,12 @@
  * DB, and shows a success message before redirecting back.
  */
 
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  createFileRoute,
-  useNavigate,
-  useSearch,
-} from "@tanstack/react-router";
-import { COLORS } from "~/lib/colors";
-import { Card } from "~/components/Card";
 import { Button } from "~/components/Button";
-import { pollComposioConnection, activateConnection } from "~/server/connections";
+import { Card } from "~/components/Card";
+import { COLORS } from "~/lib/colors";
+import { activateConnection, pollComposioConnection } from "~/server/connections";
 
 export const Route = createFileRoute("/$projectId/callback/composio")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -33,9 +29,7 @@ function ComposioCallbackPage() {
   // Detect popup mode: either from query param OR by checking if this window was opened as a popup
   const isPopup = popupParam || (typeof window !== "undefined" && window.opener !== null);
 
-  const [status, setStatus] = useState<"verifying" | "success" | "error">(
-    "verifying",
-  );
+  const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
@@ -54,7 +48,9 @@ function ComposioCallbackPage() {
           if (result.connected) {
             if (!cancelled) setStatus("success");
             // Notify opener window so it can refresh connection state
-            try { window.opener?.postMessage({ type: "composio:connected", provider }, "*"); } catch {}
+            try {
+              window.opener?.postMessage({ type: "composio:connected", provider }, "*");
+            } catch {}
             setTimeout(() => {
               if (!cancelled) {
                 if (isPopup) {
@@ -92,7 +88,9 @@ function ComposioCallbackPage() {
 
           if (activation.success) {
             setStatus("success");
-            try { window.opener?.postMessage({ type: "composio:connected", provider }, "*"); } catch {}
+            try {
+              window.opener?.postMessage({ type: "composio:connected", provider }, "*");
+            } catch {}
             setTimeout(() => {
               if (!cancelled) {
                 if (isPopup) {
@@ -126,12 +124,7 @@ function ComposioCallbackPage() {
     };
   }, [projectId, provider, returnTo, isPopup, navigate]);
 
-  const providerLabel =
-    provider === "googleads"
-      ? "Google Ads"
-      : provider === "slack"
-        ? "Slack"
-        : provider;
+  const providerLabel = provider === "googleads" ? "Google Ads" : provider === "slack" ? "Slack" : provider;
 
   return (
     <div
@@ -243,9 +236,7 @@ function ComposioCallbackPage() {
                   Back to project
                 </Button>
               )}
-              <Button onClick={() => window.location.reload()}>
-                Try again
-              </Button>
+              <Button onClick={() => window.location.reload()}>Try again</Button>
             </div>
           </>
         )}

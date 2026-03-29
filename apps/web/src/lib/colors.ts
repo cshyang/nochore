@@ -64,15 +64,24 @@ export const COLORS = {
 
 // Spacing scale (8px grid)
 export const SPACE = {
-  1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 8: 48, 10: 64, 12: 80, 16: 120,
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 24,
+  6: 32,
+  8: 48,
+  10: 64,
+  12: 80,
+  16: 120,
 } as const;
 
 // Border radius scale (crisp direction)
 export const RADIUS = {
-  sm: 3,     // cards, containers, badges
-  md: 6,     // buttons, inputs
-  lg: 8,     // modals, overlays
-  pill: 99,  // pills, avatars
+  sm: 3, // cards, containers, badges
+  md: 6, // buttons, inputs
+  lg: 8, // modals, overlays
+  pill: 99, // pills, avatars
 } as const;
 
 // Typography
@@ -81,14 +90,14 @@ export const TYPE = {
   body: "'General Sans', system-ui, sans-serif",
   mono: "'SF Mono', 'Fira Code', 'Consolas', monospace",
   scale: {
-    xs: "0.6875rem",    // 11px
-    sm: "0.8125rem",    // 13px
-    base: "0.875rem",   // 14px
-    md: "1rem",          // 16px
-    lg: "1.25rem",       // 20px
-    xl: "1.875rem",      // 30px
-    "2xl": "2.75rem",    // 44px
-    "3xl": "3.5rem",     // 56px
+    xs: "0.6875rem", // 11px
+    sm: "0.8125rem", // 13px
+    base: "0.875rem", // 14px
+    md: "1rem", // 16px
+    lg: "1.25rem", // 20px
+    xl: "1.875rem", // 30px
+    "2xl": "2.75rem", // 44px
+    "3xl": "3.5rem", // 56px
   },
   leading: {
     tight: 1.15,

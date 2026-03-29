@@ -40,9 +40,7 @@ export const getChatHistory = createServerFn({ method: "GET" })
         id: run.id,
         role: "assistant" as const,
         content:
-          run.status === "failed"
-            ? run.error ?? "The run failed."
-            : `Run ${run.status} via ${run.triggerType}.`,
+          run.status === "failed" ? (run.error ?? "The run failed.") : `Run ${run.status} via ${run.triggerType}.`,
         createdAt: run.completedAt?.toISOString() ?? run.startedAt.toISOString(),
       })),
     );

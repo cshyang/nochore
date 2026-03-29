@@ -1,15 +1,15 @@
 import { eq } from "drizzle-orm";
-import { agents } from "../db/schema";
 import type { createDb } from "../db/client";
+import { agents } from "../db/schema";
 import {
-  AgentConfigSchema,
-  AgentScheduleSchema,
-  AgentStatusSchema,
-  ToolConfigSchema,
-  NotificationConfigSchema,
   type AgentConfig,
+  AgentConfigSchema,
   type AgentSchedule,
+  AgentScheduleSchema,
   type AgentStatus,
+  AgentStatusSchema,
+  NotificationConfigSchema,
+  ToolConfigSchema,
 } from "../types";
 import { getAgentWorkspacePath } from "../workspace";
 
@@ -41,20 +41,23 @@ export class AgentRepository {
     const id = input.id ?? crypto.randomUUID().slice(0, 12);
     const now = Date.now();
     const config = AgentConfigSchema.parse(input);
-    this.db.insert(agents).values({
-      id,
-      projectId: input.projectId,
-      name: input.name,
-      description: input.description,
-      instructions: config.instructions,
-      skills: JSON.stringify(config.skills),
-      toolConfig: JSON.stringify(config.toolConfig),
-      notificationConfig: JSON.stringify(config.notificationConfig),
-      schedule: config.schedule,
-      status: input.status ?? "draft",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
+    this.db
+      .insert(agents)
+      .values({
+        id,
+        projectId: input.projectId,
+        name: input.name,
+        description: input.description,
+        instructions: config.instructions,
+        skills: JSON.stringify(config.skills),
+        toolConfig: JSON.stringify(config.toolConfig),
+        notificationConfig: JSON.stringify(config.notificationConfig),
+        schedule: config.schedule,
+        status: input.status ?? "draft",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
     return id;
   }
 
@@ -64,12 +67,7 @@ export class AgentRepository {
   }
 
   async listByProject(projectId: string): Promise<AgentRecord[]> {
-    return this.db
-      .select()
-      .from(agents)
-      .where(eq(agents.projectId, projectId))
-      .all()
-      .map(toAgentRecord);
+    return this.db.select().from(agents).where(eq(agents.projectId, projectId)).all().map(toAgentRecord);
   }
 
   async update(
@@ -97,9 +95,7 @@ export class AgentRepository {
       updateData.toolConfig = JSON.stringify(ToolConfigSchema.parse(patch.toolConfig));
     }
     if (patch.notificationConfig !== undefined) {
-      updateData.notificationConfig = JSON.stringify(
-        NotificationConfigSchema.parse(patch.notificationConfig),
-      );
+      updateData.notificationConfig = JSON.stringify(NotificationConfigSchema.parse(patch.notificationConfig));
     }
     if (patch.schedule !== undefined) {
       updateData.schedule = AgentScheduleSchema.parse(patch.schedule);
@@ -119,9 +115,7 @@ export class AgentRepository {
 function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
   const skills = parseJson<unknown[]>(row.skills, []);
   const toolConfig = ToolConfigSchema.parse(parseJson(row.toolConfig, {}));
-  const notificationConfig = NotificationConfigSchema.parse(
-    parseJson(row.notificationConfig, {}),
-  );
+  const notificationConfig = NotificationConfigSchema.parse(parseJson(row.notificationConfig, {}));
 
   return {
     id: row.id,
@@ -129,9 +123,7 @@ function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
     name: row.name,
     description: row.description,
     instructions: row.instructions,
-    skills: Array.isArray(skills)
-      ? skills.filter((item): item is string => typeof item === "string")
-      : [],
+    skills: Array.isArray(skills) ? skills.filter((item): item is string => typeof item === "string") : [],
     toolConfig,
     notificationConfig,
     schedule: AgentScheduleSchema.parse(row.schedule),

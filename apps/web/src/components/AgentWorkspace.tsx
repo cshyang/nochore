@@ -1,13 +1,24 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowLeft, BookOpen, ChatCircle, Check, CircleNotch, DotsThree, Info, Play, RocketLaunch, WarningCircle, X } from "@phosphor-icons/react";
-import { LiveRunView } from "~/components/LiveRunView";
-import { RunRail } from "~/components/RunRail";
-import { RunReport } from "~/components/RunReport";
+import {
+  ArrowLeft,
+  BookOpen,
+  ChatCircle,
+  Check,
+  CircleNotch,
+  DotsThree,
+  Info,
+  Play,
+  RocketLaunch,
+  WarningCircle,
+} from "@phosphor-icons/react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
-import { COLORS, RADIUS, TYPE, MOTION, SPACE } from "~/lib/colors";
-import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
+import { LiveRunView } from "~/components/LiveRunView";
+import { RunRail } from "~/components/RunRail";
+import { RunReport } from "~/components/RunReport";
+import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
+import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -106,19 +117,21 @@ export interface AgentWorkspaceProps {
   project: ProjectLike;
   onBack: () => void;
   onDeleteAgent?: () => void;
-  onRunNow?: () => Promise<{ runId?: string } | void>;
-  onApprove?: (approvalId: string) => Promise<{ runId?: string } | void> | void;
+  onRunNow?: () => Promise<{ runId?: string } | undefined>;
+  onApprove?: (approvalId: string) => Promise<{ runId?: string } | undefined> | undefined;
   onReject?: (approvalId: string) => Promise<void> | void;
-  onUpdateAgent?: (updates: Partial<{
-    name: string;
-    description: string;
-    instructions: string;
-    skills: string[];
-    schedule: string;
-    toolConfig: ToolConfigLike;
-    notificationConfig: NotificationConfigLike;
-    status: string;
-  }>) => Promise<void> | void;
+  onUpdateAgent?: (
+    updates: Partial<{
+      name: string;
+      description: string;
+      instructions: string;
+      skills: string[];
+      schedule: string;
+      toolConfig: ToolConfigLike;
+      notificationConfig: NotificationConfigLike;
+      status: string;
+    }>,
+  ) => Promise<void> | void;
   onAskDeeper?: (prompt: string, context?: { eventId?: string; runId?: string }) => void;
   availableSkills?: SkillLike[];
   skills?: SkillLike[];
@@ -151,15 +164,11 @@ function normalizeToolConfig(value: unknown): ToolConfigLike {
     requiredProviders: Array.isArray(record.requiredProviders)
       ? record.requiredProviders.filter(
           (item): item is { provider: string; reason?: string; logo?: string } =>
-            !!item &&
-            typeof item === "object" &&
-            typeof (item as Record<string, unknown>).provider === "string",
+            !!item && typeof item === "object" && typeof (item as Record<string, unknown>).provider === "string",
         )
       : [],
     tools:
-      record.tools && typeof record.tools === "object"
-        ? (record.tools as Record<string, ToolConfigEntryLike>)
-        : {},
+      record.tools && typeof record.tools === "object" ? (record.tools as Record<string, ToolConfigEntryLike>) : {},
   };
 }
 
@@ -241,12 +250,11 @@ function DraftChecklist({
               color: COLORS.text,
             }}
           >
-            {allDone
-              ? "All set — your agent is ready to launch."
-              : `${doneCount} of ${items.length} complete`}
+            {allDone ? "All set — your agent is ready to launch." : `${doneCount} of ${items.length} complete`}
           </div>
         </div>
         <button
+          type="button"
           className="btn"
           onClick={onGoLive}
           disabled={!allDone || goingLive}
@@ -280,7 +288,7 @@ function DraftChecklist({
       <div style={{ padding: "8px 12px" }}>
         {items.map((item, index) => (
           <div
-            key={index}
+            key={item.label}
             style={{
               display: "flex",
               alignItems: "center",
@@ -330,6 +338,7 @@ function DraftChecklist({
             </div>
             {!item.done && item.action && (
               <button
+                type="button"
                 className="btn"
                 onClick={item.action.onClick}
                 style={{
@@ -345,8 +354,14 @@ function DraftChecklist({
                   flexShrink: 0,
                   transition: `all ${MOTION.duration} ${MOTION.ease}`,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.accent; e.currentTarget.style.color = COLORS.accent; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.accent;
+                  e.currentTarget.style.color = COLORS.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.border;
+                  e.currentTarget.style.color = COLORS.textSecondary;
+                }}
               >
                 {item.action.label}
               </button>
@@ -357,7 +372,6 @@ function DraftChecklist({
     </div>
   );
 }
-
 
 const PROVIDER_DISPLAY: Record<string, { name: string; icon: string }> = {
   googleads: { name: "Google Ads", icon: "📊" },
@@ -375,7 +389,7 @@ const PROVIDER_DISPLAY: Record<string, { name: string; icon: string }> = {
   whatsapp: { name: "WhatsApp", icon: "📱" },
 };
 
-function ToolTrustRow({
+function _ToolTrustRow({
   label,
   value,
   tone,
@@ -387,7 +401,9 @@ function ToolTrustRow({
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
       <span style={{ color: COLORS.textSecondary, fontSize: TYPE.scale.sm }}>{label}</span>
-      <Badge color={tone === "success" ? "green" : tone === "warning" ? "orange" : tone === "danger" ? "red" : "accent"}>
+      <Badge
+        color={tone === "success" ? "green" : tone === "warning" ? "orange" : tone === "danger" ? "red" : "accent"}
+      >
         {value}
       </Badge>
     </div>
@@ -402,8 +418,8 @@ function SettingsPanel({
   onUpdateAgent,
   onConnect,
   onDisconnect,
-  isDraft,
-  onRunNow,
+  isDraft: _isDraft,
+  onRunNow: _onRunNow,
   section = "objective",
 }: {
   agent: AgentLike;
@@ -436,14 +452,26 @@ function SettingsPanel({
     setSelectedSkills(agent.skills ?? []);
     setPendingToolConfig(normalizeToolConfig(agent.toolConfig));
     setPendingNotificationConfig(normalizeNotificationConfig(agent.notificationConfig));
-  }, [agent.id, agent.name, agent.description, agent.instructions, agent.schedule, agent.skills, agent.toolConfig, agent.notificationConfig]);
+  }, [
+    agent.name,
+    agent.description,
+    agent.instructions,
+    agent.schedule,
+    agent.skills,
+    agent.toolConfig,
+    agent.notificationConfig,
+  ]);
 
   const toolEntries = Object.entries(pendingToolConfig.tools ?? {});
-  const autoCount = toolEntries.filter(([, tool]) => tool.enabled !== false && tool.approvalMode === "auto").length;
-  const approvalCount = toolEntries.filter(([, tool]) => tool.enabled !== false && tool.approvalMode === "approval").length;
-  const blockedCount = toolEntries.filter(([, tool]) => tool.approvalMode === "blocked").length;
-  const activeProviderSet = new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider));
-  const missingProviders = requiredProviders.filter((provider) => !activeProviderSet.has(provider.provider));
+  const _autoCount = toolEntries.filter(([, tool]) => tool.enabled !== false && tool.approvalMode === "auto").length;
+  const _approvalCount = toolEntries.filter(
+    ([, tool]) => tool.enabled !== false && tool.approvalMode === "approval",
+  ).length;
+  const _blockedCount = toolEntries.filter(([, tool]) => tool.approvalMode === "blocked").length;
+  const activeProviderSet = new Set(
+    connections.filter((connection) => connection.status === "active").map((connection) => connection.provider),
+  );
+  const _missingProviders = requiredProviders.filter((provider) => !activeProviderSet.has(provider.provider));
 
   const persist = async (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
     if (!onUpdateAgent) return;
@@ -470,7 +498,12 @@ function SettingsPanel({
                 style={fieldStyle}
               />
             </SettingsRow>
-            <SettingsRow icon="◌" title="Description" description="A concise summary of the agent's job." defaultExpanded>
+            <SettingsRow
+              icon="◌"
+              title="Description"
+              description="A concise summary of the agent's job."
+              defaultExpanded
+            >
               <textarea
                 className="textarea"
                 value={description}
@@ -484,6 +517,7 @@ function SettingsPanel({
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
                   <button
+                    type="button"
                     className="pill"
                     key={value}
                     onClick={() => {
@@ -522,7 +556,16 @@ function SettingsPanel({
                 rows={12}
                 style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
               />
-              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
                   {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
                 </span>
@@ -536,7 +579,9 @@ function SettingsPanel({
           <SectionHeading>Skills</SectionHeading>
           <SettingsCard>
             {skills.length === 0 ? (
-              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>No skills selected yet.</div>
+              <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+                No skills selected yet.
+              </div>
             ) : (
               skills.map((skill, index) => {
                 const isEnabled = selectedSkills.includes(skill.id);
@@ -549,6 +594,7 @@ function SettingsPanel({
                     isLast={index === skills.length - 1}
                     trailing={
                       <button
+                        type="button"
                         onClick={() => {
                           const next = isEnabled
                             ? selectedSkills.filter((id) => id !== skill.id)
@@ -566,7 +612,18 @@ function SettingsPanel({
                           cursor: "pointer",
                         }}
                       >
-                        <span style={{ position: "absolute", inset: 3, width: 16, height: 16, borderRadius: 999, background: COLORS.white, left: isEnabled ? 19 : 3, transition: `left ${MOTION.duration} ${MOTION.ease}` }} />
+                        <span
+                          style={{
+                            position: "absolute",
+                            inset: 3,
+                            width: 16,
+                            height: 16,
+                            borderRadius: 999,
+                            background: COLORS.white,
+                            left: isEnabled ? 19 : 3,
+                            transition: `left ${MOTION.duration} ${MOTION.ease}`,
+                          }}
+                        />
                       </button>
                     }
                   />
@@ -581,20 +638,47 @@ function SettingsPanel({
               icon="◎"
               title="In-app"
               description="Show events in Nochore."
-              trailing={<Toggle checked={pendingNotificationConfig.inApp !== false} onChange={(checked) => { const next = { ...pendingNotificationConfig, inApp: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+              trailing={
+                <Toggle
+                  checked={pendingNotificationConfig.inApp !== false}
+                  onChange={(checked) => {
+                    const next = { ...pendingNotificationConfig, inApp: checked };
+                    setPendingNotificationConfig(next);
+                    void persist({ notificationConfig: next });
+                  }}
+                />
+              }
             />
             <SettingsRow
               icon="✉"
               title="Email"
               description="Send email summaries."
-              trailing={<Toggle checked={pendingNotificationConfig.email === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, email: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+              trailing={
+                <Toggle
+                  checked={pendingNotificationConfig.email === true}
+                  onChange={(checked) => {
+                    const next = { ...pendingNotificationConfig, email: checked };
+                    setPendingNotificationConfig(next);
+                    void persist({ notificationConfig: next });
+                  }}
+                />
+              }
             />
             <SettingsRow
               icon="▣"
               title="Slack"
               description="Notify a Slack channel."
               isLast
-              trailing={<Toggle checked={pendingNotificationConfig.slack === true} onChange={(checked) => { const next = { ...pendingNotificationConfig, slack: checked }; setPendingNotificationConfig(next); void persist({ notificationConfig: next }); }} />}
+              trailing={
+                <Toggle
+                  checked={pendingNotificationConfig.slack === true}
+                  onChange={(checked) => {
+                    const next = { ...pendingNotificationConfig, slack: checked };
+                    setPendingNotificationConfig(next);
+                    void persist({ notificationConfig: next });
+                  }}
+                />
+              }
             />
           </SettingsCard>
         </div>
@@ -606,23 +690,47 @@ function SettingsPanel({
           <div style={{ display: "grid", gap: 6 }}>
             {requiredProviders.map((rp) => {
               const display = PROVIDER_DISPLAY[rp.provider];
-              const provider = { id: rp.provider, name: display?.name ?? rp.provider, icon: display?.icon ?? "🔌", description: rp.reason ?? "", logo: rp.logo ?? null };
+              const provider = {
+                id: rp.provider,
+                name: display?.name ?? rp.provider,
+                icon: display?.icon ?? "🔌",
+                description: rp.reason ?? "",
+                logo: rp.logo ?? null,
+              };
               const conn = connections.find((c) => c.provider === provider.id);
               const isConnected = conn?.status === "active";
               const accountId: string | null = conn?.id ?? null;
               return (
                 <SettingsCard key={provider.id}>
-                  <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                       {provider.logo ? (
-                        <img src={provider.logo} alt="" style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, objectFit: "contain" }} />
+                        <img
+                          src={provider.logo}
+                          alt=""
+                          style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, objectFit: "contain" }}
+                        />
                       ) : (
                         <span style={{ fontSize: 20, flexShrink: 0 }}>{provider.icon}</span>
                       )}
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>{provider.name}</div>
+                        <div
+                          style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}
+                        >
+                          {provider.name}
+                        </div>
                         {provider.description ? (
-                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>{provider.description}</div>
+                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>
+                            {provider.description}
+                          </div>
                         ) : null}
                       </div>
                     </div>
@@ -630,21 +738,51 @@ function SettingsPanel({
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                         <Badge color="green">Connected</Badge>
                         <button
+                          type="button"
                           className="btn"
                           onClick={() => onConnect?.(provider.id)}
-                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.textDim; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
-                          style={{ fontFamily: TYPE.body, padding: "4px 10px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.textSecondary, fontSize: TYPE.scale.xs, cursor: "pointer", transition: `all ${MOTION.duration} ${MOTION.ease}` }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = COLORS.textDim;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = COLORS.border;
+                          }}
+                          style={{
+                            fontFamily: TYPE.body,
+                            padding: "4px 10px",
+                            borderRadius: RADIUS.pill,
+                            border: `1px solid ${COLORS.border}`,
+                            background: "transparent",
+                            color: COLORS.textSecondary,
+                            fontSize: TYPE.scale.xs,
+                            cursor: "pointer",
+                            transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                          }}
                         >
                           Reconnect
                         </button>
                         {accountId && (
                           <button
+                            type="button"
                             className="btn"
                             onClick={() => onDisconnect?.(provider.id, accountId)}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.red; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
-                            style={{ fontFamily: TYPE.body, padding: "4px 10px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.red, fontSize: TYPE.scale.xs, cursor: "pointer", transition: `all ${MOTION.duration} ${MOTION.ease}` }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = COLORS.red;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = COLORS.border;
+                            }}
+                            style={{
+                              fontFamily: TYPE.body,
+                              padding: "4px 10px",
+                              borderRadius: RADIUS.pill,
+                              border: `1px solid ${COLORS.border}`,
+                              background: "transparent",
+                              color: COLORS.red,
+                              fontSize: TYPE.scale.xs,
+                              cursor: "pointer",
+                              transition: `all ${MOTION.duration} ${MOTION.ease}`,
+                            }}
                           >
                             Disconnect
                           </button>
@@ -652,11 +790,16 @@ function SettingsPanel({
                       </div>
                     ) : (
                       <button
+                        type="button"
                         className="btn"
                         onClick={() => onConnect?.(provider.id)}
                         disabled={!onConnect}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.accentDim; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = COLORS.accentDim;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
                         style={{
                           fontFamily: TYPE.body,
                           padding: "6px 16px",
@@ -702,6 +845,7 @@ function SettingsPanel({
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {(["auto", "approval", "blocked"] as const).map((mode) => (
                         <button
+                          type="button"
                           className="pill"
                           key={mode}
                           onClick={() => {
@@ -748,15 +892,10 @@ function SettingsPanel({
   );
 }
 
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!checked)}
       style={{
         width: 36,
@@ -812,7 +951,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onAskDeeper,
     onConnect,
     onDisconnect,
-    approvals = [],
+    approvals: _approvals = [],
     runs = [],
     pendingActions = [],
     requiredProviders = [],
@@ -824,7 +963,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
   const availableSkills = props.availableSkills ?? props.skills ?? [];
   const projectConnections = props.projectConnections ?? [];
-  const isDraft = isDraftProp ?? (agent.status?.toLowerCase() === "draft");
+  const isDraft = isDraftProp ?? agent.status?.toLowerCase() === "draft";
   const [tab, setTab] = useState<"activity" | "objective" | "tools" | "chat" | "memory">("activity");
   const [moreOpen, setMoreOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -839,7 +978,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   // Reset selection when agent changes
   useEffect(() => {
     setSelectedRunId(null);
-  }, [agent.id]);
+  }, []);
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null;
 
@@ -872,12 +1011,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   // --- Draft checklist readiness ---
   const [goingLive, setGoingLive] = useState(false);
 
-  const activeProviderSet = new Set(
-    projectConnections.filter((c) => c.status === "active").map((c) => c.provider),
-  );
-  const missingProviders = mergedRequiredProviders.filter(
-    (p) => !activeProviderSet.has(p.provider),
-  );
+  const activeProviderSet = new Set(projectConnections.filter((c) => c.status === "active").map((c) => c.provider));
+  const missingProviders = mergedRequiredProviders.filter((p) => !activeProviderSet.has(p.provider));
 
   const hasName = !!agent.name && agent.name !== "Untitled Agent";
   const hasInstructions = !!(agent.instructions && agent.instructions.trim().length > 20);
@@ -901,9 +1036,10 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         {
           label: "Connect required tools",
           done: hasToolsConnected,
-          hint: missingProviders.length > 0
-            ? `${missingProviders.map((p) => humanize(p.provider)).join(", ")} not connected`
-            : undefined,
+          hint:
+            missingProviders.length > 0
+              ? `${missingProviders.map((p) => humanize(p.provider)).join(", ")} not connected`
+              : undefined,
           action: !hasToolsConnected ? { label: "Connect", onClick: () => setTab("tools") } : undefined,
         },
         {
@@ -968,9 +1104,19 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           padding: "28px clamp(20px, 3vw, 40px) 40px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 18,
+            flexWrap: "wrap",
+            marginBottom: 18,
+          }}
+        >
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16, minWidth: 0 }}>
             <button
+              type="button"
               onClick={onBack}
               style={{
                 background: "transparent",
@@ -990,20 +1136,50 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             </button>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-                <Badge color="accent">{project.icon ?? "◌"} {project.name}</Badge>
+                <Badge color="accent">
+                  {project.icon ?? "◌"} {project.name}
+                </Badge>
                 <Badge color={isDraft ? "orange" : agent.status === "running" ? "green" : "gray"}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     {agent.status === "running" && (
-                      <span className="aw-running-dot" style={{ width: 6, height: 6, borderRadius: RADIUS.pill, background: COLORS.green, display: "inline-block" }} />
+                      <span
+                        className="aw-running-dot"
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: RADIUS.pill,
+                          background: COLORS.green,
+                          display: "inline-block",
+                        }}
+                      />
                     )}
                     {humanize(agent.status ?? (isDraft ? "draft" : "idle"))}
                   </span>
                 </Badge>
               </div>
-              <h1 style={{ margin: 0, fontSize: TYPE.scale.xl, fontFamily: TYPE.display, fontWeight: TYPE.weight.bold, letterSpacing: TYPE.tracking.tight, color: COLORS.text, lineHeight: TYPE.leading.tight }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: TYPE.scale.xl,
+                  fontFamily: TYPE.display,
+                  fontWeight: TYPE.weight.bold,
+                  letterSpacing: TYPE.tracking.tight,
+                  color: COLORS.text,
+                  lineHeight: TYPE.leading.tight,
+                }}
+              >
                 {agent.name}
               </h1>
-              <p style={{ margin: "8px 0 0", color: COLORS.textSecondary, maxWidth: 780, lineHeight: TYPE.leading.normal, fontSize: TYPE.scale.base, fontFamily: TYPE.body }}>
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  color: COLORS.textSecondary,
+                  maxWidth: 780,
+                  lineHeight: TYPE.leading.normal,
+                  fontSize: TYPE.scale.base,
+                  fontFamily: TYPE.body,
+                }}
+              >
                 {agent.description || agent.instructions || "No description yet."}
               </p>
             </div>
@@ -1024,20 +1200,38 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               {moreOpen ? (
                 <>
                   <button
+                    type="button"
                     aria-label="Close menu"
                     onClick={() => setMoreOpen(false)}
                     style={{ position: "fixed", inset: 0, border: "none", background: "transparent" }}
                   />
-                  <div style={{ position: "absolute", right: 0, marginTop: 8, minWidth: 180, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 6, zIndex: 20 }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      marginTop: 8,
+                      minWidth: 180,
+                      background: COLORS.surface,
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 12,
+                      padding: 6,
+                      zIndex: 20,
+                    }}
+                  >
                     {onDeleteAgent ? (
                       <button
+                        type="button"
                         className="btn"
                         onClick={() => {
                           setMoreOpen(false);
                           onDeleteAgent();
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.redDim; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = COLORS.redDim;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
                         style={{
                           width: "100%",
                           padding: "10px 12px",
@@ -1062,16 +1256,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
         {/* Draft pre-flight checklist — visible on all tabs */}
         {isDraft && checklistItems.length > 0 && (
-          <DraftChecklist
-            items={checklistItems}
-            onGoLive={() => void handleGoLive()}
-            goingLive={goingLive}
-          />
+          <DraftChecklist items={checklistItems} onGoLive={() => void handleGoLive()} goingLive={goingLive} />
         )}
 
         <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
           {(["activity", "objective", "tools", "chat", "memory"] as const).map((item) => (
             <button
+              type="button"
               key={item}
               onClick={() => setTab(item)}
               style={{
@@ -1091,7 +1282,17 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               {item.charAt(0).toUpperCase() + item.slice(1)}
             </button>
           ))}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              paddingBottom: 12,
+              color: COLORS.textDim,
+              fontSize: TYPE.scale.xs,
+            }}
+          >
             <span>{activeConnections.length} connected</span>
             <span>•</span>
             <span>{mergedRequiredProviders.length} required</span>
@@ -1102,36 +1303,71 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         {showFirstRunPrompt && (
           <Card style={{ padding: "20px 24px", marginBottom: 18, borderColor: COLORS.accent }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: RADIUS.lg,
-                background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: RADIUS.lg,
+                  background: COLORS.accentDim,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
                 <Info size={18} weight="bold" color={COLORS.accent} />
               </div>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+                <div
+                  style={{
+                    fontSize: TYPE.scale.md,
+                    fontWeight: TYPE.weight.semibold,
+                    color: COLORS.text,
+                    fontFamily: TYPE.display,
+                    marginBottom: 6,
+                  }}
+                >
                   Ready to start the first run?
                 </div>
-                <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal, marginBottom: 4 }}>
-                  The agent will follow its instructions, use connected tools to gather data, analyze what it finds, and surface results on the Activity tab.
+                <div
+                  style={{
+                    fontSize: TYPE.scale.base,
+                    color: COLORS.textSecondary,
+                    lineHeight: TYPE.leading.normal,
+                    marginBottom: 4,
+                  }}
+                >
+                  The agent will follow its instructions, use connected tools to gather data, analyze what it finds, and
+                  surface results on the Activity tab.
                 </div>
-                <ul style={{ margin: "10px 0 0", padding: "0 0 0 18px", color: COLORS.textSecondary, fontSize: TYPE.scale.sm, lineHeight: 1.8 }}>
+                <ul
+                  style={{
+                    margin: "10px 0 0",
+                    padding: "0 0 0 18px",
+                    color: COLORS.textSecondary,
+                    fontSize: TYPE.scale.sm,
+                    lineHeight: 1.8,
+                  }}
+                >
                   <li>Runs typically take 30 seconds to a few minutes</li>
                   {mergedRequiredProviders.length > 0 && (
-                    <li>
-                      Using: {mergedRequiredProviders.map((p) => humanize(p.provider)).join(", ")}
-                    </li>
+                    <li>Using: {mergedRequiredProviders.map((p) => humanize(p.provider)).join(", ")}</li>
                   )}
-                  {Object.values(normalizeToolConfig(agent.toolConfig).tools ?? {}).some((t) => t.approvalMode === "approval") && (
-                    <li>Write actions will pause for your approval before executing</li>
-                  )}
+                  {Object.values(normalizeToolConfig(agent.toolConfig).tools ?? {}).some(
+                    (t) => t.approvalMode === "approval",
+                  ) && <li>Write actions will pause for your approval before executing</li>}
                 </ul>
               </div>
               <div style={{ display: "flex", gap: 8, flexShrink: 0, alignSelf: "center" }}>
                 <Button variant="secondary" onClick={() => setShowFirstRunPrompt(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => { setShowFirstRunPrompt(false); void onRunNow?.(); }}>
+                <Button
+                  onClick={() => {
+                    setShowFirstRunPrompt(false);
+                    void onRunNow?.();
+                  }}
+                >
                   <Play size={13} weight="bold" />
                   Start run
                 </Button>
@@ -1141,20 +1377,25 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         )}
 
         {tab === "activity" && (
-          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
+          <div
+            className="aw-panel-enter"
+            style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}
+          >
             {runError && (
-              <div style={{
-                padding: "10px 14px",
-                margin: "0 0 8px 0",
-                background: COLORS.redSubtle,
-                borderLeft: `3px solid ${COLORS.red}`,
-                borderRadius: RADIUS.sm,
-                fontSize: TYPE.scale.sm,
-                color: COLORS.red,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}>
+              <div
+                style={{
+                  padding: "10px 14px",
+                  margin: "0 0 8px 0",
+                  background: COLORS.redSubtle,
+                  borderLeft: `3px solid ${COLORS.red}`,
+                  borderRadius: RADIUS.sm,
+                  fontSize: TYPE.scale.sm,
+                  color: COLORS.red,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 <WarningCircle size={16} weight="bold" />
                 {runError}
               </div>
@@ -1165,23 +1406,35 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 accessToken={activeRun.accessToken}
                 runId={activeRun.runId}
                 onComplete={onLiveRunComplete}
-                onApprove={onApprove ? (id, reason) => { void onApprove(id); } : undefined}
-                onReject={onReject ? (id, reason) => { void onReject(id); } : undefined}
+                onApprove={
+                  onApprove
+                    ? (id, _reason) => {
+                        void onApprove(id);
+                      }
+                    : undefined
+                }
+                onReject={
+                  onReject
+                    ? (id, _reason) => {
+                        void onReject(id);
+                      }
+                    : undefined
+                }
               />
             ) : (
               <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
-                <RunRail
-                  runs={runs}
-                  selectedRunId={selectedRun?.id ?? null}
-                  onSelect={setSelectedRunId}
-                />
+                <RunRail runs={runs} selectedRunId={selectedRun?.id ?? null} onSelect={setSelectedRunId} />
                 <RunReport
                   run={selectedRun as any}
                   hasRuns={runs.length > 0}
                   onRunNow={wrappedOnRunNow}
                   pendingApproval={selectedRunApproval}
-                  onApprove={(id) => { void onApprove?.(id); }}
-                  onReject={(id) => { void onReject?.(id); }}
+                  onApprove={(id) => {
+                    void onApprove?.(id);
+                  }}
+                  onReject={(id) => {
+                    void onReject?.(id);
+                  }}
                 />
               </div>
             )}
@@ -1221,18 +1474,53 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         )}
 
         {tab === "chat" && (
-          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: RADIUS.lg,
-              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
-            }}>
+          <div
+            className="aw-panel-enter"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "80px 24px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: RADIUS.lg,
+                background: COLORS.accentDim,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+              }}
+            >
               <ChatCircle size={20} weight="bold" color={COLORS.accent} />
             </div>
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: TYPE.scale.md,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                fontFamily: TYPE.display,
+                marginBottom: 6,
+              }}
+            >
               Talk to {agent.name}
             </div>
-            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 440, lineHeight: TYPE.leading.normal, marginBottom: 24 }}>
-              Ask about findings, request deeper analysis on a specific run, or give new instructions. The agent uses its full context to respond.
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                color: COLORS.textSecondary,
+                maxWidth: 440,
+                lineHeight: TYPE.leading.normal,
+                marginBottom: 24,
+              }}
+            >
+              Ask about findings, request deeper analysis on a specific run, or give new instructions. The agent uses
+              its full context to respond.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 360 }}>
               {[
@@ -1241,6 +1529,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 "Run a deeper analysis on yesterday's data",
               ].map((prompt) => (
                 <button
+                  type="button"
                   key={prompt}
                   className="btn"
                   onClick={() => onAskDeeper?.(prompt)}
@@ -1256,8 +1545,14 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                     textAlign: "left",
                     transition: `all ${MOTION.duration} ${MOTION.ease}`,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.accent; e.currentTarget.style.color = COLORS.text; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.accent;
+                    e.currentTarget.style.color = COLORS.text;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.border;
+                    e.currentTarget.style.color = COLORS.textSecondary;
+                  }}
                 >
                   {prompt}
                 </button>
@@ -1267,18 +1562,53 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         )}
 
         {tab === "memory" && (
-          <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: RADIUS.lg,
-              background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
-            }}>
+          <div
+            className="aw-panel-enter"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "80px 24px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: RADIUS.lg,
+                background: COLORS.accentDim,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+              }}
+            >
               <BookOpen size={20} weight="bold" color={COLORS.accent} />
             </div>
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: TYPE.scale.md,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                fontFamily: TYPE.display,
+                marginBottom: 6,
+              }}
+            >
               {agent.name} hasn't learned anything yet
             </div>
-            <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 440, lineHeight: TYPE.leading.normal, marginBottom: 24 }}>
-              After each run, the agent extracts lessons — patterns it noticed, decisions that worked, and mistakes to avoid. These compound over time, making each run smarter than the last.
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                color: COLORS.textSecondary,
+                maxWidth: 440,
+                lineHeight: TYPE.leading.normal,
+                marginBottom: 24,
+              }}
+            >
+              After each run, the agent extracts lessons — patterns it noticed, decisions that worked, and mistakes to
+              avoid. These compound over time, making each run smarter than the last.
             </div>
             <div style={{ display: "flex", gap: 24, justifyContent: "center", flexWrap: "wrap" }}>
               {[
@@ -1287,7 +1617,14 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 { label: "Decisions", desc: "Choices made and their outcomes" },
               ].map((item) => (
                 <div key={item.label} style={{ textAlign: "center", maxWidth: 140 }}>
-                  <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.textDim, marginBottom: 4 }}>
+                  <div
+                    style={{
+                      fontSize: TYPE.scale.sm,
+                      fontWeight: TYPE.weight.semibold,
+                      color: COLORS.textDim,
+                      marginBottom: 4,
+                    }}
+                  >
                     {item.label}
                   </div>
                   <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, lineHeight: TYPE.leading.normal }}>

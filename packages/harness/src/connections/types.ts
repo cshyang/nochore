@@ -9,11 +9,7 @@ export interface ConnectionHealth {
 
 export interface ConnectionManager {
   fetch(dataTypeId: string): Promise<unknown>;
-  execute(
-    action: string,
-    toolCategory: string,
-    args: Record<string, unknown>,
-  ): Promise<ExecutionResult>;
+  execute(action: string, toolCategory: string, args: Record<string, unknown>): Promise<ExecutionResult>;
   availableDataTypes(): string[];
   getHealth(): Promise<ConnectionHealth[]>;
 }

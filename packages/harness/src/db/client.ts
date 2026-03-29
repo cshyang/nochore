@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
 const RESET_TABLES = [
@@ -157,9 +157,7 @@ function migrateAddColumns(sqlite: Database.Database) {
 
 function hasLegacyAgentSchema(sqlite: Database.Database): boolean {
   try {
-    const cols = sqlite
-      .prepare("PRAGMA table_info(agents)")
-      .all() as Array<{ name: string }>;
+    const cols = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
 
     if (cols.length === 0) {
       return false;

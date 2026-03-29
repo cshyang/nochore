@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { wait } from "@trigger.dev/sdk/v3";
-import { getProjectDeps } from "./deps";
 import { approveActionWithResolution } from "./approvals-core";
+import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction } from "./models";
 import { jsonSafe } from "./serializable";
 

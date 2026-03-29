@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { COLORS, RADIUS, MOTION, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 
 export interface RailRun {
   id: string;
@@ -94,6 +94,7 @@ export function RunRail({ runs, selectedRunId, onSelect }: RunRailProps) {
             style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}
           >
             <button
+              type="button"
               onClick={() => onSelect(run.id)}
               onMouseEnter={() => setHoveredId(run.id)}
               onMouseLeave={() => setHoveredId(null)}
@@ -142,9 +143,7 @@ export function RunRail({ runs, selectedRunId, onSelect }: RunRailProps) {
                   pointerEvents: "none",
                 }}
               >
-                <div style={{ color: COLORS.text, fontWeight: TYPE.weight.medium }}>
-                  {formatDate(run.startedAt)}
-                </div>
+                <div style={{ color: COLORS.text, fontWeight: TYPE.weight.medium }}>{formatDate(run.startedAt)}</div>
                 <div>
                   {humanize(run.triggerType ?? "manual")}
                   {run.completedAt ? ` · ${formatDuration(run.startedAt, run.completedAt)}` : ""}

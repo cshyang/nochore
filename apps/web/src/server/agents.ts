@@ -3,33 +3,60 @@ import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { agents, approvals, connections, lessons, runEvents, runs } from "../../../../packages/harness/src/db/schema";
-import { initializeWorkspace } from "../../../../packages/harness/src/workspace";
-import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
-import type {
-  AgentConfig,
-  NotificationConfig,
-  ToolConfig,
-} from "../../../../packages/harness/src/types";
-import { buildAgentView } from "./models";
+import type { AgentRecord } from "../../../../packages/harness/src/repositories";
+import type { AgentConfig, NotificationConfig, ToolConfig } from "../../../../packages/harness/src/types";
+import { getAgentWorkspacePath, initializeWorkspace } from "../../../../packages/harness/src/workspace";
 import { getProjectDeps } from "./deps";
-import { jsonSafe } from "./serializable";
+import { buildAgentView } from "./models";
 import { startAgentRun } from "./orchestration";
+import { jsonSafe } from "./serializable";
+
+type AgentStatus = "draft" | "live";
+type ProviderRequirement = ToolConfig["requiredProviders"][number];
+type ProjectDeps = ReturnType<typeof getProjectDeps>;
+
+type AgentMutationFields = {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  skills?: string[];
+  toolConfig?: ToolConfig;
+  requiredProviders?: ProviderRequirement[];
+  notificationConfig?: NotificationConfig;
+  schedule?: AgentConfig["schedule"];
+  status?: AgentStatus;
+};
+
+type CreateAgentInput = AgentMutationFields & {
+  projectId: string;
+};
+
+type UpdateAgentInput = AgentMutationFields & {
+  agentId: string;
+  projectId: string;
+};
+
+type AgentRecordInput = {
+  agentId: string;
+  projectId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  skills: string[];
+  toolConfig: ToolConfig;
+  notificationConfig: NotificationConfig;
+  schedule: AgentConfig["schedule"];
+  status: AgentStatus;
+};
+
+const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
+  inApp: true,
+  email: false,
+  slack: false,
+};
 
 export const createAgent = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      projectId: string;
-      name?: string;
-      description?: string;
-      instructions?: string;
-      skills?: string[];
-      toolConfig?: ToolConfig;
-      requiredProviders?: Array<{ provider: string; reason: string }>;
-      notificationConfig?: NotificationConfig;
-      schedule?: AgentConfig["schedule"];
-      status?: "draft" | "live";
-    }) => input,
-  )
+  .inputValidator((input: CreateAgentInput) => input)
   .handler(async ({ data }) => {
     const agentId = crypto.randomUUID().slice(0, 12);
     await createAgentRecord({
@@ -40,11 +67,7 @@ export const createAgent = createServerFn({ method: "POST" })
       instructions: data.instructions ?? "",
       skills: data.skills ?? [],
       toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
-      notificationConfig: data.notificationConfig ?? {
-        inApp: true,
-        email: false,
-        slack: false,
-      },
+      notificationConfig: data.notificationConfig ?? DEFAULT_NOTIFICATION_CONFIG,
       schedule: data.schedule ?? "manual",
       status: data.status ?? "draft",
     });
@@ -66,21 +89,7 @@ export const getAgent = createServerFn({ method: "GET" })
   });
 
 export const updateAgentConfig = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      agentId: string;
-      projectId: string;
-      name?: string;
-      description?: string;
-      instructions?: string;
-      skills?: string[];
-      toolConfig?: ToolConfig;
-      requiredProviders?: Array<{ provider: string; reason: string }>;
-      notificationConfig?: NotificationConfig;
-      schedule?: AgentConfig["schedule"];
-      status?: "draft" | "live";
-    }) => input,
-  )
+  .inputValidator((input: UpdateAgentInput) => input)
   .handler(async ({ data }) => {
     await updateAgentRecord(data.projectId, data.agentId, {
       name: data.name,
@@ -123,15 +132,7 @@ export const launchAgent = createServerFn({ method: "POST" })
     }
 
     await agentRepository.update(agentId, { status: "live" });
-    const { runId, triggerRunId } = await startAgentRun({
-      agentId,
-      projectId,
-      trigger: {
-        type: "manual",
-        timestamp: new Date(),
-        metadata: { source: "launch" },
-      },
-    });
+    const { runId, triggerRunId } = await queueManualRun(projectId, agentId, "launch");
 
     return jsonSafe({ launched: true, runId, triggerRunId, queued: true });
   });
@@ -139,15 +140,7 @@ export const launchAgent = createServerFn({ method: "POST" })
 export const triggerManualRun = createServerFn({ method: "POST" })
   .inputValidator((input: { agentId: string; projectId: string }) => input)
   .handler(async ({ data: { agentId, projectId } }) => {
-    const { runId, triggerRunId } = await startAgentRun({
-      agentId,
-      projectId,
-      trigger: {
-        type: "manual",
-        timestamp: new Date(),
-        metadata: { source: "run_now" },
-      },
-    });
+    const { runId, triggerRunId } = await queueManualRun(projectId, agentId, "run_now");
 
     return jsonSafe({ triggered: true, runId, triggerRunId, status: "queued", ok: true });
   });
@@ -171,18 +164,7 @@ export const deleteAgent = createServerFn({ method: "POST" })
     return jsonSafe({ deleted: true });
   });
 
-async function createAgentRecord(input: {
-  agentId: string;
-  projectId: string;
-  name: string;
-  description: string;
-  instructions: string;
-  skills: string[];
-  toolConfig: ToolConfig;
-  notificationConfig: NotificationConfig;
-  schedule: AgentConfig["schedule"];
-  status: "draft" | "live";
-}) {
+async function createAgentRecord(input: AgentRecordInput) {
   const { agentRepository } = getProjectDeps(input.projectId);
   await agentRepository.create({
     id: input.agentId,
@@ -199,27 +181,14 @@ async function createAgentRecord(input: {
   await initializeWorkspace(getAgentWorkspacePath(input.projectId, input.agentId));
 }
 
-async function updateAgentRecord(
-  projectId: string,
-  agentId: string,
-  updates: Partial<{
-    name: string;
-    description: string;
-    instructions: string;
-    skills: string[];
-    toolConfig: ToolConfig;
-    notificationConfig: NotificationConfig;
-    schedule: AgentConfig["schedule"];
-    status: "draft" | "live";
-  }>,
-) {
+async function updateAgentRecord(projectId: string, agentId: string, updates: AgentMutationFields) {
   const { agentRepository } = getProjectDeps(projectId);
   await agentRepository.update(agentId, updates);
 }
 
 function resolveToolConfig(
   toolConfig: ToolConfig | undefined,
-  requiredProviders: Array<{ provider: string; reason: string }> | undefined,
+  requiredProviders: ProviderRequirement[] | undefined,
 ): ToolConfig {
   if (toolConfig) {
     return toolConfig;
@@ -233,36 +202,41 @@ function resolveToolConfig(
   };
 }
 
+async function queueManualRun(projectId: string, agentId: string, source: "launch" | "run_now") {
+  return startAgentRun({
+    agentId,
+    projectId,
+    trigger: {
+      type: "manual",
+      timestamp: new Date(),
+      metadata: { source },
+    },
+  });
+}
+
 async function loadProjectAgentViews(projectId: string) {
-  const { agentRepository, runRepository, approvalRepository, lessonRepository, db } = getProjectDeps(projectId);
-  const agents = await agentRepository.listByProject(projectId);
-  return Promise.all(
-    agents.map(async (agent) =>
-      buildAgentView({
-        agent,
-        db,
-        runs: await runRepository.getByAgent(agent.id),
-        approvals: await approvalRepository.listByAgent(agent.id),
-        lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
-        activeConnections: agent.toolConfig.requiredProviders,
-      }),
-    ),
-  );
+  const deps = getProjectDeps(projectId);
+  const projectAgents = await deps.agentRepository.listByProject(projectId);
+  return Promise.all(projectAgents.map((agent) => buildAgentViewModel(deps, agent)));
 }
 
 async function loadAgentView(projectId: string, agentId: string) {
-  const { agentRepository, runRepository, approvalRepository, lessonRepository, db } = getProjectDeps(projectId);
-  const agent = await agentRepository.getById(agentId);
+  const deps = getProjectDeps(projectId);
+  const agent = await deps.agentRepository.getById(agentId);
   if (!agent) {
     return null;
   }
 
+  return buildAgentViewModel(deps, agent);
+}
+
+async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
   return buildAgentView({
     agent,
-    db,
-    runs: await runRepository.getByAgent(agent.id),
-    approvals: await approvalRepository.listByAgent(agent.id),
-    lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
+    db: deps.db,
+    runs: await deps.runRepository.getByAgent(agent.id),
+    approvals: await deps.approvalRepository.listByAgent(agent.id),
+    lessonsCount: (await deps.lessonRepository.listByAgent(agent.id)).length,
     activeConnections: agent.toolConfig.requiredProviders,
   });
 }

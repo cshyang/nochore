@@ -21,27 +21,20 @@ export class StubConnectionManager implements ConnectionManager {
 
   constructor(config: StubConnectionManagerConfig) {
     this.dataStore = new Map(Object.entries(config.data ?? {}));
-    this.executionResults = new Map(
-      Object.entries(config.executionResults ?? {}),
-    );
+    this.executionResults = new Map(Object.entries(config.executionResults ?? {}));
     this.defaultExecutionResult = config.defaultExecutionResult;
   }
 
   async fetch(dataTypeId: string): Promise<unknown> {
     if (!this.dataStore.has(dataTypeId)) {
       throw new Error(
-        `No data configured for data type "${dataTypeId}". ` +
-          `Available: [${[...this.dataStore.keys()].join(", ")}]`,
+        `No data configured for data type "${dataTypeId}". ` + `Available: [${[...this.dataStore.keys()].join(", ")}]`,
       );
     }
     return this.dataStore.get(dataTypeId);
   }
 
-  async execute(
-    action: string,
-    toolCategory: string,
-    args: Record<string, unknown>,
-  ): Promise<ExecutionResult> {
+  async execute(action: string, toolCategory: string, args: Record<string, unknown>): Promise<ExecutionResult> {
     this.executionLog.push({ action, toolCategory, args });
 
     const specific = this.executionResults.get(action);
@@ -49,9 +42,7 @@ export class StubConnectionManager implements ConnectionManager {
 
     if (this.defaultExecutionResult) return this.defaultExecutionResult;
 
-    throw new Error(
-      `No execution result configured for action "${action}" and no default provided`,
-    );
+    throw new Error(`No execution result configured for action "${action}" and no default provided`);
   }
 
   availableDataTypes(): string[] {

@@ -1,17 +1,17 @@
-import { useState, useRef, useEffect } from "react";
-import { COLORS, RADIUS, TYPE, MOTION } from "~/lib/colors";
-import type { ProjectView } from "~/lib/types";
-import { Badge } from "~/components/Badge";
 import {
-  Sparkle,
-  Plus,
   ArrowRight,
-  WarningCircle,
   CheckCircle,
-  FolderSimplePlus,
   CircleNotch,
+  FolderSimplePlus,
+  Plus,
+  Sparkle,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { Badge } from "~/components/Badge";
+import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import type { ProjectView } from "~/lib/types";
 
 export function Homepage({
   projects,
@@ -56,9 +56,7 @@ export function Homepage({
 
   // Gather all attention agents across projects for the "needs you" section
   const attentionItems = projects.flatMap((p) =>
-    p.agents
-      .filter((a) => a.status === "attention")
-      .map((a) => ({ ...a, projectName: p.name, projectId: p.id })),
+    p.agents.filter((a) => a.status === "attention").map((a) => ({ ...a, projectName: p.name, projectId: p.id })),
   );
 
   const transition = `${MOTION.duration} ${MOTION.ease}`;
@@ -168,7 +166,8 @@ export function Homepage({
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {attentionItems.map((item) => {
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={item.id}
                     onClick={() => onSelectProject(item.projectId)}
                     style={{
@@ -180,14 +179,13 @@ export function Homepage({
                       background: COLORS.orangeSubtle,
                       cursor: "pointer",
                       transition: `background ${transition}`,
+                      border: "none",
                       borderLeft: `1px solid ${COLORS.orangeBorder}`,
+                      width: "100%",
+                      textAlign: "left",
                     }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = COLORS.orangeDim)
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = COLORS.orangeSubtle)
-                    }
+                    onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.orangeDim)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = COLORS.orangeSubtle)}
                   >
                     <div>
                       <div
@@ -208,7 +206,7 @@ export function Homepage({
                       </div>
                     </div>
                     <ArrowRight size={16} weight="light" color={COLORS.textDim} />
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -259,6 +257,7 @@ export function Homepage({
             </span>
             {!creating && (
               <button
+                type="button"
                 onClick={() => setCreating(true)}
                 style={{
                   background: "none",
@@ -275,9 +274,7 @@ export function Homepage({
                   fontFamily: "inherit",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.text)}
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.color = COLORS.textSecondary)
-                }
+                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textSecondary)}
               >
                 <Plus size={14} weight="light" />
                 New project
@@ -301,12 +298,7 @@ export function Homepage({
                   transition: `all ${transition}`,
                 }}
               >
-                <FolderSimplePlus
-                  size={20}
-                  weight="duotone"
-                  color={COLORS.accent}
-                  style={{ flexShrink: 0 }}
-                />
+                <FolderSimplePlus size={20} weight="duotone" color={COLORS.accent} style={{ flexShrink: 0 }} />
                 <input
                   ref={inputRef}
                   type="text"
@@ -353,6 +345,7 @@ export function Homepage({
                         Enter
                       </span>
                       <button
+                        type="button"
                         onClick={handleCancel}
                         style={{
                           background: "none",
@@ -372,17 +365,12 @@ export function Homepage({
             )}
 
             {projects.map((proj) => {
-              const totalLessons = proj.agents.reduce(
-                (s, a) => s + a.lessonCount,
-                0,
-              );
-              const totalRuns = proj.agents.reduce(
-                (s, a) => s + a.runCount,
-                0,
-              );
+              const totalLessons = proj.agents.reduce((s, a) => s + a.lessonCount, 0);
+              const totalRuns = proj.agents.reduce((s, a) => s + a.runCount, 0);
 
               return (
-                <div
+                <button
+                  type="button"
                   key={proj.id}
                   onClick={() => onSelectProject(proj.id)}
                   style={{
@@ -391,13 +379,12 @@ export function Homepage({
                     background: COLORS.surface,
                     cursor: "pointer",
                     transition: `background ${transition}`,
+                    border: "none",
+                    width: "100%",
+                    textAlign: "left",
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = COLORS.surfaceHover)
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = COLORS.surface)
-                  }
+                  onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surfaceHover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = COLORS.surface)}
                 >
                   {/* Project header */}
                   <div
@@ -440,9 +427,7 @@ export function Homepage({
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {proj.attentionCount > 0 && (
-                        <Badge color="orange">{proj.attentionCount}</Badge>
-                      )}
+                      {proj.attentionCount > 0 && <Badge color="orange">{proj.attentionCount}</Badge>}
                       <ArrowRight size={16} weight="light" color={COLORS.textDim} />
                     </div>
                   </div>
@@ -483,17 +468,12 @@ export function Homepage({
                               background: statusDotColor,
                               flexShrink: 0,
                               opacity: agent.status === "idle" ? 0.5 : 1,
-                              ...(isRunning
-                                ? { animation: "pulse 3s ease-in-out infinite" }
-                                : {}),
+                              ...(isRunning ? { animation: "pulse 3s ease-in-out infinite" } : {}),
                             }}
                           />
                           <span
                             style={{
-                              color:
-                                agent.status === "attention"
-                                  ? COLORS.text
-                                  : COLORS.textSecondary,
+                              color: agent.status === "attention" ? COLORS.text : COLORS.textSecondary,
                               fontWeight: agent.status === "attention" ? TYPE.weight.medium : TYPE.weight.regular,
                             }}
                           >
@@ -503,7 +483,7 @@ export function Homepage({
                       );
                     })}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

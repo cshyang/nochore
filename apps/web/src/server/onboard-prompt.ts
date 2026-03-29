@@ -18,14 +18,10 @@ export function buildOnboardingSystemPrompt(params: {
   existingConnections: string[];
   toolkitSummaries: ToolkitSummary[];
 }): string {
-  const skillsList = params.availableSkills
-    .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
-    .join("\n");
+  const skillsList = params.availableSkills.map((s) => `- ${s.id}: ${s.name} — ${s.description}`).join("\n");
 
   const toolkitList = params.toolkitSummaries.length
-    ? params.toolkitSummaries
-        .map((tk) => `- **${tk.name}** (${tk.slug}) — ${tk.description}`)
-        .join("\n")
+    ? params.toolkitSummaries.map((tk) => `- **${tk.name}** (${tk.slug}) — ${tk.description}`).join("\n")
     : "none available";
 
   return `# Agent Setup Assistant

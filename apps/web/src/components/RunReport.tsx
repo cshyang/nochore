@@ -1,8 +1,8 @@
+import { CheckCircle, CircleNotch, Play, WarningCircle } from "@phosphor-icons/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Play, WarningCircle, CheckCircle, CircleNotch } from "@phosphor-icons/react";
-import { Button } from "~/components/Button";
 import { Badge } from "~/components/Badge";
+import { Button } from "~/components/Button";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 
 export interface ReportRun {
@@ -65,24 +65,61 @@ function formatDuration(start: string | number | Date | undefined, end: string |
 }
 
 function humanize(value: string): string {
-  return value.replace(/_/g, " ").replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  return value
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, onReject }: RunReportProps) {
   // Empty state: no runs at all
   if (!hasRuns || !run) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center", flex: 1 }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: RADIUS.lg,
-          background: COLORS.accentDim, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16,
-        }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "80px 24px",
+          textAlign: "center",
+          flex: 1,
+        }}
+      >
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: RADIUS.lg,
+            background: COLORS.accentDim,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 16,
+          }}
+        >
           <Play size={20} weight="bold" color={COLORS.accent} />
         </div>
-        <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+        <div
+          style={{
+            fontSize: TYPE.scale.md,
+            fontWeight: TYPE.weight.semibold,
+            color: COLORS.text,
+            fontFamily: TYPE.display,
+            marginBottom: 6,
+          }}
+        >
           No runs yet
         </div>
-        <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary, maxWidth: 440, lineHeight: TYPE.leading.normal, marginBottom: 20 }}>
+        <div
+          style={{
+            fontSize: TYPE.scale.base,
+            color: COLORS.textSecondary,
+            maxWidth: 440,
+            lineHeight: TYPE.leading.normal,
+            marginBottom: 20,
+          }}
+        >
           Your agent hasn't run yet. Click "Run now" to see it in action.
         </div>
         {onRunNow && (
@@ -101,9 +138,32 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
   // Running state
   if (status === "running" || status === "queued") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center", flex: 1 }}>
-        <CircleNotch size={32} weight="bold" color={COLORS.accent} style={{ animation: "spin 1s linear infinite", marginBottom: 16 }} />
-        <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, color: COLORS.text, fontFamily: TYPE.display, marginBottom: 6 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "80px 24px",
+          textAlign: "center",
+          flex: 1,
+        }}
+      >
+        <CircleNotch
+          size={32}
+          weight="bold"
+          color={COLORS.accent}
+          style={{ animation: "spin 1s linear infinite", marginBottom: 16 }}
+        />
+        <div
+          style={{
+            fontSize: TYPE.scale.md,
+            fontWeight: TYPE.weight.semibold,
+            color: COLORS.text,
+            fontFamily: TYPE.display,
+            marginBottom: 6,
+          }}
+        >
           {status === "queued" ? "Run queued..." : "Run in progress..."}
         </div>
         <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary }}>
@@ -118,13 +178,27 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
     return (
       <div style={{ flex: 1, padding: "24px 0" }}>
         {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: 14, padding: 20,
-          background: COLORS.redSubtle, border: `1px solid ${COLORS.redBorder}`, borderRadius: RADIUS.sm,
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 14,
+            padding: 20,
+            background: COLORS.redSubtle,
+            border: `1px solid ${COLORS.redBorder}`,
+            borderRadius: RADIUS.sm,
+          }}
+        >
           <WarningCircle size={20} weight="bold" color={COLORS.red} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.red, marginBottom: 4 }}>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.red,
+                marginBottom: 4,
+              }}
+            >
               Run failed
             </div>
             <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
@@ -142,13 +216,27 @@ export function RunReport({ run, hasRuns, onRunNow, pendingApproval, onApprove, 
     return (
       <div style={{ flex: 1, padding: "24px 0" }}>
         {pendingApproval && <ApprovalCard approval={pendingApproval} onApprove={onApprove} onReject={onReject} />}
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: 14, padding: 20,
-          background: COLORS.accentSubtle, border: `1px solid ${COLORS.accentBorder}`, borderRadius: RADIUS.sm,
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 14,
+            padding: 20,
+            background: COLORS.accentSubtle,
+            border: `1px solid ${COLORS.accentBorder}`,
+            borderRadius: RADIUS.sm,
+          }}
+        >
           <CheckCircle size={20} weight="bold" color={COLORS.accent} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text, marginBottom: 4 }}>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                marginBottom: 4,
+              }}
+            >
               Run completed
             </div>
             <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
@@ -184,11 +272,20 @@ function ApprovalCard({
   onReject?: (id: string) => void;
 }) {
   return (
-    <div style={{
-      padding: 16, marginBottom: 20,
-      background: COLORS.orangeSubtle, border: `1px solid ${COLORS.orangeBorder}`, borderRadius: RADIUS.sm,
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
-    }}>
+    <div
+      style={{
+        padding: 16,
+        marginBottom: 20,
+        background: COLORS.orangeSubtle,
+        border: `1px solid ${COLORS.orangeBorder}`,
+        borderRadius: RADIUS.sm,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+      }}
+    >
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <Badge color="orange">Approval needed</Badge>
@@ -205,8 +302,12 @@ function ApprovalCard({
         )}
       </div>
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <Button size="sm" onClick={() => onApprove?.(approval.id)}>Approve</Button>
-        <Button size="sm" variant="ghost" onClick={() => onReject?.(approval.id)}>Reject</Button>
+        <Button size="sm" onClick={() => onApprove?.(approval.id)}>
+          Approve
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onReject?.(approval.id)}>
+          Reject
+        </Button>
       </div>
     </div>
   );
@@ -219,14 +320,24 @@ function RunMeta({ run }: { run: ReportRun }) {
   if (!duration && !toolCount) return null;
 
   return (
-    <div style={{
-      marginTop: 24, paddingTop: 16,
-      borderTop: `1px solid ${COLORS.border}`,
-      display: "flex", gap: 20, flexWrap: "wrap",
-      fontSize: TYPE.scale.xs, color: COLORS.textDim,
-    }}>
+    <div
+      style={{
+        marginTop: 24,
+        paddingTop: 16,
+        borderTop: `1px solid ${COLORS.border}`,
+        display: "flex",
+        gap: 20,
+        flexWrap: "wrap",
+        fontSize: TYPE.scale.xs,
+        color: COLORS.textDim,
+      }}
+    >
       {duration && <span>Duration: {duration}</span>}
-      {toolCount > 0 && <span>{toolCount} tool call{toolCount === 1 ? "" : "s"}</span>}
+      {toolCount > 0 && (
+        <span>
+          {toolCount} tool call{toolCount === 1 ? "" : "s"}
+        </span>
+      )}
       {run.triggerType && <span>Trigger: {humanize(run.triggerType)}</span>}
     </div>
   );

@@ -3,13 +3,12 @@ import { createDb } from "../../../../packages/harness/src/db/client";
 import { agents, connections, projects } from "../../../../packages/harness/src/db/schema";
 import { AgentRepository } from "../../../../packages/harness/src/repositories/agent";
 import { ApprovalRepository } from "../../../../packages/harness/src/repositories/approval";
-import { LessonRepository } from "../../../../packages/harness/src/repositories/lesson";
 import { RunEventRepository } from "../../../../packages/harness/src/repositories/event";
+import { LessonRepository } from "../../../../packages/harness/src/repositories/lesson";
 import { RunRepository } from "../../../../packages/harness/src/repositories/run";
 import { listPromptSkills } from "../../../../packages/harness/src/skills";
-import { WorkspaceStore } from "../../../../packages/harness/src/workspace";
-import { getAgentWorkspacePath, getProjectDbPath } from "../../../../packages/harness/src/workspace";
 import type { AgentConfig } from "../../../../packages/harness/src/types";
+import { getAgentWorkspacePath, getProjectDbPath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
 import { buildAgentView, buildProjectView } from "./models";
 
 const dbCache = new Map<string, ReturnType<typeof createDb>>();
@@ -58,12 +57,7 @@ export interface AgentRow {
 
 export function listAgentRows(projectId: string): AgentRow[] {
   const { db } = getProjectDeps(projectId);
-  return db
-    .select()
-    .from(agents)
-    .where(eq(agents.projectId, projectId))
-    .all()
-    .map(toAgentRow);
+  return db.select().from(agents).where(eq(agents.projectId, projectId)).all().map(toAgentRow);
 }
 
 export function getAgentRow(projectId: string, agentId: string): AgentRow | null {
@@ -74,11 +68,7 @@ export function getAgentRow(projectId: string, agentId: string): AgentRow | null
 
 export function listProjectConnections(projectId: string) {
   const { db } = getProjectDeps(projectId);
-  return db
-    .select()
-    .from(connections)
-    .where(eq(connections.projectId, projectId))
-    .all();
+  return db.select().from(connections).where(eq(connections.projectId, projectId)).all();
 }
 
 export function getProjectRow(projectId: string) {
@@ -92,7 +82,7 @@ export async function getProjectView(projectId: string) {
     return null;
   }
 
-  const { db, agentRepository, runRepository, runEventRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
+  const { db, agentRepository, runRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
   const agentRows = await agentRepository.listByProject(projectId);
   const agents = await Promise.all(
     agentRows.map(async (agent) =>
@@ -147,9 +137,7 @@ function toAgentRow(row: typeof agents.$inferSelect): AgentRow {
 function parseSkills(value: string): string[] {
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
   } catch {
     return [];
   }

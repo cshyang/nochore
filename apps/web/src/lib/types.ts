@@ -1,17 +1,7 @@
 export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
 export type AgentOperationalStatus = "running" | "attention" | "idle" | "error";
-export type RunStatus =
-  | "queued"
-  | "running"
-  | "waiting_for_approval"
-  | "completed"
-  | "failed";
-export type ApprovalStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "blocked"
-  | "expired";
+export type RunStatus = "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "blocked" | "expired";
 export type RunEventType =
   | "run_started"
   | "prompt_built"

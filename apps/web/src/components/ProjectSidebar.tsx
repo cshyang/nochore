@@ -1,10 +1,7 @@
-import { COLORS, RADIUS, TYPE, MOTION, getAgentColor } from "~/lib/colors";
-import type { ProjectView, AgentView } from "~/lib/types";
+import { ArrowLeft, Plus } from "@phosphor-icons/react";
 import { Button } from "~/components/Button";
-import {
-  ArrowLeft,
-  Plus,
-} from "@phosphor-icons/react";
+import { COLORS, getAgentColor, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import type { AgentView, ProjectView } from "~/lib/types";
 
 interface ProjectSidebarProps {
   project: ProjectView;
@@ -14,19 +11,9 @@ interface ProjectSidebarProps {
   onNewAgent: () => void;
 }
 
-export function ProjectSidebar({
-  project,
-  activeAgentId,
-  onSelectAgent,
-  onGoHome,
-  onNewAgent,
-}: ProjectSidebarProps) {
-  const draftAgents = project.agents.filter(
-    (a) => a.lifecycleStatus === "draft",
-  );
-  const attentionAgents = project.agents.filter(
-    (a) => a.lifecycleStatus !== "draft" && a.status === "attention",
-  );
+export function ProjectSidebar({ project, activeAgentId, onSelectAgent, onGoHome, onNewAgent }: ProjectSidebarProps) {
+  const draftAgents = project.agents.filter((a) => a.lifecycleStatus === "draft");
+  const attentionAgents = project.agents.filter((a) => a.lifecycleStatus !== "draft" && a.status === "attention");
   const activeAgents = project.agents.filter(
     (a) => a.lifecycleStatus !== "draft" && (a.status === "running" || a.status === "idle"),
   );
@@ -47,7 +34,8 @@ export function ProjectSidebar({
       }}
     >
       {/* Back to projects */}
-      <div
+      <button
+        type="button"
         onClick={onGoHome}
         style={{
           padding: "12px 16px",
@@ -56,19 +44,23 @@ export function ProjectSidebar({
           gap: 8,
           cursor: "pointer",
           transition: `background ${MOTION.duration} ${MOTION.ease}`,
+          background: "none",
+          border: "none",
+          width: "100%",
+          textAlign: "left",
         }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = COLORS.surfaceHover)
-        }
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.background = "transparent")
-        }
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = COLORS.surfaceHover;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
       >
         <ArrowLeft size={14} weight="light" color={COLORS.textSecondary} />
         <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
           All projects
         </span>
-      </div>
+      </button>
 
       {/* Project header */}
       <div
@@ -222,7 +214,8 @@ function AgentRow({
   const isAttention = !isDraft && agent.status === "attention";
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onSelect}
       style={{
         padding: "8px 12px",
@@ -232,13 +225,18 @@ function AgentRow({
         background: isActive ? COLORS.surfaceHover : "transparent",
         borderLeft: isActive ? `2px solid ${agentColor.primary}` : "2px solid transparent",
         transition: `all ${MOTION.duration} ${MOTION.ease}`,
+        borderTop: "none",
+        borderRight: "none",
+        borderBottom: "none",
+        width: "100%",
+        textAlign: "left",
       }}
-      onMouseEnter={(e) =>
-        !isActive && (e.currentTarget.style.background = COLORS.surfaceHover)
-      }
-      onMouseLeave={(e) =>
-        !isActive && (e.currentTarget.style.background = "transparent")
-      }
+      onMouseEnter={(e) => {
+        if (!isActive) e.currentTarget.style.background = COLORS.surfaceHover;
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) e.currentTarget.style.background = "transparent";
+      }}
     >
       <div
         style={{
@@ -279,7 +277,17 @@ function AgentRow({
           {agent.name}
         </span>
         {isDraft && (
-          <span style={{ fontSize: 10, color: COLORS.textDim, marginLeft: "auto", flexShrink: 0, padding: "1px 6px", borderRadius: RADIUS.pill, border: `1px solid ${COLORS.border}` }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: COLORS.textDim,
+              marginLeft: "auto",
+              flexShrink: 0,
+              padding: "1px 6px",
+              borderRadius: RADIUS.pill,
+              border: `1px solid ${COLORS.border}`,
+            }}
+          >
             Draft
           </span>
         )}
@@ -295,9 +303,10 @@ function AgentRow({
             fontFamily: TYPE.body,
           }}
         >
-          {agent.pendingCount} action{agent.pendingCount === 1 ? "" : "s"} need{agent.pendingCount === 1 ? "s" : ""} approval
+          {agent.pendingCount} action{agent.pendingCount === 1 ? "" : "s"} need{agent.pendingCount === 1 ? "s" : ""}{" "}
+          approval
         </div>
       )}
-    </div>
+    </button>
   );
 }

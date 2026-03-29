@@ -2,8 +2,8 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { initializeWorkspace } from "../templates";
 import { WorkspaceStore } from "../store";
+import { initializeWorkspace } from "../templates";
 
 const tempDirs: string[] = [];
 
@@ -11,9 +11,7 @@ afterEach(async () => {
   await Promise.all(
     tempDirs.map(async (dir) => {
       try {
-        await import("node:fs/promises").then((fs) =>
-          fs.rm(dir, { recursive: true, force: true }),
-        );
+        await import("node:fs/promises").then((fs) => fs.rm(dir, { recursive: true, force: true }));
       } catch {
         // ignore cleanup failures in temp dirs
       }
@@ -61,9 +59,7 @@ describe("simplified workspace", () => {
 
     const store = new WorkspaceStore(dir);
 
-    await expect(store.writeFile("reports/out.md", "nope")).rejects.toThrow(
-      /not writable/i,
-    );
+    await expect(store.writeFile("reports/out.md", "nope")).rejects.toThrow(/not writable/i);
     await expect(store.readFile("../secrets.md")).rejects.toThrow(/Invalid path/);
   });
 });

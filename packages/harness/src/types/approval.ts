@@ -1,12 +1,6 @@
 import { z } from "zod";
 
-export const ApprovalStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "rejected",
-  "blocked",
-  "expired",
-]);
+export const ApprovalStatusSchema = z.enum(["pending", "approved", "rejected", "blocked", "expired"]);
 export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
 
 export const ApprovalRecordSchema = z.object({

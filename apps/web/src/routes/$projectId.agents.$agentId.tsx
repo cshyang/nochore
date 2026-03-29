@@ -1,28 +1,14 @@
-import { useState, useCallback, useEffect } from "react";
-import {
-  createFileRoute,
-  useNavigate,
-  useParams,
-  useRouter,
-} from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
-import {
-  deleteAgent,
-  getAgent,
-  triggerManualRun,
-  updateAgentConfig,
-} from "~/server/agents";
-import { getProject } from "~/server/projects";
-import { getRunHistory } from "~/server/runs";
-import {
-  approveAction,
-  getPendingActions,
-  rejectAction,
-} from "~/server/approvals";
+import { deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agents";
+import { approveAction, getPendingActions, rejectAction } from "~/server/approvals";
 import { sendChat } from "~/server/chat";
-import { listAvailableSkills } from "~/server/skills";
 import { disconnectProvider, initiateConnection, listConnections } from "~/server/connections";
+import { getProject } from "~/server/projects";
 import { getRealtimeToken } from "~/server/realtime";
+import { getRunHistory } from "~/server/runs";
+import { listAvailableSkills } from "~/server/skills";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
@@ -88,23 +74,29 @@ function AgentDetailPage() {
     void router.invalidate();
   }, [router]);
 
-  const handleConnect = useCallback(async (provider: string) => {
-    try {
-      const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}`;
-      const result = await initiateConnection({ data: { projectId, provider, callbackUrl } });
-      const data = result as { redirectUrl?: string };
-      if (data.redirectUrl) {
-        window.open(data.redirectUrl, "composio-oauth", "width=600,height=700");
+  const handleConnect = useCallback(
+    async (provider: string) => {
+      try {
+        const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}`;
+        const result = await initiateConnection({ data: { projectId, provider, callbackUrl } });
+        const data = result as { redirectUrl?: string };
+        if (data.redirectUrl) {
+          window.open(data.redirectUrl, "composio-oauth", "width=600,height=700");
+        }
+      } catch {
+        // Connection initiation failed
       }
-    } catch {
-      // Connection initiation failed
-    }
-  }, [projectId]);
+    },
+    [projectId],
+  );
 
-  const handleDisconnect = useCallback(async (provider: string, connectedAccountId: string) => {
-    await disconnectProvider({ data: { projectId, provider, connectedAccountId } });
-    void router.invalidate();
-  }, [projectId, router]);
+  const handleDisconnect = useCallback(
+    async (provider: string, connectedAccountId: string) => {
+      await disconnectProvider({ data: { projectId, provider, connectedAccountId } });
+      void router.invalidate();
+    },
+    [projectId, router],
+  );
 
   // Refresh data when OAuth popup signals a successful connection
   useEffect(() => {
@@ -120,19 +112,60 @@ function AgentDetailPage() {
   // Auto-activate LiveRunView if page loads with an active run
   useEffect(() => {
     if (activeRun) return;
-    const activeRunRecord = runs.find(
-      (r) => r.status === "running" || r.status === "queued",
-    );
+    const activeRunRecord = runs.find((r) => r.status === "running" || r.status === "queued");
     if (!activeRunRecord) return;
     const triggerRunId = (activeRunRecord as { triggerRunId?: string }).triggerRunId;
     if (triggerRunId) {
       void activateRun(activeRunRecord.id, triggerRunId);
     }
-  }, []); // Run once on mount
+  }, [activeRun, activateRun, runs]); // Run once on mount
+
+  const [runError, setRunError] = useState<string | null>(null);
 
   if (!project || !agent) {
     return <div>Agent not found.</div>;
   }
+
+  const handleRunNow = async () => {
+    setRunError(null);
+    try {
+      const result = await triggerManualRun({ data: { agentId, projectId } });
+      const data = result as { runId?: string; triggerRunId?: string };
+      if (data.runId && data.triggerRunId) {
+        void activateRun(data.runId, data.triggerRunId);
+      }
+      void router.invalidate();
+      return data;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setRunError(
+        msg.includes("fetch") || msg.includes("ECONNREFUSED")
+          ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
+          : `Run failed: ${msg}`,
+      );
+      return {};
+    }
+  };
+
+  const handleAskDeeper = async (prompt: string, context?: { eventId?: string; runId?: string }) => {
+    setRunError(null);
+    try {
+      const message = context?.runId ? `[Re: run ${context.runId}] ${prompt}` : prompt;
+      const result = await sendChat({ data: { agentId, projectId, message } });
+      const data = result as { startedRunId?: string; triggerRunId?: string };
+      if (data.startedRunId && data.triggerRunId) {
+        void activateRun(data.startedRunId, data.triggerRunId);
+      }
+      void router.invalidate();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setRunError(
+        msg.includes("fetch") || msg.includes("ECONNREFUSED")
+          ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
+          : `Run failed: ${msg}`,
+      );
+    }
+  };
 
   const handleApprove = async (actionId: string) => {
     try {
@@ -159,47 +192,6 @@ function AgentDetailPage() {
     navigate({ to: "/$projectId", params: { projectId } });
   };
 
-  const [runError, setRunError] = useState<string | null>(null);
-
-  const handleRunNow = async () => {
-    setRunError(null);
-    try {
-      const result = await triggerManualRun({ data: { agentId, projectId } });
-      const data = result as { runId?: string; triggerRunId?: string };
-      if (data.runId && data.triggerRunId) {
-        void activateRun(data.runId, data.triggerRunId);
-      }
-      void router.invalidate();
-      return data;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setRunError(msg.includes("fetch") || msg.includes("ECONNREFUSED")
-        ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
-        : `Run failed: ${msg}`);
-      return {};
-    }
-  };
-
-  const handleAskDeeper = async (prompt: string, context?: { eventId?: string; runId?: string }) => {
-    setRunError(null);
-    try {
-      const message = context?.runId
-        ? `[Re: run ${context.runId}] ${prompt}`
-        : prompt;
-      const result = await sendChat({ data: { agentId, projectId, message } });
-      const data = result as { startedRunId?: string; triggerRunId?: string };
-      if (data.startedRunId && data.triggerRunId) {
-        void activateRun(data.startedRunId, data.triggerRunId);
-      }
-      void router.invalidate();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setRunError(msg.includes("fetch") || msg.includes("ECONNREFUSED")
-        ? "Could not reach the task runner. Is trigger.dev running? (npx trigger.dev dev)"
-        : `Run failed: ${msg}`);
-    }
-  };
-
   return (
     <AgentWorkspace
       agent={agent}
@@ -209,9 +201,7 @@ function AgentDetailPage() {
       activeRun={activeRun}
       onLiveRunComplete={handleLiveRunComplete}
       runError={runError}
-      onBack={() =>
-        navigate({ to: "/$projectId", params: { projectId } })
-      }
+      onBack={() => navigate({ to: "/$projectId", params: { projectId } })}
       onDeleteAgent={handleDeleteAgent}
       onRunNow={handleRunNow}
       onConnect={handleConnect}
@@ -225,9 +215,13 @@ function AgentDetailPage() {
             ...(updates.description !== undefined ? { description: updates.description } : {}),
             ...(updates.instructions !== undefined ? { instructions: updates.instructions } : {}),
             ...(updates.skills !== undefined ? { skills: updates.skills } : {}),
-            ...(updates.schedule !== undefined ? { schedule: updates.schedule as "hourly" | "6hours" | "daily" | "weekly" | "manual" } : {}),
+            ...(updates.schedule !== undefined
+              ? { schedule: updates.schedule as "hourly" | "6hours" | "daily" | "weekly" | "manual" }
+              : {}),
             ...(updates.toolConfig !== undefined ? { toolConfig: updates.toolConfig as never } : {}),
-            ...(updates.notificationConfig !== undefined ? { notificationConfig: updates.notificationConfig as never } : {}),
+            ...(updates.notificationConfig !== undefined
+              ? { notificationConfig: updates.notificationConfig as never }
+              : {}),
             ...(updates.status !== undefined ? { status: updates.status as "draft" | "live" } : {}),
           },
         });
@@ -262,28 +256,17 @@ function normalizeAgent(agent: unknown) {
     id: value.id,
     name: value.name,
     description: typeof value.description === "string" ? value.description : "",
-    instructions:
-      typeof value.instructions === "string"
-        ? value.instructions
-        : "",
-    skills: Array.isArray(value.skills)
-      ? value.skills.filter((item): item is string => typeof item === "string")
-      : [],
-    schedule:
-      typeof value.schedule === "string"
-        ? value.schedule
-        : "manual",
-    status:
-      typeof value.status === "string"
-        ? value.status
-        : "draft",
+    instructions: typeof value.instructions === "string" ? value.instructions : "",
+    skills: Array.isArray(value.skills) ? value.skills.filter((item): item is string => typeof item === "string") : [],
+    schedule: typeof value.schedule === "string" ? value.schedule : "manual",
+    status: typeof value.status === "string" ? value.status : "draft",
     toolConfig:
-      (value.toolConfig as Record<string, unknown> | undefined) ?? ({
+      (value.toolConfig as Record<string, unknown> | undefined) ??
+      ({
         requiredProviders: [],
         tools: {},
       } as Record<string, unknown>),
-    notificationConfig:
-      (value.notificationConfig as Record<string, unknown> | undefined) ?? {
+    notificationConfig: (value.notificationConfig as Record<string, unknown> | undefined) ?? {
       inApp: true,
       email: false,
       slack: false,
@@ -295,7 +278,10 @@ function normalizeSkills(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter(
     (item): item is { id: string; name: string; description?: string } =>
-      !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string" && typeof (item as Record<string, unknown>).name === "string",
+      !!item &&
+      typeof item === "object" &&
+      typeof (item as Record<string, unknown>).id === "string" &&
+      typeof (item as Record<string, unknown>).name === "string",
   );
 }
 
@@ -313,7 +299,9 @@ function normalizeConnections(value: unknown) {
 function normalizeRuns(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (item): item is {
+    (
+      item,
+    ): item is {
       id: string;
       agentId?: string;
       triggerType?: string;
@@ -328,15 +316,16 @@ function normalizeRuns(value: unknown) {
         proposals?: Array<{ id?: string; action?: string; reason?: string; confidence?: number; skillSource?: string }>;
         steps?: Array<{ step?: string }>;
       };
-    } =>
-      !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string",
+    } => !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string",
   );
 }
 
 function normalizeApprovals(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (item): item is {
+    (
+      item,
+    ): item is {
       id: string;
       approvalId?: string;
       runId?: string;
@@ -346,8 +335,6 @@ function normalizeApprovals(value: unknown) {
       decisionReason?: string;
       createdAt?: string | number | Date;
       resolvedAt?: string | number | Date;
-    } =>
-      !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string",
+    } => !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string",
   );
 }
-

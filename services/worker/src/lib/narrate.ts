@@ -45,15 +45,10 @@ export function humanizeToolName(toolName: string): string {
  * Returns a human-readable one-liner for any agent run event.
  * Unknown event types pass through as-is for forward compatibility.
  */
-export function narrateEvent(
-  type: string,
-  payload: Record<string, unknown>,
-): string {
+export function narrateEvent(type: string, payload: Record<string, unknown>): string {
   switch (type) {
     case "run_started": {
-      const trigger = payload.trigger as
-        | { type: string }
-        | undefined;
+      const trigger = payload.trigger as { type: string } | undefined;
       const providers = payload.providers as string[] | undefined;
       const triggerLabel = trigger?.type ?? "unknown";
       const providerCount = providers?.length ?? 0;
@@ -109,20 +104,14 @@ export function narrateEvent(
     }
 
     case "run_completed": {
-      const summary = payload.summary as
-        | { headline?: string; status?: string }
-        | undefined;
+      const summary = payload.summary as { headline?: string; status?: string } | undefined;
       const headline = summary?.headline;
-      return headline
-        ? `Completed -- ${truncate(headline, 170)}`
-        : "Run completed";
+      return headline ? `Completed -- ${truncate(headline, 170)}` : "Run completed";
     }
 
     case "run_failed": {
       const reason = payload.reason as string | undefined;
-      return reason
-        ? `Run failed -- ${truncate(reason, 150)}`
-        : "Run failed";
+      return reason ? `Run failed -- ${truncate(reason, 150)}` : "Run failed";
     }
 
     default:
@@ -136,7 +125,7 @@ export function narrateEvent(
 
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1) + "\u2026";
+  return `${text.slice(0, maxLength - 1)}\u2026`;
 }
 
 function titleCase(word: string): string {

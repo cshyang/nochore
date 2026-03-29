@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { COLORS, RADIUS, MOTION } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS } from "~/lib/colors";
 
 export interface ToastData {
   id: string;
@@ -13,13 +13,7 @@ export interface ToastData {
   duration?: number;
 }
 
-export function Toast({
-  toast,
-  onDismiss,
-}: {
-  toast: ToastData;
-  onDismiss: (id: string) => void;
-}) {
+export function Toast({ toast, onDismiss }: { toast: ToastData; onDismiss: (id: string) => void }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -64,6 +58,7 @@ export function Toast({
     >
       <span style={{ flex: 1, lineHeight: 1.4 }}>{toast.message}</span>
       <button
+        type="button"
         onClick={() => {
           setVisible(false);
           setTimeout(() => onDismiss(toast.id), 200);
@@ -85,13 +80,7 @@ export function Toast({
   );
 }
 
-export function ToastContainer({
-  toasts,
-  onDismiss,
-}: {
-  toasts: ToastData[];
-  onDismiss: (id: string) => void;
-}) {
+export function ToastContainer({ toasts, onDismiss }: { toasts: ToastData[]; onDismiss: (id: string) => void }) {
   if (toasts.length === 0) return null;
 
   return (

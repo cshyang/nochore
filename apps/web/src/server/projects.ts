@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { createDb } from "../../../../packages/harness/src/db/client";
-import { projects, connections } from "../../../../packages/harness/src/db/schema";
+import { connections, projects } from "../../../../packages/harness/src/db/schema";
 import { getProjectDbPath, getProjectDirectory, getWebDataRoot } from "../../../../packages/harness/src/workspace";
-import { buildAgentView, buildProjectView } from "./models";
 import { clearProjectDeps, getProjectDeps } from "./deps";
+import { buildAgentView, buildProjectView } from "./models";
 import { jsonSafe } from "./serializable";
 
 const DEFAULT_PROJECT_ICON = "briefcase";
@@ -102,13 +102,15 @@ async function loadProjectView(projectId: string) {
     if (!projectRow) {
       // Self-heal: directory exists but no DB row (created by older version)
       const now = Date.now();
-      db.insert(projects).values({
-        id: projectId,
-        name: projectId.charAt(0).toUpperCase() + projectId.slice(1),
-        icon: DEFAULT_PROJECT_ICON,
-        color: DEFAULT_PROJECT_COLOR,
-        createdAt: now,
-      }).run();
+      db.insert(projects)
+        .values({
+          id: projectId,
+          name: projectId.charAt(0).toUpperCase() + projectId.slice(1),
+          icon: DEFAULT_PROJECT_ICON,
+          color: DEFAULT_PROJECT_COLOR,
+          createdAt: now,
+        })
+        .run();
       projectRow = db.select().from(projects).get();
       if (!projectRow) return null;
     }

@@ -1,12 +1,7 @@
 import { COLORS, RADIUS } from "~/lib/colors";
 
 export function MiniConfidence({ value }: { value: number }) {
-  const color =
-    value >= 80
-      ? COLORS.green
-      : value >= 60
-        ? COLORS.orange
-        : COLORS.textSecondary;
+  const color = value >= 80 ? COLORS.green : value >= 60 ? COLORS.orange : COLORS.textSecondary;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
       <div

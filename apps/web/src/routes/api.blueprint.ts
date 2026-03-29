@@ -7,7 +7,7 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { ToolLoopAgent, stepCountIs, tool } from "ai";
+import { stepCountIs, ToolLoopAgent, tool } from "ai";
 import { z } from "zod";
 import type {
   AgentSchedule,
@@ -21,22 +21,16 @@ async function createModel() {
 
   switch (provider) {
     case "zai": {
-      const { createOpenAICompatible } = await import(
-        "@ai-sdk/openai-compatible"
-      );
+      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
       const zai = createOpenAICompatible({
         name: "zai",
-        baseURL:
-          process.env.LLM_BASE_URL ??
-          "https://open.bigmodel.cn/api/paas/v4",
+        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
         apiKey: process.env.ZAI_API_KEY,
       });
       return zai(process.env.LLM_MODEL ?? "glm-4.7");
     }
     case "openai": {
-      const { createOpenAICompatible } = await import(
-        "@ai-sdk/openai-compatible"
-      );
+      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
       const openai = createOpenAICompatible({
         name: "openai",
         baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
@@ -44,7 +38,6 @@ async function createModel() {
       });
       return openai(process.env.LLM_MODEL ?? "gpt-4o");
     }
-    case "anthropic":
     default: {
       const { createAnthropic } = await import("@ai-sdk/anthropic");
       const anthropic = createAnthropic();
@@ -53,32 +46,14 @@ async function createModel() {
   }
 }
 
-const DraftScheduleSchema = z.enum([
-  "hourly",
-  "6hours",
-  "daily",
-  "weekly",
-  "manual",
-]);
+const DraftScheduleSchema = z.enum(["hourly", "6hours", "daily", "weekly", "manual"]);
 
 const ToolInputSchema = z.object({
   name: z.string().min(1).describe("A short, memorable agent name"),
-  description: z
-    .string()
-    .min(1)
-    .describe("A concise one-sentence summary of the agent"),
-  instructions: z
-    .string()
-    .min(1)
-    .describe("Detailed markdown instructions that become the agent system prompt"),
-  skills: z
-    .array(z.string())
-    .default([])
-    .describe("Skill IDs chosen from the available skills list"),
-  providers: z
-    .array(z.string())
-    .default([])
-    .describe("Provider slugs the agent genuinely requires"),
+  description: z.string().min(1).describe("A concise one-sentence summary of the agent"),
+  instructions: z.string().min(1).describe("Detailed markdown instructions that become the agent system prompt"),
+  skills: z.array(z.string()).default([]).describe("Skill IDs chosen from the available skills list"),
+  providers: z.array(z.string()).default([]).describe("Provider slugs the agent genuinely requires"),
   schedule: DraftScheduleSchema.describe("How often the agent should run"),
 });
 
@@ -130,10 +105,7 @@ const PROVIDER_INFO: Record<string, { name: string; reason: string }> = {
   },
 };
 
-function resolveSkillIds(
-  modelSkills: string[],
-  available: Array<{ id: string; name: string }>,
-): string[] {
+function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; name: string }>): string[] {
   if (!modelSkills.length || !available.length) return [];
 
   const resolved: string[] = [];
@@ -148,12 +120,7 @@ function resolveSkillIds(
     const fuzzy = available.find((skill) => {
       const normId = skill.id.toLowerCase().replace(/[-_\s]/g, "");
       const normName = skill.name.toLowerCase().replace(/[-_\s]/g, "");
-      return (
-        normId === lower ||
-        normName === lower ||
-        normId.includes(lower) ||
-        lower.includes(normId)
-      );
+      return normId === lower || normName === lower || normId.includes(lower) || lower.includes(normId);
     });
 
     if (fuzzy) {
@@ -165,9 +132,7 @@ function resolveSkillIds(
 }
 
 function expandBlueprint(raw: ToolInput): BlueprintDraft {
-  const providers = Array.from(
-    new Set((raw.providers ?? []).filter((provider) => provider in PROVIDER_INFO)),
-  );
+  const providers = Array.from(new Set((raw.providers ?? []).filter((provider) => provider in PROVIDER_INFO)));
   const requiredProviders = providers.map((provider) => ({
     provider,
     reason: PROVIDER_INFO[provider]?.reason ?? "Required for this agent",
@@ -257,14 +222,10 @@ If the user request is too vague to write usable instructions, ask one focused f
           },
           tools: {
             create_blueprint: tool({
-              description:
-                "Create a draft agent configuration once you have enough context.",
+              description: "Create a draft agent configuration once you have enough context.",
               inputSchema: ToolInputSchema,
               execute: async (input) => {
-                const resolvedSkills = resolveSkillIds(
-                  input.skills,
-                  availableSkills,
-                );
+                const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
                 const blueprint = expandBlueprint({
                   ...input,
@@ -286,7 +247,7 @@ If the user request is too vague to write usable instructions, ask one focused f
         const stream = new ReadableStream({
           async start(controller) {
             const send = (obj: Record<string, unknown>) => {
-              controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+              controller.enqueue(encoder.encode(`${JSON.stringify(obj)}\n`));
             };
 
             let toolArgs = "";
@@ -321,8 +282,7 @@ If the user request is too vague to write usable instructions, ask one focused f
               }
             } catch (error) {
               send({
-                _error:
-                  error instanceof Error ? error.message : "Blueprint stream failed",
+                _error: error instanceof Error ? error.message : "Blueprint stream failed",
               });
             } finally {
               controller.close();

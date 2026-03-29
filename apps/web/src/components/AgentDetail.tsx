@@ -9,4 +9,3 @@ export function AgentDetail() {
     </Card>
   );
 }
-

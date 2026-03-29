@@ -1,12 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { approvals } from "../db/schema";
 import type { createDb } from "../db/client";
-import {
-  ApprovalRecordSchema,
-  ApprovalStatusSchema,
-  type ApprovalRecord,
-  type ApprovalStatus,
-} from "../types";
+import { approvals } from "../db/schema";
+import { type ApprovalRecord, ApprovalRecordSchema, type ApprovalStatus, ApprovalStatusSchema } from "../types";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -25,17 +20,20 @@ export class ApprovalRepository {
 
   async create(input: CreateApprovalInput): Promise<string> {
     const id = crypto.randomUUID();
-    this.db.insert(approvals).values({
-      id,
-      runId: input.runId,
-      agentId: input.agentId,
-      approvalId: input.approvalId,
-      waitTokenId: input.waitTokenId,
-      toolName: input.toolName,
-      toolInput: JSON.stringify(input.toolInput),
-      status: "pending",
-      createdAt: input.createdAt.getTime(),
-    }).run();
+    this.db
+      .insert(approvals)
+      .values({
+        id,
+        runId: input.runId,
+        agentId: input.agentId,
+        approvalId: input.approvalId,
+        waitTokenId: input.waitTokenId,
+        toolName: input.toolName,
+        toolInput: JSON.stringify(input.toolInput),
+        status: "pending",
+        createdAt: input.createdAt.getTime(),
+      })
+      .run();
     return id;
   }
 
@@ -45,18 +43,11 @@ export class ApprovalRepository {
   }
 
   async getByApprovalId(approvalId: string): Promise<ApprovalRecord | null> {
-    const row = this.db
-      .select()
-      .from(approvals)
-      .where(eq(approvals.approvalId, approvalId))
-      .get();
+    const row = this.db.select().from(approvals).where(eq(approvals.approvalId, approvalId)).get();
     return row ? toApprovalRecord(row) : null;
   }
 
-  async listByAgent(
-    agentId: string,
-    statuses?: ApprovalStatus[],
-  ): Promise<ApprovalRecord[]> {
+  async listByAgent(agentId: string, statuses?: ApprovalStatus[]): Promise<ApprovalRecord[]> {
     const conditions = [eq(approvals.agentId, agentId)];
     if (statuses && statuses.length > 0) {
       conditions.push(inArray(approvals.status, statuses));
@@ -77,11 +68,15 @@ export class ApprovalRepository {
     decisionReason: string,
     resolvedAt: Date,
   ): Promise<void> {
-    this.db.update(approvals).set({
-      status: ApprovalStatusSchema.parse(status),
-      decisionReason,
-      resolvedAt: resolvedAt.getTime(),
-    }).where(eq(approvals.id, id)).run();
+    this.db
+      .update(approvals)
+      .set({
+        status: ApprovalStatusSchema.parse(status),
+        decisionReason,
+        resolvedAt: resolvedAt.getTime(),
+      })
+      .where(eq(approvals.id, id))
+      .run();
   }
 }
 

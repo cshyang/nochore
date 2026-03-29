@@ -113,13 +113,9 @@ export class WorkspaceStore {
    * Validate that a relative path is safe (no traversal, no absolute, no null bytes).
    */
   private validatePath(relativePath: string): void {
-    if (
-      relativePath.includes("\0") ||
-      relativePath.startsWith("/") ||
-      relativePath.includes("..")
-    ) {
+    if (relativePath.includes("\0") || relativePath.startsWith("/") || relativePath.includes("..")) {
       throw new Error(
-        `Invalid path: "${relativePath}". Path must not contain "..", start with "/", or contain null bytes.`
+        `Invalid path: "${relativePath}". Path must not contain "..", start with "/", or contain null bytes.`,
       );
     }
   }
@@ -129,9 +125,7 @@ export class WorkspaceStore {
    */
   private assertMdExtension(relativePath: string): void {
     if (!relativePath.endsWith(".md")) {
-      throw new Error(
-        `Only .md files are allowed. Got: "${relativePath}"`
-      );
+      throw new Error(`Only .md files are allowed. Got: "${relativePath}"`);
     }
   }
 
@@ -142,7 +136,7 @@ export class WorkspaceStore {
     const firstSegment = relativePath.split("/")[0];
     if (!WRITABLE_DIRS.includes(firstSegment)) {
       throw new Error(
-        `Path "${relativePath}" is not writable. Only ${WRITABLE_DIRS.join(", ")}/ directories are writable.`
+        `Path "${relativePath}" is not writable. Only ${WRITABLE_DIRS.join(", ")}/ directories are writable.`,
       );
     }
   }
@@ -151,7 +145,7 @@ export class WorkspaceStore {
    * Recursively walk a directory, collecting .md file paths relative to basePath.
    */
   private async walkDir(dir: string, results: string[]): Promise<void> {
-    let entries;
+    let entries: import("fs").Dirent[];
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {

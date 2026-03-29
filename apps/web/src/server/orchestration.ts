@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { tasks, wait } from "@trigger.dev/sdk/v3";
 import type { RunTrigger } from "../../../../packages/harness/src/types";
-import { getProjectDeps } from "./deps";
 import { approveActionWithResolution } from "./approvals-core";
+import { getProjectDeps } from "./deps";
 
 export async function startAgentRun(params: {
   agentId: string;
@@ -52,11 +52,7 @@ export async function startAgentRun(params: {
   }
 }
 
-export async function approvePendingAction(params: {
-  actionId: string;
-  projectId: string;
-  reason: string;
-}): Promise<{
+export async function approvePendingAction(params: { actionId: string; projectId: string; reason: string }): Promise<{
   runId?: string;
   actionStatus: string;
   triggered: boolean;
