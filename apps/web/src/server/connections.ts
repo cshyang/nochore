@@ -3,7 +3,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { and, eq } from "drizzle-orm";
 import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
 import { connections } from "../../../../packages/harness/src/db/schema";
+import { TOOLKIT_CATALOG_PROVIDER_SLUGS } from "../lib/provider-metadata";
 import { getProjectDeps } from "./deps";
+import { buildConnectionView } from "./models";
 import { jsonSafe } from "./serializable";
 
 type ProjectDb = ReturnType<typeof getProjectDeps>["db"];
@@ -190,19 +192,6 @@ export const disconnectProvider = createServerFn({ method: "POST" })
     }
   });
 
-const SUPPORTED_PROVIDERS = [
-  "googleads",
-  "meta",
-  "slack",
-  "gmail",
-  "ga4",
-  "shopify",
-  "stripe",
-  "github",
-  "googlesearchconsole",
-  "tiktok",
-];
-
 export interface ComposioToolMeta {
   slug: string;
   name: string;
@@ -223,7 +212,7 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
       // composio.client.tools.list() is the REST API that returns tool metadata.
       // composio.tools.* is the SDK wrapper for execution — no list() method.
       const results = await Promise.all(
-        SUPPORTED_PROVIDERS.map((provider) =>
+        TOOLKIT_CATALOG_PROVIDER_SLUGS.map((provider) =>
           catalogClient.tools
             .list({ toolkit_slug: provider, limit: 50 })
             .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
@@ -253,7 +242,7 @@ export const fetchToolkitSummaries = createServerFn({ method: "GET" })
         const composio = await createComposioClient();
 
         const results = await Promise.allSettled(
-          SUPPORTED_PROVIDERS.map((slug) =>
+          TOOLKIT_CATALOG_PROVIDER_SLUGS.map((slug) =>
             composio.toolkits.get(slug).then((tk) => ({
               slug: tk.slug,
               name: tk.name,
@@ -292,14 +281,7 @@ export const listConnections = createServerFn({ method: "GET" })
     const { db } = getProjectDeps(data.projectId);
     const rows = db.select().from(connections).where(eq(connections.projectId, data.projectId)).all();
 
-    return jsonSafe(
-      rows.map((row) => ({
-        id: row.id,
-        provider: row.provider,
-        status: row.status,
-        createdAt: row.createdAt,
-      })),
-    );
+    return jsonSafe(rows.map(buildConnectionView));
   });
 
 function getLatestConnection(db: ProjectDb, projectId: string, provider: string, status?: string) {

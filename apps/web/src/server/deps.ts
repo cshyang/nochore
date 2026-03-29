@@ -82,7 +82,7 @@ export async function getProjectView(projectId: string) {
     return null;
   }
 
-  const { db, agentRepository, runRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
+  const { db, agentRepository, runRepository, lessonRepository } = getProjectDeps(projectId);
   const agentRows = await agentRepository.listByProject(projectId);
   const agents = await Promise.all(
     agentRows.map(async (agent) =>
@@ -90,7 +90,7 @@ export async function getProjectView(projectId: string) {
         agent,
         db,
         runs: await runRepository.getByAgent(agent.id),
-        approvals: await approvalRepository.listByAgent(agent.id),
+        approvals: [],
         lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
         activeConnections: agent.toolConfig.requiredProviders,
       }),

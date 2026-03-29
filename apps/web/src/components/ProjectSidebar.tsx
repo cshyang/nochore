@@ -303,8 +303,7 @@ function AgentRow({
             fontFamily: TYPE.body,
           }}
         >
-          {agent.pendingCount} action{agent.pendingCount === 1 ? "" : "s"} need{agent.pendingCount === 1 ? "s" : ""}{" "}
-          approval
+          Needs attention
         </div>
       )}
     </button>

@@ -199,9 +199,7 @@ export function Homepage({
                         {item.name}
                       </div>
                       <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
-                        {item.pendingCount > 0
-                          ? `${item.pendingCount} action${item.pendingCount === 1 ? "" : "s"} need approval`
-                          : "Needs attention"}
+                        Needs attention
                         <span style={{ color: COLORS.textDim }}> · {item.projectName}</span>
                       </div>
                     </div>

@@ -97,7 +97,7 @@ async function loadProjectView(projectId: string) {
   }
 
   try {
-    const { db, agentRepository, runRepository, approvalRepository, lessonRepository } = getProjectDeps(projectId);
+    const { db, agentRepository, runRepository, lessonRepository } = getProjectDeps(projectId);
     let projectRow = db.select().from(projects).get();
     if (!projectRow) {
       // Self-heal: directory exists but no DB row (created by older version)
@@ -119,13 +119,12 @@ async function loadProjectView(projectId: string) {
     const agentViews = await Promise.all(
       agentRows.map(async (agent) => {
         const runs = await runRepository.getByAgent(agent.id);
-        const approvals = await approvalRepository.listByAgent(agent.id);
         const lessons = await lessonRepository.listByAgent(agent.id);
         return buildAgentView({
           agent,
           db,
           runs,
-          approvals,
+          approvals: [],
           lessonsCount: lessons.length,
           activeConnections: agent.toolConfig.requiredProviders,
         });

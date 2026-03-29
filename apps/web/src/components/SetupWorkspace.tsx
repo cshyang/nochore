@@ -106,7 +106,7 @@ export function SetupWorkspace({ availableSkills, onCreateProject }: SetupWorksp
                 lineHeight: 1.6,
               }}
             >
-              Projects give your agents a shared workspace for goals, approvals, and runs. Start with a single project
+              Projects give your agents a shared workspace for goals, context, and runs. Start with a single project
               now—you can add more as your workflows grow.
             </p>
           </div>

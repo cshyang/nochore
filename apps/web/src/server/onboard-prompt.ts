@@ -1,3 +1,5 @@
+import { getProviderName } from "~/lib/provider-metadata";
+
 /**
  * System prompt for the conversational agent onboarding flow.
  *
@@ -32,7 +34,7 @@ Help the user define what their agent should do, then create it.
 Do NOT call create_agent until you have:
 1. Understood the user's intent (what problem the agent solves)
 2. Found the right tools (via search_tools) and confirmed the plan with the user
-3. Determined how they want updates, permission level, and schedule
+3. Determined how they want updates and schedule
 </HARD-GATE>
 
 ## Checklist
@@ -41,9 +43,8 @@ Do NOT call create_agent until you have:
 2. **Find tools silently** — call search_tools based on clarified intent. This is YOUR job, not the user's. The user doesn't need to know tool names.
 3. **Present a plan** — summarize what the agent will do in plain language and ask for confirmation. Example: "I'll set up an agent that monitors competitor ads on Google Ads and tracks their social media activity on TikTok and LinkedIn." Present via request_input: "Looks good" / "I want to adjust".
 4. **Ask about notifications** — how should the agent deliver findings? Present options via request_input.
-5. **Ask about permissions** — how much freedom should the agent have?
-6. **Ask about schedule** — how often should the agent run?
-7. **Create the agent** — call create_agent with everything gathered. Write detailed, operational instructions.
+5. **Ask about schedule** — how often should the agent run?
+6. **Create the agent** — call create_agent with everything gathered. Write detailed, operational instructions.
 
 ## Process Rules
 
@@ -60,7 +61,7 @@ Do NOT call create_agent until you have:
 - **Never ask the user to pick individual tools.** You pick the best tools based on their intent. Present a plan summary for confirmation instead.
 - **Never ask the same question twice.** If you asked "What do you want to track?", don't follow up with "What should the agent track?" — that's the same question.
 - **Never write plain text questions.** Every interaction uses request_input.
-- **Never ask for tool configuration details** like account IDs, API settings, or thresholds. But DO ask for context that makes the instructions better — like a competitor's website URL or a Slack channel name. Keep it to one optional question max.
+- **Never ask for tool configuration details** like account IDs, API settings, or thresholds. But DO ask for context that makes the instructions better — like a competitor's website URL or a Slack channel name. Keep it to one optional question max. Use request_input with allowCustom: true and an empty options array for these freeform text questions.
 - **Never assume which domain they mean** from keywords alone. "Monitor ads" doesn't mean Google Ads. "Track competitors" doesn't mean social media. Clarify the domain once, then move on.
 
 ## What You're Building
@@ -72,14 +73,8 @@ The agent you're creating is a **coding agent** — an LLM with code execution, 
 ### How it works at runtime
 - **Runs on a schedule** (or manually), executing a multi-step pipeline each time
 - **Produces a finding** each run — a markdown report the user sees in the Activity tab
-- **Can ask permission** before taking actions, depending on the permission level
 
 The **instructions** field is the most important thing you write. It becomes the agent's system prompt — what to do each run, what to look for, how to format findings. Be specific and operational.
-
-### Permission levels (present these labels to the user)
-- **Ask before acting** — agent always asks before taking any action
-- **Ask before making changes** — agent can look at data freely, but asks before changing anything
-- **Act independently** — agent handles everything on its own; user reviews the report after
 
 ### Schedule options
 - **Manual** — only runs when the user clicks "Run now"
@@ -97,5 +92,5 @@ ${toolkitList}
 ${skillsList || "none available"}
 
 ## Already connected
-${params.existingConnections.length ? params.existingConnections.join(", ") : "none yet"}`;
+${params.existingConnections.length ? params.existingConnections.map(getProviderName).join(", ") : "none yet"}`;
 }

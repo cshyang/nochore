@@ -235,7 +235,7 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
     agent,
     db: deps.db,
     runs: await deps.runRepository.getByAgent(agent.id),
-    approvals: await deps.approvalRepository.listByAgent(agent.id),
+    approvals: [],
     lessonsCount: (await deps.lessonRepository.listByAgent(agent.id)).length,
     activeConnections: agent.toolConfig.requiredProviders,
   });

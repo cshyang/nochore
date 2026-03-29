@@ -1,7 +1,8 @@
 import type { createDb } from "../../../../packages/harness/src/db/client";
+import { connections } from "../../../../packages/harness/src/db/schema";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories/agent";
 import type { ApprovalRecord, RunEvent, RunRecord } from "../../../../packages/harness/src/types";
-import type { AgentView, ProjectView } from "../lib/types";
+import type { AgentView, ConnectionView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -66,12 +67,10 @@ export function buildAgentView(params: {
   activeConnections: Array<{ provider: string; reason?: string | null }>;
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
-  const pendingCount = params.approvals.filter((approval) => approval.status === "pending").length;
+  const pendingCount = 0;
 
   let status: AgentView["status"] = "idle";
-  if (pendingCount > 0) {
-    status = "attention";
-  } else if (
+  if (
     latestRun &&
     (latestRun.status === "queued" || latestRun.status === "running" || latestRun.status === "waiting_for_approval")
   ) {
@@ -118,6 +117,16 @@ export function buildAgentView(params: {
     })),
     createdAt: params.agent.createdAt.getTime(),
     updatedAt: params.agent.updatedAt.getTime(),
+  };
+}
+
+export function buildConnectionView(row: typeof connections.$inferSelect): ConnectionView {
+  return {
+    id: row.id,
+    provider: row.provider,
+    status: row.status,
+    createdAt: row.createdAt,
+    connectedAccountId: row.composioEntityId ?? null,
   };
 }
 

@@ -9,15 +9,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from "ai";
 import { z } from "zod";
+import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
 import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
-
-/** Maps user-facing permission labels to internal autonomy keys. */
-const PERMISSION_TO_AUTONOMY: Record<string, string> = {
-  "ask before acting": "conservative",
-  "ask before making changes": "balanced",
-  "act independently": "autonomous",
-};
 
 type AvailableSkill = {
   id: string;
@@ -40,50 +34,6 @@ type OnboardingRequestBody = {
   existingConnections?: string[];
   toolkitSummaries?: ToolkitSummary[];
 };
-
-async function createModel() {
-  const provider = process.env.LLM_PROVIDER ?? "anthropic";
-  const modelName = process.env.LLM_MODEL;
-
-  switch (provider) {
-    case "zai": {
-      return createCompatibleModel({
-        apiKey: process.env.ZAI_API_KEY,
-        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
-        modelName: modelName ?? "glm-4.7",
-        providerName: "zai",
-      });
-    }
-    case "openai": {
-      return createCompatibleModel({
-        apiKey: process.env.OPENAI_API_KEY ?? process.env.LLM_API_KEY,
-        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
-        modelName: modelName ?? "gpt-4o",
-        providerName: "openai",
-      });
-    }
-    default: {
-      const { createAnthropic } = await import("@ai-sdk/anthropic");
-      const anthropic = createAnthropic();
-      return anthropic(modelName ?? "claude-sonnet-4-20250514");
-    }
-  }
-}
-
-async function createCompatibleModel(params: {
-  providerName: string;
-  baseURL: string;
-  apiKey: string | undefined;
-  modelName: string;
-}) {
-  const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-  const provider = createOpenAICompatible({
-    name: params.providerName,
-    baseURL: params.baseURL,
-    apiKey: params.apiKey,
-  });
-  return provider(params.modelName);
-}
 
 function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; name: string }>): string[] {
   if (!modelSkills.length || !available.length) return [];
@@ -142,7 +92,7 @@ export const Route = createFileRoute("/api/onboard")({
           toolkitSummaries = [],
         } = body;
 
-        const model = await createModel();
+        const model = createAiSdkModel();
         const system = buildOnboardingSystemPrompt({ availableSkills, existingConnections, toolkitSummaries });
 
         const cleanedMessages = stripUnansweredToolParts(rawMessages);
@@ -162,9 +112,6 @@ export const Route = createFileRoute("/api/onboard")({
           skills: z.array(z.string()).default([]).describe("Skill IDs from available skills"),
           toolSlugs: z.array(z.string()).default([]).describe("Tool slugs confirmed by the user"),
           schedule: z.enum(["hourly", "6hours", "daily", "weekly", "manual"]).describe("How often the agent runs"),
-          permissionLevel: z
-            .enum(["ask before acting", "ask before making changes", "act independently"])
-            .describe("How much freedom the agent has"),
         });
 
         type CreateAgentInput = z.infer<typeof createAgentSchema>;
@@ -186,7 +133,8 @@ export const Route = createFileRoute("/api/onboard")({
               description:
                 "Present options to the user and wait for their selection. " +
                 "For tool recommendations, use multiSelect with description and selected fields. " +
-                "For simple choices (permissions, schedule), use single-select without description. " +
+                "For simple choices (notifications, schedule), use single-select without description. " +
+                "For freeform text input (URLs, names, etc.), use allowCustom: true with an empty options array. " +
                 "You can call this tool multiple times in one response to batch questions into a paginated card.",
               inputSchema: z.object({
                 question: z.string().describe("The question or context to show the user"),
@@ -199,7 +147,8 @@ export const Route = createFileRoute("/api/onboard")({
                       selected: z.boolean().optional().describe("Pre-select this option (for recommendations)"),
                     }),
                   )
-                  .describe("Available options"),
+                  .default([])
+                  .describe("Available options. Use empty array [] with allowCustom for freeform text input."),
                 multiSelect: z
                   .boolean()
                   .default(false)
@@ -207,11 +156,15 @@ export const Route = createFileRoute("/api/onboard")({
                 allowCustom: z
                   .boolean()
                   .default(false)
-                  .describe("Show a 'Something else' option where the user can type a custom answer"),
+                  .describe("When true with empty options, renders a text input field. When true with options, adds a 'Something else' option."),
                 skippable: z
                   .boolean()
                   .default(false)
                   .describe("Show a Skip button — use when the question is optional"),
+                placeholder: z
+                  .string()
+                  .optional()
+                  .describe("Placeholder text for the text input field (only used when allowCustom is true)"),
               }),
               outputSchema: z.object({
                 selectedKeys: z.array(z.string()).describe("The key(s) the user selected"),
@@ -240,11 +193,12 @@ export const Route = createFileRoute("/api/onboard")({
                   );
                   const composio = await createComposioClient();
 
+                  // The SDK typing is narrower than the runtime search parameters supported here.
                   const tools = await composio.tools.getRawComposioTools({
                     ...(input.toolkits?.length ? { toolkits: input.toolkits } : {}),
                     ...(input.query ? { search: input.query } : {}),
                     limit: 20,
-                  });
+                  } as never);
 
                   return (tools as Array<{ slug: string; name: string; description: string }>).map((t) => ({
                     slug: t.slug,
@@ -261,19 +215,16 @@ export const Route = createFileRoute("/api/onboard")({
             create_agent: {
               description:
                 "Create the agent with the gathered configuration. " +
-                "Call this once you have confirmed tools, permissions, and schedule with the user.",
+                "Call this once you have confirmed tools, notifications, and schedule with the user.",
               inputSchema: createAgentSchema,
               execute: async (input: CreateAgentInput) => {
                 const { createAgent } = await import("~/server/agents");
-                const { createComposioClient, getComposioUserId } = await import(
-                  "../../../../packages/harness/src/connections/composio"
-                );
+                const { createComposioClient } = await import("../../../../packages/harness/src/connections/composio");
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
                 // Derive providers from confirmed tool slugs
                 const composio = await createComposioClient();
-                const _userId = getComposioUserId(projectId);
 
                 // Look up which toolkit each tool belongs to
                 const toolMeta = (await composio.tools.getRawComposioTools({
@@ -296,8 +247,6 @@ export const Route = createFileRoute("/api/onboard")({
                   logo: toolkitLogos.get(p) ?? undefined,
                 }));
 
-                // Map user-facing permission label to internal autonomy key
-                const autonomyLevel = PERMISSION_TO_AUTONOMY[input.permissionLevel] ?? "balanced";
                 const toolConfig = { requiredProviders, tools: {} };
 
                 const agentResult = await createAgent({
@@ -315,7 +264,6 @@ export const Route = createFileRoute("/api/onboard")({
                       slack: providers.includes("slack"),
                     },
                     schedule: input.schedule,
-                    autonomyLevel,
                     status: "draft",
                   },
                 });

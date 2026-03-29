@@ -3,12 +3,13 @@ import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
 import { ProjectConnections } from "~/components/ProjectConnections";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
-import type { ProjectView } from "~/lib/types";
+import type { ConnectionView, ProjectView } from "~/lib/types";
 
 const transition = `${MOTION.duration} ${MOTION.ease}`;
 
 interface ProjectHomeProps {
   project: ProjectView;
+  connections: ConnectionView[];
   onSelectAgent: (id: string) => void;
   onNewAgent?: () => void;
   onDeleteProject?: () => void;
@@ -30,7 +31,7 @@ function draftHint(agent: ProjectView["agents"][number]): string {
   return `Needs ${missing.join(", ")}`;
 }
 
-export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProject }: ProjectHomeProps) {
+export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, onDeleteProject }: ProjectHomeProps) {
   const [projectTab, setProjectTab] = useState("agents");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const needsAttention = project.agents.filter((a) => a.status === "attention");
@@ -149,7 +150,7 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
         </nav>
       </div>
 
-      {projectTab === "connections" && <ProjectConnections project={project} />}
+      {projectTab === "connections" && <ProjectConnections project={project} connections={connections} />}
       {projectTab === "agents" &&
         (project.agents.length === 0 ? (
           /* Empty state — no agents yet */
@@ -225,9 +226,7 @@ export function ProjectHome({ project, onSelectAgent, onNewAgent, onDeleteProjec
                         {agent.name}
                       </div>
                       <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>
-                        {agent.pendingCount > 0
-                          ? `${agent.pendingCount} action${agent.pendingCount === 1 ? "" : "s"} need approval`
-                          : "Needs attention"}
+                        Needs attention
                       </div>
                     </div>
                     <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>

@@ -9,42 +9,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { stepCountIs, ToolLoopAgent, tool } from "ai";
 import { z } from "zod";
+import { createAiSdkModel, resolveAiSdkProvider } from "../../../../packages/harness/src/llm/model";
 import type {
   AgentSchedule,
   NotificationConfig,
   ProviderRequirement,
   ToolConfig,
 } from "../../../../packages/harness/src/types";
-
-async function createModel() {
-  const provider = process.env.LLM_PROVIDER ?? "anthropic";
-
-  switch (provider) {
-    case "zai": {
-      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-      const zai = createOpenAICompatible({
-        name: "zai",
-        baseURL: process.env.LLM_BASE_URL ?? "https://open.bigmodel.cn/api/paas/v4",
-        apiKey: process.env.ZAI_API_KEY,
-      });
-      return zai(process.env.LLM_MODEL ?? "glm-4.7");
-    }
-    case "openai": {
-      const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-      const openai = createOpenAICompatible({
-        name: "openai",
-        baseURL: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
-        apiKey: process.env.OPENAI_API_KEY ?? process.env.LLM_API_KEY,
-      });
-      return openai(process.env.LLM_MODEL ?? "gpt-4o");
-    }
-    default: {
-      const { createAnthropic } = await import("@ai-sdk/anthropic");
-      const anthropic = createAnthropic();
-      return anthropic(process.env.LLM_MODEL ?? "claude-sonnet-4-20250514");
-    }
-  }
-}
+import { CONNECTABLE_PROVIDER_SLUGS, getProviderDefaultReason, getProviderName } from "~/lib/provider-metadata";
 
 const DraftScheduleSchema = z.enum(["hourly", "6hours", "daily", "weekly", "manual"]);
 
@@ -69,41 +41,6 @@ export interface BlueprintDraft {
   notificationConfig: NotificationConfig;
   schedule: AgentSchedule;
 }
-
-const PROVIDER_INFO: Record<string, { name: string; reason: string }> = {
-  googleads: {
-    name: "Google Ads",
-    reason: "Read campaign performance and adjust paid media execution",
-  },
-  slack: {
-    name: "Slack",
-    reason: "Send approval requests and findings to the team",
-  },
-  gmail: {
-    name: "Gmail",
-    reason: "Send approval requests and finding summaries by email",
-  },
-  meta: {
-    name: "Meta Ads",
-    reason: "Monitor and adjust Meta campaign execution",
-  },
-  ga4: {
-    name: "Google Analytics",
-    reason: "Use website conversion and traffic context in decisions",
-  },
-  shopify: {
-    name: "Shopify",
-    reason: "Use storefront order and revenue context in analysis",
-  },
-  stripe: {
-    name: "Stripe",
-    reason: "Use payments and subscription data as operating context",
-  },
-  github: {
-    name: "GitHub",
-    reason: "Inspect repository and deployment activity when required",
-  },
-};
 
 function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; name: string }>): string[] {
   if (!modelSkills.length || !available.length) return [];
@@ -132,10 +69,10 @@ function resolveSkillIds(modelSkills: string[], available: Array<{ id: string; n
 }
 
 function expandBlueprint(raw: ToolInput): BlueprintDraft {
-  const providers = Array.from(new Set((raw.providers ?? []).filter((provider) => provider in PROVIDER_INFO)));
+  const providers = Array.from(new Set((raw.providers ?? []).filter((provider) => provider.trim().length > 0)));
   const requiredProviders = providers.map((provider) => ({
     provider,
-    reason: PROVIDER_INFO[provider]?.reason ?? "Required for this agent",
+    reason: getProviderDefaultReason(provider),
   }));
 
   return {
@@ -175,15 +112,15 @@ export const Route = createFileRoute("/api/blueprint")({
           existingConnections?: string[];
         };
 
-        const model = await createModel();
-        const providerName = process.env.LLM_PROVIDER ?? "anthropic";
+        const model = createAiSdkModel();
+        const providerName = resolveAiSdkProvider();
 
         const skillsList = availableSkills
           .map((skill) => `- ${skill.id}: ${skill.name} — ${skill.description}`)
           .join("\n");
 
-        const providerList = Object.entries(PROVIDER_INFO)
-          .map(([slug, info]) => `- ${slug}: ${info.name} — ${info.reason}`)
+        const providerList = CONNECTABLE_PROVIDER_SLUGS
+          .map((slug) => `- ${slug}: ${getProviderName(slug)} — ${getProviderDefaultReason(slug)}`)
           .join("\n");
 
         const prompt = `You design draft agents for Nochore's simplified platform.
@@ -206,9 +143,9 @@ Available providers:
 ${providerList || "- none"}
 
 Already connected providers:
-${existingConnections.length ? existingConnections.join(", ") : "none"}
+        ${existingConnections.length ? existingConnections.map(getProviderName).join(", ") : "none"}
 
-Instructions must be operational. They should tell the agent what to monitor, what good and bad patterns look like, how to communicate findings, when to ask for approval, and what outcome to optimize for.
+Instructions must be operational. They should tell the agent what to monitor, what good and bad patterns look like, how to communicate findings, and what outcome to optimize for.
 
 If the user request is too vague to write usable instructions, ask one focused follow-up question instead of calling the tool.`;
 

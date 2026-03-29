@@ -53,6 +53,35 @@ export interface RunSummaryView {
   finalText?: string;
 }
 
+export interface RunStepView {
+  step: string;
+  duration: number;
+  data: unknown;
+}
+
+export interface RunProposalView {
+  id: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  reason: string;
+}
+
+export interface RunResultView {
+  runId: string;
+  agentId: string;
+  duration: number;
+  steps: RunStepView[];
+  proposals: RunProposalView[];
+  eventsLogged: number;
+}
+
+export interface RunEventView {
+  id: string;
+  type: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
 export interface RunView {
   id: string;
   agentId: string;
@@ -61,16 +90,9 @@ export interface RunView {
   startedAt: string;
   completedAt?: string;
   error?: string;
-  summary?: RunSummaryView;
-}
-
-export interface RunEventView {
-  id: string;
-  runId: string;
-  agentId: string;
-  timestamp: string;
-  type: RunEventType;
-  payload: Record<string, unknown>;
+  triggerRunId?: string;
+  events: RunEventView[];
+  result?: RunResultView;
 }
 
 export interface ApprovalView {
@@ -97,8 +119,8 @@ export interface ConnectionView {
   id: string;
   provider: string;
   status: string;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt: number;
+  connectedAccountId?: string | null;
 }
 
 export interface AgentView {
