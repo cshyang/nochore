@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nochore Design System</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* ── Palette: Warm neutrals with plum undertone ── */
+  --bg:             #0E0D12;
+  --bg-raised:      #15141A;
+  --surface:        #1B1A21;
+  --surface-hover:  #222128;
+  --border:         #2B2935;
+  --border-strong:  #3A3845;
+
+  /* ── Text: Warm off-whites, never pure white ── */
+  --text:           #ECEAF2;
+  --text-secondary: #9B97AB;
+  --text-dim:       #6B6780;
+
+  /* ── Accent: Periwinkle blue — balanced, clear, distinctive ── */
+  --accent:         #5A7ACD;
+  --accent-bright:  #7090E0;
+  --accent-dim:     rgba(90, 122, 205, 0.14);
+  --accent-subtle:  rgba(90, 122, 205, 0.06);
+  --accent-surface: rgba(90, 122, 205, 0.04);
+  --accent-border:  rgba(90, 122, 205, 0.18);
+
+  /* ── Semantic: Present, not shouting ── */
+  --orange:         #E0905A;
+  --orange-dim:     rgba(224, 144, 90, 0.12);
+  --orange-subtle:  rgba(224, 144, 90, 0.05);
+  --orange-border:  rgba(224, 144, 90, 0.22);
+  --green:          #6CB48A;
+  --green-dim:      rgba(108, 180, 138, 0.10);
+  --green-subtle:   rgba(108, 180, 138, 0.05);
+  --green-border:   rgba(108, 180, 138, 0.20);
+  --red:            #D97272;
+  --red-dim:        rgba(217, 114, 114, 0.10);
+  --red-subtle:     rgba(217, 114, 114, 0.05);
+  --red-border:     rgba(217, 114, 114, 0.20);
+
+  /* ── Functional: Tool mode colors ── */
+  --read:           #7CA8C4;  /* slate blue — passive, data-fetching */
+  --read-dim:       rgba(124, 168, 196, 0.10);
+  --write:          #C49B7C;  /* warm amber — active, state-changing */
+  --write-dim:      rgba(196, 155, 124, 0.10);
+
+  /* ── Spacing: 8px grid ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+  --sp-10: 64px;
+  --sp-12: 80px;
+  --sp-16: 120px;
+
+  /* ── Type: Font families ── */
+  --font-display: 'Satoshi', system-ui, sans-serif;
+  --font-body:    'General Sans', system-ui, sans-serif;
+  --font-mono:    'SF Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* ── Type: Scale (base 0.875rem/14px)
+       Dramatic jumps at the top — display is 4x body.
+       App UI base is 14px — dense interfaces need compact type.
+       All rem-based to respect user zoom settings. ── */
+  --text-xs:   0.6875rem;  /* 11px — overline, caption */
+  --text-sm:   0.8125rem;  /* 13px — metadata, secondary */
+  --text-base: 0.875rem;   /* 14px — body text */
+  --text-md:   1rem;        /* 16px — emphasis, subheading */
+  --text-lg:   1.25rem;     /* 20px — section title */
+  --text-xl:   1.875rem;    /* 30px — page heading (was 28) */
+  --text-2xl:  2.75rem;     /* 44px — display, greeting (was 36) */
+  --text-3xl:  3.5rem;      /* 56px — hero, when you really mean it */
+
+  /* ── Type: Line heights (bumped +0.05 for dark mode readability) ── */
+  --leading-tight:  1.15;   /* display — tighter for drama */
+  --leading-snug:   1.3;    /* headings, subheadings */
+  --leading-normal: 1.6;    /* body text */
+  --leading-loose:  1.75;   /* long-form, instructions */
+
+  /* ── Type: Weights ── */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ── Type: Letter spacing ── */
+  --tracking-tight:  -0.03em;  /* display — tighter for impact */
+  --tracking-normal:  0;       /* body */
+  --tracking-wide:    0.06em;  /* overline, uppercase labels */
+
+  /* ── Radii: Crisp, not bubbly ── */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 99px;
+
+  /* ── Motion ── */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* subtle overshoot */
+  --duration: 0.15s;
+  --duration-slow: 0.3s;
+}
+
+/* ── Subtle grain texture — adds warmth and tactility ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text);
+  background: var(--bg);
+  font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  font-weight: var(--weight-bold);
+}
+
+/* Prose containers — comfortable reading width */
+.prose { max-width: 65ch; }
+
+/* Tabular numbers for data alignment */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   DELIGHT — Micro-interactions & polish
+   ═══════════════════════════════════════════════════ */
+
+/* ── Staggered entrance — gentle reveal, not a slide show ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ds-section {
+  animation: fadeIn 0.4s var(--ease-out-expo) both;
+}
+.ds-section:nth-child(1)  { animation-delay: 0ms; }
+.ds-section:nth-child(2)  { animation-delay: 40ms; }
+.ds-section:nth-child(3)  { animation-delay: 80ms; }
+.ds-section:nth-child(4)  { animation-delay: 120ms; }
+.ds-section:nth-child(5)  { animation-delay: 160ms; }
+.ds-section:nth-child(6)  { animation-delay: 200ms; }
+.ds-section:nth-child(7)  { animation-delay: 240ms; }
+.ds-section:nth-child(8)  { animation-delay: 280ms; }
+.ds-section:nth-child(9)  { animation-delay: 320ms; }
+.ds-section:nth-child(10) { animation-delay: 360ms; }
+.ds-section:nth-child(11) { animation-delay: 400ms; }
+.ds-section:nth-child(12) { animation-delay: 440ms; }
+
+/* ── Running status dot — quiet breath ── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.dot-running {
+  animation: pulse 3s ease-in-out infinite;
+}
+
+/* ── Button press — just enough to feel the click ── */
+.btn:active {
+  transform: translateY(1px) !important;
+  transition-duration: 0.05s;
+}
+
+/* ── Input focus — thin accent ring, not a glow ── */
+.input:focus, .textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* ── Toggle — smooth deceleration, no overshoot ── */
+.toggle-knob {
+  transition: left var(--duration-slow) var(--ease-out-expo);
+}
+
+/* ── Tab — underline grows from center ── */
+.tab {
+  position: relative;
+}
+.tab::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: all var(--duration-slow) var(--ease-out-expo);
+  transform: translateX(-50%);
+}
+.tab-active::after {
+  width: 100%;
+}
+.tab-active {
+  border-bottom-color: transparent !important;
+}
+
+/* ── Card hover — border shift only, no lift ── */
+.card[onclick], .card-interactive {
+  transition: border-color var(--duration) var(--ease);
+}
+.card[onclick]:hover, .card-interactive:hover {
+  border-color: var(--border-strong);
+}
+
+/* ── Focus ring — visible, branded, accessible ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════
+   DESIGN SYSTEM PAGE LAYOUT
+   ═══════════════════════════════════════════════════ */
+
+.ds-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--sp-10) var(--sp-6);
+}
+
+.ds-section {
+  margin-bottom: var(--sp-12);
+}
+
+.ds-section-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--sp-5);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.ds-subsection {
+  margin-bottom: var(--sp-6);
+}
+
+.ds-label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  margin-bottom: var(--sp-3);
+}
+
+/* ═══════════════════════════════════════════════════
+   1. COLOR PALETTE
+   ═══════════════════════════════════════════════════ */
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-3);
+}
+
+.color-swatch {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.color-swatch-block {
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.color-swatch-info {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.color-swatch-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.color-swatch-value {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ═══════════════════════════════════════════════════
+   2. TYPOGRAPHY
+   ═══════════════════════════════════════════════════ */
+
+.type-sample {
+  margin-bottom: var(--sp-5);
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-5);
+}
+
+.type-sample-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  min-width: 80px;
+  flex-shrink: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ═══════════════════════════════════════════════════
+   3. COMPONENTS
+   ═══════════════════════════════════════════════════ */
+
+/* ── Buttons ── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: background var(--duration) var(--ease);
+}
+.btn-primary:hover {
+  background: var(--accent-bright);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  padding: 8px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.btn-secondary:hover { border-color: var(--text-dim); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+}
+.btn-ghost:hover { color: var(--text); background: var(--surface-hover); }
+
+.btn-sm {
+  font-size: var(--text-xs);
+  padding: 6px 12px;
+}
+
+.btn-danger {
+  background: var(--red-dim);
+  color: var(--red);
+  padding: 8px 16px;
+  border: 1px solid rgba(201, 112, 112, 0.2);
+  border-radius: var(--radius-md);
+}
+.btn-danger:hover { border-color: var(--red); }
+
+/* ── Inputs ── */
+
+.input, .textarea {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color var(--duration) var(--ease);
+}
+
+.input:focus, .textarea:focus {
+  border-color: var(--accent);
+}
+
+.input::placeholder, .textarea::placeholder {
+  color: var(--text-dim);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* ── Field group ── */
+
+.field {
+  margin-bottom: var(--sp-5);
+}
+
+.field-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
+}
+
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  margin-top: var(--sp-1);
+}
+
+/* ── Badges ── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  line-height: 1.4;
+}
+
+.badge-neutral   { background: rgba(110, 106, 122, 0.12); color: var(--text-secondary); }
+.badge-accent    { background: var(--accent-dim); color: var(--accent); }
+.badge-orange    { background: var(--orange-dim); color: var(--orange); }
+.badge-green     { background: var(--green-dim); color: var(--green); }
+.badge-red       { background: var(--red-dim); color: var(--red); }
+
+/* ── Toggle ── */
+
+.toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--duration) var(--ease);
+}
+.toggle-off { background: var(--border-strong); }
+.toggle-on  { background: var(--accent); }
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: #fff;
+  transition: left var(--duration) var(--ease);
+}
+.toggle-off .toggle-knob { left: 3px; }
+.toggle-on  .toggle-knob { left: 19px; }
+
+/* ── Pill selector (like schedule) ── */
+
+.pill-group {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.pill {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+}
+.pill:hover { border-color: var(--text-dim); }
+.pill-active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Tabs ── */
+
+.tabs {
+  display: flex;
+  gap: var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  padding: var(--sp-3) 0;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--duration) var(--ease);
+}
+.tab:hover { color: var(--text-secondary); }
+.tab-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Card ── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.card-padded {
+  padding: var(--sp-5);
+}
+
+/* ── List row ── */
+
+.list-row {
+  display: flex;
+  align-items: center;
+  padding: 14px var(--sp-4);
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:hover {
+  background: var(--surface-hover);
+}
+
+.list-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  margin-right: var(--sp-3);
+}
+
+/* Status dots speak through color alone — no rings needed */
+
+.list-row-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-row-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-left: var(--sp-4);
+}
+
+.list-row-arrow {
+  color: var(--text-dim);
+  margin-left: var(--sp-2);
+}
+
+/* ── Section heading ── */
+
+.section-heading {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-dim);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* ── Settings row ── */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+
+.settings-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.settings-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+
+.settings-desc {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-trailing {
+  flex-shrink: 0;
+}
+
+/* ── Empty state ── */
+
+.empty-state {
+  text-align: center;
+  padding: var(--sp-10) var(--sp-6);
+}
+
+.empty-state-icon {
+  font-size: 32px;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-4);
+  opacity: 0.6;
+}
+
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: var(--sp-2);
+}
+
+.empty-state-desc {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 360px;
+  margin: 0 auto var(--sp-5);
+}
+
+/* ── Status dot ── */
+
+.dot-idle    { background: var(--text-dim); opacity: 0.4; }
+.dot-running { background: var(--green); }
+.dot-attention { background: var(--orange); }
+.dot-error   { background: var(--red); }
+
+/* ── Attention banner ── */
+
+.attention-banner {
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--orange-dim);
+  border-left: 3px solid var(--orange);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.attention-banner-text {
+  font-size: var(--text-base);
+  color: var(--orange);
+  font-weight: var(--weight-medium);
+}
+
+/* ── Agent header ── */
+
+.agent-header {
+  margin-bottom: var(--sp-6);
+}
+
+.agent-header-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.agent-header h1 {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: var(--leading-tight);
+  margin-bottom: var(--sp-3);
+}
+
+.agent-header-desc {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+/* ═══════════════════════════════════════════════════
+   4. SAMPLE COMPOSITION
+   ═══════════════════════════════════════════════════ */
+
+.demo-layout {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6);
+  margin-top: var(--sp-5);
+}
+
+/* ── Utility ── */
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: var(--sp-2); }
+.gap-3 { gap: var(--sp-3); }
+.gap-4 { gap: var(--sp-4); }
+.gap-5 { gap: var(--sp-5); }
+.mb-2 { margin-bottom: var(--sp-2); }
+.mb-3 { margin-bottom: var(--sp-3); }
+.mb-4 { margin-bottom: var(--sp-4); }
+.mb-5 { margin-bottom: var(--sp-5); }
+.mb-6 { margin-bottom: var(--sp-6); }
+.mb-8 { margin-bottom: var(--sp-8); }
+
+.component-row {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Tinted surface variants ── */
+.card-accent  { background: var(--accent-surface); border-color: var(--accent-border); }
+.card-orange  { background: var(--orange-subtle); border-color: var(--orange-border); }
+.card-green   { background: var(--green-subtle); border-color: var(--green-border); }
+.card-red     { background: var(--red-subtle); border-color: var(--red-border); }
+
+/* ── Left-border accent variants for rows ── */
+.list-row-attention {
+  border-left: 3px solid var(--orange);
+  padding-left: calc(var(--sp-4) - 3px);
+}
+.list-row-active {
+  border-left: 3px solid var(--accent);
+  padding-left: calc(var(--sp-4) - 3px);
+  background: var(--accent-surface);
+}
+
+/* ── Tool mode colors ── */
+.tool-read  { color: var(--read); }
+.tool-write { color: var(--write); }
+.tool-icon-read  { background: var(--read-dim); color: var(--read); }
+.tool-icon-write { background: var(--write-dim); color: var(--write); }
+
+/* ── Connection status ── */
+.conn-active  { color: var(--green); }
+.conn-missing { color: var(--orange); }
+.conn-dot-active  { background: var(--green); }
+.conn-dot-missing { background: var(--orange); }
+</style>
+</head>
+<body>
+
+<div class="ds-page">
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <div style="margin-bottom: var(--sp-16); padding-top: var(--sp-8);">
+    <h1 style="font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 700; letter-spacing: -0.04em; line-height: 1.05; margin-bottom: var(--sp-4);">Nochore</h1>
+    <p style="font-size: var(--text-lg); color: var(--text-secondary); max-width: 480px; line-height: var(--leading-snug); font-weight: var(--weight-regular);">
+      Design system.<br>Calm, competent, precise.
+    </p>
+  </div>
+
+  <!-- ═══════════ COLORS ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Color Palette</div>
+
+    <div class="ds-label mb-3">Surfaces</div>
+    <div class="color-grid mb-6">
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--bg);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">bg</div><div class="color-swatch-value">#0E0D12</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--bg-raised);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">bg-raised</div><div class="color-swatch-value">#15141A</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--surface);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">surface</div><div class="color-swatch-value">#1B1A21</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--surface-hover);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">surface-hover</div><div class="color-swatch-value">#222128</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--border);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">border</div><div class="color-swatch-value">#2B2935</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--border-strong);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">border-strong</div><div class="color-swatch-value">#3A3845</div></div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Text</div>
+    <div class="color-grid mb-6">
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--text);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">text</div><div class="color-swatch-value">#ECEAF2</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--text-secondary);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">text-secondary</div><div class="color-swatch-value">#9B97AB</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--text-dim);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">text-dim</div><div class="color-swatch-value">#6B6780</div></div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Accent & Semantic</div>
+    <div class="color-grid">
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--accent);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">accent</div><div class="color-swatch-value">#5A7ACD</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--orange);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">orange</div><div class="color-swatch-value">#E0905A</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--green);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">green</div><div class="color-swatch-value">#6CB48A</div></div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch-block" style="background: var(--red);"></div>
+        <div class="color-swatch-info"><div class="color-swatch-name">red</div><div class="color-swatch-value">#D97272</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ TYPOGRAPHY ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Typography</div>
+
+    <div class="ds-label mb-3">Families: Satoshi (display) + General Sans (body)</div>
+    <p style="font-size: var(--text-sm); color: var(--text-dim); max-width: 65ch; margin-bottom: var(--sp-6);">
+      Satoshi for headings — geometric with personality, not overused. General Sans for body — clean, readable, slightly warmer than Inter. Both from Fontshare.
+    </p>
+
+    <div class="ds-label mb-3">Scale (dramatic jumps at top, base 14px)</div>
+    <div style="display: flex; flex-direction: column; gap: var(--sp-6); margin-bottom: var(--sp-8);">
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>3xl</div>
+          <div style="color: var(--text-dim);">3.5rem</div>
+        </div>
+        <div>
+          <span style="font-family: var(--font-display); font-size: var(--text-3xl); font-weight: var(--weight-bold); letter-spacing: -0.04em; line-height: 1.05; color: var(--text);">Nochore</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-2);">Hero — brand, landing. Satoshi 700, extra-tight tracking. Use sparingly.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>2xl</div>
+          <div style="color: var(--text-dim);">2.75rem</div>
+        </div>
+        <div>
+          <span style="font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); line-height: var(--leading-tight); color: var(--text);">Good morning, Chau Shyang.</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-2);">Display — greeting, page headline. Satoshi 700, tight tracking.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>xl</div>
+          <div style="color: var(--text-dim);">1.875rem</div>
+        </div>
+        <div>
+          <span style="font-family: var(--font-display); font-size: var(--text-xl); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); line-height: var(--leading-snug); color: var(--text);">Google Ads Optimizer</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-2);">Page heading — agent name, project name. Satoshi 700.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>lg</div>
+          <div style="color: var(--text-dim);">1.25rem</div>
+        </div>
+        <div>
+          <span style="font-family: var(--font-display); font-size: var(--text-lg); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-tight); line-height: var(--leading-snug); color: var(--text);">What should this agent do?</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-1);">Section title — prompts, card headers. Satoshi 600, snug leading.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>md</div>
+          <div style="color: var(--text-dim);">1rem</div>
+        </div>
+        <div>
+          <span style="font-family: var(--font-display); font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: var(--leading-snug); color: var(--text);">Draft agent — finish setup before launching</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-1);">Emphasis — subheading, banner title, card title. Satoshi 600.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>base</div>
+          <div style="color: var(--text-dim);">0.875rem</div>
+        </div>
+        <div style="max-width: 65ch;">
+          <span style="font-size: var(--text-base); line-height: var(--leading-normal); color: var(--text);">Body text. All 2 agents are running smoothly. Nothing needs your attention. Review what the agent found, approve or reject requested actions.</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-1);">Body — primary reading text. General Sans 400, normal leading (1.6 for dark mode).</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>sm</div>
+          <div style="color: var(--text-dim);">0.8125rem</div>
+        </div>
+        <div>
+          <span style="font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary);">2 agents &middot; 0 connections &middot; Last run: 2h ago &middot; 3 skills &middot; 12 lessons</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-1);">Secondary — metadata, descriptions, timestamps. General Sans 400, secondary color.</div>
+        </div>
+      </div>
+      <div class="type-sample">
+        <div class="type-sample-label">
+          <div>xs</div>
+          <div style="color: var(--text-dim);">0.6875rem</div>
+        </div>
+        <div>
+          <span style="font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-dim); text-transform: uppercase; letter-spacing: var(--tracking-wide);">Identity &middot; Instructions &middot; Tools</span>
+          <div style="font-size: var(--text-xs); color: var(--text-dim); margin-top: var(--sp-1);">Overline — section labels, group headings. Uppercase, wide tracking, semibold, dim.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Line heights</div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-8);">
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">tight / 1.25</div>
+        <div style="font-family: var(--font-display); font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: var(--leading-tight); padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">Headings and display text use tight leading</div>
+      </div>
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">snug / 1.4</div>
+        <div style="font-size: var(--text-base); line-height: var(--leading-snug); padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">Labels and subheadings use snug leading for compact UI</div>
+      </div>
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">normal / 1.6</div>
+        <div style="font-size: var(--text-base); line-height: var(--leading-normal); padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">Body text uses normal leading, bumped +0.05 for dark mode readability</div>
+      </div>
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">loose / 1.75</div>
+        <div style="font-size: var(--text-base); line-height: var(--leading-loose); padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">Long-form content like agent instructions uses loose leading</div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Weight roles</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); margin-bottom: var(--sp-8);">
+      <div style="padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">
+        <span style="font-weight: var(--weight-regular); font-size: var(--text-md);">400 Regular</span>
+        <span style="font-size: var(--text-xs); color: var(--text-dim); margin-left: var(--sp-3);">Body text, descriptions</span>
+      </div>
+      <div style="padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">
+        <span style="font-weight: var(--weight-medium); font-size: var(--text-md);">500 Medium</span>
+        <span style="font-size: var(--text-xs); color: var(--text-dim); margin-left: var(--sp-3);">Buttons, labels, interactive text</span>
+      </div>
+      <div style="padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">
+        <span style="font-weight: var(--weight-semibold); font-size: var(--text-md);">600 Semibold</span>
+        <span style="font-size: var(--text-xs); color: var(--text-dim); margin-left: var(--sp-3);">Subheadings, emphasis, active states</span>
+      </div>
+      <div style="padding: var(--sp-3); background: var(--surface); border-radius: var(--radius-sm);">
+        <span style="font-weight: var(--weight-bold); font-size: var(--text-md);">700 Bold</span>
+        <span style="font-size: var(--text-xs); color: var(--text-dim); margin-left: var(--sp-3);">Page headings, display text only</span>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Data & numbers</div>
+    <div style="display: flex; gap: var(--sp-6);">
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">Default (proportional)</div>
+        <div style="font-size: var(--text-lg); font-weight: var(--weight-semibold); font-family: var(--font-display);">1,234 &middot; 5,678 &middot; 90</div>
+      </div>
+      <div>
+        <div style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: var(--sp-1);">Tabular (aligned columns)</div>
+        <div style="font-size: var(--text-lg); font-weight: var(--weight-semibold); font-family: var(--font-display); font-variant-numeric: tabular-nums;">1,234 &middot; 5,678 &middot; 90</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SPACING ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Spacing Scale (8px grid)</div>
+    <div style="display: flex; flex-direction: column; gap: var(--sp-3);">
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-1 / 4</span><div style="width: 4px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-2 / 8</span><div style="width: 8px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-3 / 12</span><div style="width: 12px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-4 / 16</span><div style="width: 16px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-5 / 24</span><div style="width: 24px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-6 / 32</span><div style="width: 32px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-8 / 48</span><div style="width: 48px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+      <div class="flex items-center gap-3"><span class="type-sample-label">sp-10 / 64</span><div style="width: 64px; height: 20px; background: var(--accent); border-radius: 1px;"></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ BUTTONS ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Buttons</div>
+    <div class="component-row mb-5">
+      <button class="btn btn-primary">Run now</button>
+      <button class="btn btn-secondary">Save instructions</button>
+      <button class="btn btn-ghost">More</button>
+      <button class="btn btn-danger">Delete agent</button>
+    </div>
+    <div class="ds-label mb-3">Small</div>
+    <div class="component-row">
+      <button class="btn btn-primary btn-sm">Run now</button>
+      <button class="btn btn-secondary btn-sm">Save</button>
+      <button class="btn btn-ghost btn-sm">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ BADGES ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Badges</div>
+    <div class="component-row">
+      <span class="badge badge-neutral">Draft</span>
+      <span class="badge badge-accent">Homescape</span>
+      <span class="badge badge-orange">2 need attention</span>
+      <span class="badge badge-green">Live</span>
+      <span class="badge badge-red">3 blocked</span>
+      <span class="badge badge-neutral">0 skills</span>
+      <span class="badge badge-green">10 auto</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ INPUTS ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Inputs</div>
+    <div style="max-width: 480px;">
+      <div class="field">
+        <label class="field-label">Agent name</label>
+        <input class="input" type="text" value="Google Ads Optimizer">
+      </div>
+      <div class="field">
+        <label class="field-label">Description</label>
+        <textarea class="textarea" rows="3">Autonomously monitors and optimizes Google Ads campaigns using performance data from both Google Ads and Google Analytics.</textarea>
+        <div class="field-hint">A concise summary of the agent's job.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ PILLS & TOGGLES ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Selection Controls</div>
+
+    <div class="ds-label mb-3">Pill selector</div>
+    <div class="pill-group mb-6">
+      <button class="pill pill-active">Manual</button>
+      <button class="pill">Hourly</button>
+      <button class="pill">6 hours</button>
+      <button class="pill">Daily</button>
+      <button class="pill">Weekly</button>
+    </div>
+
+    <div class="ds-label mb-3">Toggle</div>
+    <div class="component-row">
+      <button class="toggle toggle-on"><span class="toggle-knob"></span></button>
+      <span style="font-size: var(--text-sm); color: var(--text);">In-app notifications</span>
+      <span style="width: 32px;"></span>
+      <button class="toggle toggle-off"><span class="toggle-knob"></span></button>
+      <span style="font-size: var(--text-sm); color: var(--text-secondary);">Email summaries</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ TABS ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Tabs</div>
+    <div class="tabs">
+      <button class="tab tab-active">Timeline</button>
+      <button class="tab">Objective</button>
+      <button class="tab">Tools</button>
+      <button class="tab">Chat</button>
+      <button class="tab">Memory</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ CARDS & LISTS ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Lists & Cards</div>
+
+    <div class="ds-label mb-3">Agent list (color signals status — border + dot work together)</div>
+    <div class="card mb-6">
+      <div class="list-row list-row-active">
+        <div class="list-row-dot dot-running"></div>
+        <div class="list-row-content">
+          <div class="list-row-title">Google Ads Optimizer</div>
+        </div>
+        <div class="list-row-meta">
+          <span>3 skills</span>
+          <span>12 lessons</span>
+          <span>2h ago</span>
+          <span class="list-row-arrow">&rsaquo;</span>
+        </div>
+      </div>
+      <div class="list-row list-row-attention">
+        <div class="list-row-dot dot-attention"></div>
+        <div class="list-row-content">
+          <div class="flex items-center gap-2">
+            <span class="list-row-title">Lead Qualifier</span>
+            <span class="badge badge-orange" style="font-size: 10px; padding: 2px 8px;">2 pending</span>
+          </div>
+        </div>
+        <div class="list-row-meta">
+          <span>1 skill</span>
+          <span>4 lessons</span>
+          <span>15m ago</span>
+          <span class="list-row-arrow">&rsaquo;</span>
+        </div>
+      </div>
+      <div class="list-row">
+        <div class="list-row-dot dot-idle"></div>
+        <div class="list-row-content">
+          <div class="flex items-center gap-2">
+            <span class="list-row-title">Content Scheduler</span>
+            <span class="badge badge-neutral">Draft</span>
+          </div>
+        </div>
+        <div class="list-row-meta">
+          <span>0 skills</span>
+          <span>0 lessons</span>
+          <span>Never run</span>
+          <span class="list-row-arrow">&rsaquo;</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Settings card with rows</div>
+    <div class="card mb-6">
+      <div class="section-heading">Notifications</div>
+      <div class="settings-row">
+        <div class="settings-icon">&#9678;</div>
+        <div class="settings-info">
+          <div class="settings-title">In-app</div>
+          <div class="settings-desc">Show events in Nochore.</div>
+        </div>
+        <div class="settings-trailing">
+          <button class="toggle toggle-on"><span class="toggle-knob"></span></button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-icon">&#9993;</div>
+        <div class="settings-info">
+          <div class="settings-title">Email</div>
+          <div class="settings-desc">Send email summaries.</div>
+        </div>
+        <div class="settings-trailing">
+          <button class="toggle toggle-off"><span class="toggle-knob"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Tool list — read (blue) vs write (amber) differentiation</div>
+    <div class="card">
+      <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
+        <span>Tool trust</span>
+        <div class="flex gap-2">
+          <span class="badge badge-green">10 auto</span>
+          <span class="badge badge-orange">0 approval</span>
+          <span class="badge badge-red">0 blocked</span>
+        </div>
+      </div>
+      <div class="settings-row" style="cursor: pointer;">
+        <div class="settings-icon tool-icon-read" style="font-size: 12px;">&#8600;</div>
+        <div class="settings-info">
+          <div class="settings-title">Search Terms Report</div>
+          <div class="settings-desc">Read Google Ads search terms for waste analysis.</div>
+        </div>
+        <span class="badge" style="background: var(--read-dim); color: var(--read); font-size: 10px; padding: 2px 8px;">Read</span>
+        <span style="font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--sp-2);">Auto</span>
+        <span style="color: var(--text-dim); margin-left: var(--sp-2); font-size: var(--text-sm);">&rsaquo;</span>
+      </div>
+      <div class="settings-row" style="cursor: pointer;">
+        <div class="settings-icon tool-icon-read" style="font-size: 12px;">&#8600;</div>
+        <div class="settings-info">
+          <div class="settings-title">Campaign Performance</div>
+          <div class="settings-desc">Read campaign spend, clicks, conversions, and trends.</div>
+        </div>
+        <span class="badge" style="background: var(--read-dim); color: var(--read); font-size: 10px; padding: 2px 8px;">Read</span>
+        <span style="font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--sp-2);">Auto</span>
+        <span style="color: var(--text-dim); margin-left: var(--sp-2); font-size: var(--text-sm);">&rsaquo;</span>
+      </div>
+      <div class="settings-row" style="cursor: pointer;">
+        <div class="settings-icon tool-icon-write" style="font-size: 12px;">&#8599;</div>
+        <div class="settings-info">
+          <div class="settings-title">Pause Keyword</div>
+          <div class="settings-desc">Pause a Google Ads keyword.</div>
+        </div>
+        <span class="badge" style="background: var(--write-dim); color: var(--write); font-size: 10px; padding: 2px 8px;">Write</span>
+        <span style="font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--sp-2);">Auto</span>
+        <span style="color: var(--text-dim); margin-left: var(--sp-2); font-size: var(--text-sm);">&rsaquo;</span>
+      </div>
+      <div class="settings-row" style="cursor: pointer;">
+        <div class="settings-icon tool-icon-write" style="font-size: 12px;">&#8599;</div>
+        <div class="settings-info">
+          <div class="settings-title">Adjust Budget</div>
+          <div class="settings-desc">Update a Google Ads campaign budget.</div>
+        </div>
+        <span class="badge" style="background: var(--write-dim); color: var(--write); font-size: 10px; padding: 2px 8px;">Write</span>
+        <span style="font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--sp-2);">Approval</span>
+        <span style="color: var(--text-dim); margin-left: var(--sp-2); font-size: var(--text-sm);">&rsaquo;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ COLOR IN CONTEXT ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Color in Context</div>
+
+    <div class="ds-label mb-3">Tinted surfaces — color lives in backgrounds, not just badges</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); margin-bottom: var(--sp-6);">
+      <div class="card card-accent card-padded">
+        <div style="font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text); margin-bottom: var(--sp-2);">Active agent</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary);">Accent-tinted surface for the currently selected or active item.</div>
+      </div>
+      <div class="card card-orange card-padded">
+        <div style="font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text); margin-bottom: var(--sp-2);">Needs attention</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary);">Orange-tinted surface when something needs user action.</div>
+      </div>
+      <div class="card card-green card-padded">
+        <div style="font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text); margin-bottom: var(--sp-2);">All clear</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary);">Green-tinted surface for success states and confirmations.</div>
+      </div>
+      <div class="card card-red card-padded">
+        <div style="font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--text); margin-bottom: var(--sp-2);">Error</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary);">Red-tinted surface for errors and destructive confirmations.</div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Connection status — color encodes health</div>
+    <div class="card mb-6">
+      <div class="section-heading">Connections</div>
+      <div class="settings-row">
+        <div style="width: 8px; height: 8px; border-radius: var(--radius-pill); flex-shrink: 0;" class="conn-dot-active"></div>
+        <div class="settings-info">
+          <div class="settings-title">Google Ads</div>
+          <div class="settings-desc">Read campaign performance and adjust paid media.</div>
+        </div>
+        <span class="badge badge-green">Connected</span>
+      </div>
+      <div class="settings-row">
+        <div style="width: 8px; height: 8px; border-radius: var(--radius-pill); flex-shrink: 0;" class="conn-dot-missing"></div>
+        <div class="settings-info">
+          <div class="settings-title">Google Analytics</div>
+          <div class="settings-desc">Website conversion and traffic context.</div>
+        </div>
+        <span class="badge badge-orange">Required</span>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Read vs Write — functional color for tool modes</div>
+    <div style="display: flex; gap: var(--sp-4); margin-bottom: var(--sp-6);">
+      <div style="display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--read-dim); border-radius: var(--radius-md); border: 1px solid rgba(124, 168, 196, 0.15);">
+        <span style="font-size: 14px; color: var(--read);">&#8600;</span>
+        <div>
+          <div style="font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--read);">Read tools</div>
+          <div style="font-size: var(--text-xs); color: var(--text-dim);">Data-fetching, passive. Safe to auto-approve.</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--write-dim); border-radius: var(--radius-md); border: 1px solid rgba(196, 155, 124, 0.15);">
+        <span style="font-size: 14px; color: var(--write);">&#8599;</span>
+        <div>
+          <div style="font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--write);">Write tools</div>
+          <div style="font-size: var(--text-xs); color: var(--text-dim);">State-changing, active. Consider approval mode.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ EMPTY STATE ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Empty States</div>
+    <div class="card">
+      <div class="empty-state">
+        <div class="empty-state-icon">&#9683;</div>
+        <div class="empty-state-title">No agents yet</div>
+        <div class="empty-state-desc">Create your first agent to start monitoring and optimizing.</div>
+        <button class="btn btn-primary">New agent</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ATTENTION BANNER ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Banners</div>
+
+    <div class="ds-label mb-3">Attention</div>
+    <div class="attention-banner mb-5">
+      <span style="font-size: 14px;">&#9888;</span>
+      <span class="attention-banner-text">2 actions need your approval before the agent can continue.</span>
+    </div>
+
+    <div class="ds-label mb-3">All clear</div>
+    <div style="padding: var(--sp-4) var(--sp-5); background: var(--green-dim); border-radius: var(--radius-sm); display: flex; align-items: center; gap: var(--sp-3);">
+      <span style="font-size: 14px; color: var(--green);">&#10003;</span>
+      <span style="font-size: var(--text-sm); color: var(--green); font-weight: 500;">All clear — your agents are watching.</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ DELIGHT ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Delight & Micro-interactions</div>
+    <p class="prose" style="font-size: var(--text-sm); color: var(--text-dim); margin-bottom: var(--sp-6);">
+      Craft in the details. Every interaction should feel considered. These are subtle — you notice them subconsciously, not consciously.
+    </p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-6); margin-bottom: var(--sp-6);">
+      <div>
+        <div class="ds-label mb-3">Running dot — breathes to show "alive"</div>
+        <div class="card card-padded flex items-center gap-3">
+          <div class="list-row-dot dot-running" style="width: 10px; height: 10px;"></div>
+          <span style="font-size: var(--text-sm); color: var(--text-secondary);">Google Ads Optimizer is running</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="ds-label mb-3">Input focus — border glow on accent</div>
+        <input class="input" type="text" placeholder="Click to see focus glow..." style="max-width: 100%;">
+      </div>
+
+      <div>
+        <div class="ds-label mb-3">Button press — try clicking and holding</div>
+        <div class="flex gap-3">
+          <button class="btn btn-primary">Press me</button>
+          <button class="btn btn-secondary">Or me</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="ds-label mb-3">Tab underline — grows from center</div>
+        <div class="tabs" id="delight-tabs">
+          <button class="tab tab-active" onclick="delightTab(this)">Active</button>
+          <button class="tab" onclick="delightTab(this)">Hover me</button>
+          <button class="tab" onclick="delightTab(this)">Click me</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-label mb-3">Time-aware greeting</div>
+    <div class="card card-padded mb-6">
+      <div id="time-greeting" style="font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); line-height: var(--leading-tight);"></div>
+      <div style="font-size: var(--text-base); color: var(--text-secondary); margin-top: var(--sp-2);">All 3 agents are running smoothly. Nothing needs your attention.</div>
+    </div>
+
+    <div class="ds-label mb-3">Copy that sounds human (not AI-generated)</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4);">
+      <div class="card card-padded" style="border-left: 3px solid var(--red);">
+        <div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: var(--tracking-wide); margin-bottom: var(--sp-2);">Don't write</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-normal);">
+          "Oops! Something went wrong. Our hamsters stopped running. Please try again later!"
+        </div>
+      </div>
+      <div class="card card-padded" style="border-left: 3px solid var(--green);">
+        <div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: var(--tracking-wide); margin-bottom: var(--sp-2);">Write</div>
+        <div style="font-size: var(--text-sm); color: var(--text); line-height: var(--leading-normal);">
+          "Couldn't reach Google Ads. This usually resolves in a few minutes — your agent will retry automatically."
+        </div>
+      </div>
+      <div class="card card-padded" style="border-left: 3px solid var(--red);">
+        <div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: var(--tracking-wide); margin-bottom: var(--sp-2);">Don't write</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-normal);">
+          "Herding pixels... Teaching robots to dance... Consulting the crystal ball..."
+        </div>
+      </div>
+      <div class="card card-padded" style="border-left: 3px solid var(--green);">
+        <div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: var(--tracking-wide); margin-bottom: var(--sp-2);">Write</div>
+        <div style="font-size: var(--text-sm); color: var(--text); line-height: var(--leading-normal);">
+          "Pulling campaign data from Google Ads..."<br>
+          "Analyzing 847 keywords for waste patterns..."<br>
+          "Comparing this week's CPA against targets..."
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SAMPLE COMPOSITION ═══════════ -->
+  <div class="ds-section">
+    <div class="ds-section-title">Sample Composition: Agent Detail</div>
+    <div class="demo-layout">
+      <div class="agent-header">
+        <div class="agent-header-badges">
+          <span class="badge badge-accent">Homescape</span>
+          <span class="badge badge-green">Live</span>
+        </div>
+        <h1>Google Ads Optimizer</h1>
+        <p class="agent-header-desc">Autonomously monitors and optimizes Google Ads campaigns using performance data from both Google Ads and Google Analytics to maximize ROI and reduce wasted spend.</p>
+      </div>
+
+      <div class="flex gap-3 mb-6">
+        <button class="btn btn-primary">&#9655; Run now</button>
+        <button class="btn btn-ghost">&middot;&middot;&middot; More</button>
+      </div>
+
+      <div class="tabs mb-6">
+        <button class="tab tab-active">Timeline</button>
+        <button class="tab">Objective</button>
+        <button class="tab">Tools</button>
+        <button class="tab">Chat</button>
+        <button class="tab">Memory</button>
+      </div>
+
+      <div class="card card-padded mb-5" style="border-left: 3px solid var(--orange);">
+        <span class="badge badge-orange mb-2">Setup</span>
+        <div style="font-size: var(--text-md); font-weight: 600; color: var(--text); margin: var(--sp-2) 0 var(--sp-1);">Draft agent</div>
+        <p style="font-size: var(--text-base); color: var(--text-secondary); line-height: 1.6;">
+          Finish the instructions, tools, and required connections before launching.
+        </p>
+      </div>
+
+      <div class="card card-padded">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="badge badge-accent">Timeline surface</span>
+        </div>
+        <div style="font-size: var(--text-md); font-weight: 600; color: var(--text); margin-bottom: var(--sp-2);">
+          Event-driven work, approvals, and outcomes in one place.
+        </div>
+        <p style="font-size: var(--text-base); color: var(--text-secondary); line-height: 1.6;">
+          Review what the agent found, approve or reject requested actions, and ask for more context without leaving the timeline.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Time-aware greeting
+function updateGreeting() {
+  const h = new Date().getHours();
+  const period = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const el = document.getElementById('time-greeting');
+  if (el) el.textContent = `Good ${period}, Chau Shyang.`;
+}
+updateGreeting();
+
+// Tab switcher demo
+function delightTab(clicked) {
+  const tabs = clicked.parentElement.querySelectorAll('.tab');
+  tabs.forEach(t => t.classList.remove('tab-active'));
+  clicked.classList.add('tab-active');
+}
+</script>
+</body>
+</html>

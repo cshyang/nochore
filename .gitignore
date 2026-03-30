@@ -4,32 +4,36 @@ __pycache__/
 .env
 venv/
 .venv/
-.pycache/
+
+# Node
+node_modules/
+dist/
+.vinxi/
+.tanstack/
+bun.lock
 
 # Data and credentials
+data/
 *.csv
-*.json
 credentials.json
 config.json
 .env.local
 google-ads.yaml
 
-# Client configs (contain real account IDs and business context)
-config/clients/*.yaml
-!config/clients/example.yaml
-config/defaults.yaml
+# Legacy CLI — client configs (contain real account IDs)
+legacy/config/clients/*.yaml
+!legacy/config/clients/example.yaml
+legacy/config/defaults.yaml
 .campaign-context
 
-# Generated data and logs
-data/*
-!data/.gitkeep
-logs/*
-!logs/.gitkeep
+# Legacy CLI — generated data and logs
+legacy/data/*
+legacy/reports/*
+!legacy/data/.gitkeep
+!legacy/reports/.gitkeep
+legacy/logs/*
+!legacy/logs/.gitkeep
 *.log
-
-# Reports (generated)
-reports/*
-!reports/.gitkeep
 
 # Backups
 *.backup
@@ -37,12 +41,20 @@ reports/*
 
 # IDE and editor
 .vscode/
-.venv/
 .DS_Store
 .worktrees/
 
-# local
+# Local tool configs
+.agents/
+.pi/
 .gemini/
 .kilocode/
 .opencode/
 .windsurf/
+
+.trigger
+.ant-colony/
+
+# Local reports and scratch files
+biome-report*.json
+apps-errors.txt

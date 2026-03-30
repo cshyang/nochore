@@ -1,0 +1,1 @@
+Assigned file packages/harness/src/chat/handler.ts is missing in this checkout. Verified by ls/find/read. No safe code change possible within assigned scope.

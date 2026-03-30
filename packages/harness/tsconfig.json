@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/chat/**",
+    "src/context/**",
+    "src/memory/**",
+    "src/pipeline/**",
+    "src/policy/rules/**",
+    "src/connections/stub.ts",
+    "src/connections/types.ts",
+    "src/connections/ai-tools.ts",
+    "src/connections/factory.ts",
+    "src/repositories/action-execution.ts",
+    "src/repositories/chat-session.ts",
+    "src/skills/built-in/**",
+    "src/skills/executor.ts",
+    "src/skills/registry.ts",
+    "src/types/action.ts",
+    "src/types/data-types.ts",
+    "src/types/memory.ts"
+  ]
+}
