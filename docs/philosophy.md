@@ -184,6 +184,8 @@ In Nochore:
 
 Design implication: when a user configures guardrails during setup, they're not restricting their agent — they're enabling it to act more independently. Karpathy's AutoResearch demonstrates this at the extreme: by locking the evaluation harness outside the agent's reach and bounding it to a single editable file with a clear metric, the agent runs hundreds of experiments overnight without supervision.
 
+**Implementation: Learned Policy Rules.** Constraints aren't just static — they evolve as trust is earned. The policy engine detects consistent human approval patterns (e.g., "user approved budget changes under $200 eight times in 30 days") and suggests auto-approving that pattern. Users confirm or dismiss. Learned rules sit alongside static rules; the strictest always wins. This is the mechanism for progressive autonomy: constraints start tight and relax as evidence accumulates. See `docs/plans/2026-03-30-progressive-autonomy-design.md`.
+
 ---
 
 ## The Two Audiences
@@ -259,105 +261,38 @@ Projects are the top-level organizational primitive (a client, a team, an initia
 
 ## Integration & Credential Architecture
 
-The integration layer is deceptively complex. Nice-looking OAuth buttons hide real problems: multi-account disambiguation, token lifecycle, per-agent permission scoping, and rate limiting. Our architecture splits responsibilities between Composio (commodity auth) and our Connection Manager (context-aware orchestration).
+The integration layer is deceptively complex. Nice-looking OAuth buttons hide real problems: multi-account disambiguation, token lifecycle, and rate limiting.
 
-### What Composio Handles
+### Current Architecture (post-simplification, 2026-03-24)
 
-- OAuth flows for 500+ apps (popup, redirect, token exchange)
+Composio handles auth directly — no custom Connection Manager abstraction. Tool config (enabled/disabled, auto/approval per tool) lives in the agent's DB record.
+
+**What Composio handles:**
+- OAuth flows for 250+ apps (popup, redirect, token exchange)
 - Encrypted credential storage (isolated per entity)
 - Automatic token refresh (transparent)
-- Multi-tenant isolation via `entity_id`
+- Multi-tenant isolation via `entity_id` (maps to our project ID)
 - Multiple auth methods (OAuth2, API keys, bearer tokens)
+- Tool execution with auth handling
 
-### What Our Connection Manager Handles
-
-```
-┌──────────── CONNECTION MANAGER ──────────────┐
-│                                               │
-│  Registry          "Which accounts exist?     │
-│                     Which project owns them?" │
-│                                               │
-│  Health Monitor    "Is this still working?    │
-│                     Alert user if not."       │
-│                                               │
-│  Permission        "Can this agent do this    │
-│  Resolver          action with this tool?"    │
-│                                               │
-│  Rate Limiter      "Backoff, queue, throttle  │
-│                     before upstream rejects."  │
-│                                               │
-│  Context Injector  "Tell the LLM what it has  │
-│                     access to, never expose    │
-│                     actual credentials."       │
-│                                               │
-└──────────────────────┬───────────────────────┘
-                       │
-              ┌────────▼────────┐
-              │    COMPOSIO     │
-              │  (raw auth +    │
-              │   500+ APIs)    │
-              └─────────────────┘
-```
+**What we handle:**
+- `connections` table — tracks which providers are connected per project, their status, and provider-specific config
+- Per-tool config in agent DB record — `enabled`, `approvalMode` (auto/approval/blocked), `cooldownMinutes`, `budgetThreshold`
+- Google Ads direct connector — custom integration bypassing Composio (due to DEVELOPER_TOKEN_PROHIBITED issue)
 
 ### Key Design Decisions
 
 **Connections live at the project level.** Connect Google Ads once; all agents in the project inherit access. This maps to Composio's `entity_id` = our project ID.
 
-**Sub-account selection is explicit.** When a user connects a Google Ads manager account with 12 sub-accounts, they must choose which sub-accounts agents can access. This is the "which account?" problem — Composio doesn't solve it, we do.
+**The LLM never sees credentials.** The agent knows what tools it has access to (from system prompt context), but actual API calls are executed through Composio's SDK. The agent reasons about *what* to do; the integration layer handles *how*.
 
-**Permission scoping is two-level:**
-1. **Connection-level default** — read-write, read-only, or write-only (set during connection setup)
-2. **Per-agent override** — an agent can be further restricted. "Ad Spend Guardian gets read-write; Content Scheduler gets read-only."
+**Skills are prompt modules, not code.** Skills are markdown files that encode domain knowledge and analytical instructions. They reference tools by name ("use GOOGLEADS_LIST_CAMPAIGNS to...") but never touch credentials or execute API calls directly. The agent's LLM session uses tools provided by Composio at runtime.
 
-**Health monitoring is proactive.** Don't wait for the agent to fail. Check connection health on a schedule. If a token expires or quota hits 90%, notify the user before agents break.
+### Future Considerations
 
-**The LLM never sees credentials.** Instead, the Context Injector tells the agent: "You have access to Google Ads (Acme Corp, accounts US + EU, read-write) and Slack (Acme Workspace, write)." The harness handles actual API calls — the agent reasons about *what* to do, the harness executes *how*.
-
-### For Extension Builders (SDK)
-
-Skills never touch credentials directly. They declare what data type they need, and the harness provides it:
-
-```python
-class RefundRiskAnalyzer(Skill):
-    """Analyze refund patterns."""
-
-    # Declare what data this skill needs — NOT which tool provides it
-    consumes = ["orders", "customer_events"]
-    produces = RefundRiskInsight
-
-    def analyze(self, ctx: SkillContext) -> list[RefundRiskInsight]:
-        # ctx.data["orders"] is a DataFrame — already fetched by
-        # the harness using whatever tool is connected (Shopify,
-        # WooCommerce, custom API). The skill doesn't know or care.
-        orders = ctx.data["orders"]
-        ...
-```
-
-This is the key abstraction: **skills consume data types, not tool outputs.** The harness resolves which tool provides which data type based on what's connected. This means a "Refund Risk" skill works with Shopify, WooCommerce, or any other e-commerce tool — zero changes to the skill code.
-
-For actions (mutations), the pattern is similar:
-
-```python
-class IssueRefundAction(Action):
-    """Refund an order."""
-
-    tool_category = "ecommerce"  # resolved to Shopify/WooCommerce at runtime
-    permission_required = "write"
-    reversible = False  # harness knows this needs policy approval
-
-    input_schema = RefundRequest
-    output_schema = RefundConfirmation
-
-    def execute(self, ctx: ActionContext, input: RefundRequest) -> RefundConfirmation:
-        # ctx.tool is the connected e-commerce tool, already authenticated
-        result = ctx.tool.execute("refund_order", {
-            "order_id": input.order_id,
-            "amount": input.amount,
-        })
-        return RefundConfirmation(**result)
-```
-
-The extension builder never handles OAuth, API keys, token refresh, or rate limiting. They declare what they need; the harness provides it.
+- **Sub-account selection** — When a user connects a manager account with multiple sub-accounts, which ones should agents access?
+- **Health monitoring** — Proactive connection health checks before agents fail
+- **Per-agent permission scoping** — Different agents getting different access levels to the same connection
 
 ---
 
@@ -427,17 +362,16 @@ Clarity on what we're not building, to prevent scope creep:
 ## Open Questions (To Resolve Layer by Layer)
 
 ### Resolved
-- [x] Integration: How deep is the Composio integration? → **Composio handles raw auth; our Connection Manager handles context, health, permissions, rate limiting**
+- [x] Integration: How deep is the Composio integration? → **Composio handles auth + tool execution directly (no Connection Manager abstraction). Tool config lives in agent DB record.** See `docs/plans/2026-03-24-platform-simplification-design.md`
 - [x] Extension Layer: How do skills declare dependencies on data types without coupling to specific tools? → **Skills consume data types (e.g., "orders"), not tool outputs. Harness resolves which connected tool provides each data type.**
-- [x] Consumption Layer: What's the MVP interface? → **Project home (agents + connections tabs) → Agent detail (feed + chat + memory + settings)**
+- [x] Consumption Layer: What's the MVP interface? → **Project home (agents + connections tabs) → Agent detail (activity + chat + memory + settings)**
+- [x] Harness Layer: What are the exact "LLM injection points"? → **Single Trigger.dev task with manual tool loop. LLM in agent session only; policy is always deterministic.** See `docs/plans/2026-03-24-platform-simplification-design.md`
+- [x] Policy Layer: How do policies compose? → **Strictest rule wins, deterministic ordering. Learned rules from approval patterns sit alongside static rules but never override a stricter static rule.** See `docs/plans/2026-03-30-progressive-autonomy-design.md`
+- [x] Memory Layer: What's the memory schema? → **Three-layer split (workspace files / SQLite / JSONL debug mirror). Event log (append-only) + lessons (distilled from runs, scoped, with confidence and expiration).** See `packages/harness/src/db/sqlite/schema.ts`
 
 ### Open
 - [ ] Harness Layer: How does scope resolution work across multiple tools/skills?
-- [ ] Harness Layer: What are the exact "LLM injection points" where reasoning happens vs. deterministic execution?
 - [ ] Extension Layer: What does the full SDK contract look like for Skills, Policies, and Actions?
-- [ ] Policy Layer: How do policies compose? (What if two policies conflict?)
-- [ ] Memory Layer: What's the memory schema? How does the agent query its own history?
 - [ ] Connection Manager: How does data type → tool resolution work when multiple tools could provide the same type?
-- [ ] Connection Manager: What's the health check protocol? How often? What triggers alerts?
 - [ ] Marketplace: How are extensions discovered, rated, and trusted?
 - [ ] Economics: What's the cost model when every agent invocation burns LLM tokens?

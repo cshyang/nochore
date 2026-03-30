@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { createDb } from "../db/client";
+import type { HarnessDb } from "../db/client";
 import { agents } from "../db/schema";
 import {
   type AgentConfig,
@@ -11,9 +11,8 @@ import {
   NotificationConfigSchema,
   ToolConfigSchema,
 } from "../types";
-import { getAgentWorkspacePath } from "../workspace";
 
-type Db = ReturnType<typeof createDb>;
+type Db = HarnessDb;
 
 export interface AgentRecord extends AgentConfig {
   id: string;
@@ -23,7 +22,6 @@ export interface AgentRecord extends AgentConfig {
   status: AgentStatus;
   createdAt: Date;
   updatedAt: Date;
-  workspacePath: string;
 }
 
 export interface CreateAgentInput extends AgentConfig {
@@ -130,7 +128,6 @@ function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
     status: AgentStatusSchema.parse(row.status),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
-    workspacePath: getAgentWorkspacePath(row.projectId, row.id),
   };
 }
 

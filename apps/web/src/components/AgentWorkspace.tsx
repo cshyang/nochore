@@ -1,4 +1,4 @@
-import { BookOpen, Play } from "@phosphor-icons/react";
+import { BookOpen, Play, Stop } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentWorkspaceProps, WorkspaceTab } from "~/components/agent-workspace.types";
 import { AgentWorkspaceActivityPane } from "~/components/agent-workspace-activity";
@@ -29,6 +29,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     requiredProviders = [],
     activeRun,
     onLiveRunComplete,
+    onCancelRun,
+    cancelling,
     runError,
     onApprove,
     onReject,
@@ -171,7 +173,17 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           agent={agent}
           isDraft={isDraft}
           runAction={
-            wrappedOnRunNow ? (
+            activeRun && onCancelRun ? (
+              <Button
+                variant="secondary"
+                onClick={onCancelRun}
+                disabled={cancelling}
+                style={{ borderColor: COLORS.red, color: COLORS.red }}
+              >
+                <Stop size={13} weight="bold" />
+                {cancelling ? "Cancelling..." : "Cancel run"}
+              </Button>
+            ) : wrappedOnRunNow ? (
               <Button onClick={wrappedOnRunNow}>
                 <Play size={13} weight="bold" />
                 Run now

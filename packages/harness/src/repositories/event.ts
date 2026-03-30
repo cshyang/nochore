@@ -1,9 +1,9 @@
 import { asc, desc, eq } from "drizzle-orm";
-import type { createDb } from "../db/client";
+import type { HarnessDb } from "../db/client";
 import { runEvents } from "../db/schema";
 import { type RunEvent, RunEventSchema, type RunEventType } from "../types";
 
-type Db = ReturnType<typeof createDb>;
+type Db = HarnessDb;
 
 export interface CreateRunEventInput {
   runId: string;

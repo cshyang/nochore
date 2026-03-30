@@ -317,6 +317,8 @@ Key design choices:
 - **Autonomy increases are suggested, never forced** — the user always controls the dial
 - **Evidence is always linked** — every lesson traces back to a specific experiment or observation
 
+**How trust suggestions are generated:** The system detects consistent approval patterns — counting resolved approvals by tool name within a time window (not ML, not embeddings). When consistency exceeds a threshold (default: 5+ decisions, 90%+ same outcome, 30-day window), the system suggests a learned policy rule. The user confirms, modifies, or dismisses. This is a system-level notification, not an agent suggestion — the agent never proposes increasing its own autonomy. Full mechanism: `docs/plans/2026-03-30-progressive-autonomy-design.md`.
+
 ---
 
 ## The Home Screen: Cross-Project Overview

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
 import {
   parseAgentView,
@@ -8,7 +8,7 @@ import {
   parseRunViews,
   parseSkillViews,
 } from "~/lib/view-models";
-import { deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agents";
+import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { approveAction, rejectAction } from "~/server/approvals";
 import { isDirectProvider } from "~/lib/provider-metadata";
 import {
@@ -79,6 +79,11 @@ function AgentDetailPage() {
     accessToken: string;
   } | null>(null);
 
+  // Track runs that completed/failed via LiveRunView so the auto-activate
+  // effect doesn't re-connect to a run whose DB status is stale (e.g. still
+  // "queued" in SQLite but already FAILED on trigger.dev).
+  const exhaustedRunIds = useRef<Set<string>>(new Set());
+
   const activateRun = useCallback(async (runId: string, triggerRunId: string) => {
     try {
       const tokenResult = await getRealtimeToken({ data: { triggerRunId } });
@@ -87,14 +92,18 @@ function AgentDetailPage() {
         setActiveRun({ runId, triggerRunId, accessToken: token });
       }
     } catch {
-      // Token creation failed — fall back to static timeline
+      // Token creation failed — mark as exhausted so we don't retry
+      exhaustedRunIds.current.add(runId);
     }
   }, []);
 
   const handleLiveRunComplete = useCallback(() => {
+    if (activeRun) {
+      exhaustedRunIds.current.add(activeRun.runId);
+    }
     setActiveRun(null);
     void router.invalidate();
-  }, [router]);
+  }, [activeRun, router]);
 
   const handleConnect = useCallback(
     async (provider: string) => {
@@ -141,15 +150,37 @@ function AgentDetailPage() {
   // Auto-activate LiveRunView if page loads with an active run
   useEffect(() => {
     if (activeRun) return;
-    const activeRunRecord = runs.find((r) => r.status === "running" || r.status === "queued");
+    const activeRunRecord = runs.find(
+      (r) =>
+        (r.status === "running" || r.status === "queued") &&
+        !exhaustedRunIds.current.has(r.id),
+    );
     if (!activeRunRecord) return;
     const triggerRunId = (activeRunRecord as { triggerRunId?: string }).triggerRunId;
     if (triggerRunId) {
       void activateRun(activeRunRecord.id, triggerRunId);
     }
-  }, [activeRun, activateRun, runs]); // Run once on mount
+  }, [activeRun, activateRun, runs]);
 
   const [runError, setRunError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancelRun = useCallback(async () => {
+    if (!activeRun || cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelRun({
+        data: { runId: activeRun.runId, triggerRunId: activeRun.triggerRunId, projectId },
+      });
+      exhaustedRunIds.current.add(activeRun.runId);
+      setActiveRun(null);
+      void router.invalidate();
+    } catch {
+      // Cancel failed — run may have already completed
+    } finally {
+      setCancelling(false);
+    }
+  }, [activeRun, cancelling, projectId, router]);
 
   if (!project || !agent) {
     return <div>Agent not found.</div>;
@@ -190,6 +221,8 @@ function AgentDetailPage() {
       projectConnections={projectConnections}
       activeRun={activeRun}
       onLiveRunComplete={handleLiveRunComplete}
+      onCancelRun={handleCancelRun}
+      cancelling={cancelling}
       runError={runError}
       onBack={() => navigate({ to: "/$projectId", params: { projectId } })}
       onDeleteAgent={handleDeleteAgent}

@@ -10,10 +10,8 @@ function findRepoRoot(): string {
   return process.cwd();
 }
 
-const REPO_ROOT = findRepoRoot();
-
 export function getRepoRoot(): string {
-  return REPO_ROOT;
+  return process.env.PROJECT_ROOT ?? findRepoRoot();
 }
 
 export function getWebDataRoot(): string {

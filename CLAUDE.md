@@ -84,12 +84,13 @@ Key directories inside `apps/web/src/`:
 ## Open Design Questions
 
 ### Resolved
-- ~~Harness Layer internals~~ → 8-step pipeline, LLM at steps 2/4/5/8, policy always deterministic
+- ~~Harness Layer internals~~ → Simplified to single Trigger.dev task with manual tool loop (2026-03-24 platform simplification)
 - ~~SDK contracts~~ → Zod schemas for all types, AI SDK for tool schemas
 - ~~Memory schema~~ → Three-layer split (files/DB/JSONL), event log + lessons
+- ~~Policy composition~~ → Strictest rule wins, deterministic ordering. Learned rules (from approval patterns) sit alongside static rules but can never override a stricter static rule. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
+- ~~Progressive trust automation~~ → Learned policy rules derived from approval history. Pattern detection (counting, not ML), user-confirmed suggestions, full revocability. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
 
 ### Still Open
-- **Policy composition** — Conflict resolution when policies disagree (Tier 2)
 - **Data type → tool resolution** — When multiple tools provide the same data type (Tier 2)
 - **Marketplace** — Extension discovery, trust, ratings (Tier 3)
 - **Economics** — Token cost model, pricing tiers (Tier 3)

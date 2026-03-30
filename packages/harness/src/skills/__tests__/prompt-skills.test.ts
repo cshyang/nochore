@@ -35,7 +35,11 @@ describe("prompt skill discovery", () => {
       "utf-8",
     );
     await writeFile(path.join(productSkillDir, "knowledge", "heuristics.md"), "# Heuristics\n", "utf-8");
-    await writeFile(path.join(internalSkillDir, "SKILL.md"), "# Internal Helper\n\nInternal only.", "utf-8");
+    await writeFile(
+      path.join(internalSkillDir, "SKILL.md"),
+      ["---", "product: false", "---", "", "# Internal Helper", "", "Internal only."].join("\n"),
+      "utf-8",
+    );
 
     const skills = listPromptSkills({ rootDir: root });
     expect(skills).toHaveLength(1);
@@ -60,5 +64,6 @@ describe("prompt skill discovery", () => {
     expect(allSkills).toHaveLength(1);
     expect(skill?.name).toBe("Ops Playbook");
     expect(skill?.description).toBe("Use for internal operations.");
+    expect(skill?.product).toBe(true);
   });
 });

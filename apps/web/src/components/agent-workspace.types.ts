@@ -49,5 +49,7 @@ export interface AgentWorkspaceProps {
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onCancelRun?: () => void;
+  cancelling?: boolean;
   providerLogos?: Record<string, string>;
 }

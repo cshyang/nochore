@@ -9,6 +9,8 @@ venv/
 node_modules/
 dist/
 .vinxi/
+.tanstack/
+bun.lock
 
 # Data and credentials
 data/
@@ -43,6 +45,8 @@ legacy/logs/*
 .worktrees/
 
 # Local tool configs
+.agents/
+.pi/
 .gemini/
 .kilocode/
 .opencode/
@@ -50,3 +54,7 @@ legacy/logs/*
 
 .trigger
 .ant-colony/
+
+# Local reports and scratch files
+biome-report*.json
+apps-errors.txt

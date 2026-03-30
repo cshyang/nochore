@@ -221,5 +221,5 @@ Phase 1 (alpha chat)
 2. **Chat replaces all direct manipulation** — Some things are faster as a click. Don't route everything through conversation.
 3. **Clippy** — Agent speaks first only when user opens Chat. Never interrupts.
 4. **Workflow builder via chat** — Chat modifies strategy (plain language), not conditional logic. Complex policy belongs in structured UI.
-5. **Infinite autonomy escalation** — The agent never suggests increasing its own autonomy via chat.
+5. **Infinite autonomy escalation** — The agent never suggests increasing its own autonomy via chat. Note: the *system* (not the agent) can suggest autonomy increases based on approval patterns — these appear as notification cards in Activity/Settings, not as agent chat messages. See `docs/plans/2026-03-30-progressive-autonomy-design.md`.
 6. **Silent modification** — Never apply config changes without showing diff + getting confirmation.

@@ -1,8 +1,8 @@
 import { and, eq, gt, isNull, or } from "drizzle-orm";
-import type { createDb } from "../db/client";
+import type { HarnessDb } from "../db/client";
 import { lessons } from "../db/schema";
 
-type Db = ReturnType<typeof createDb>;
+type Db = HarnessDb;
 
 export type LessonConfidence = "high" | "medium" | "low";
 
@@ -55,7 +55,7 @@ export class LessonRepository {
       .from(lessons)
       .where(and(eq(lessons.agentId, agentId), or(isNull(lessons.expiresAt), gt(lessons.expiresAt, now))))
       .all()
-      .map((row) => ({
+      .map((row: typeof lessons.$inferSelect) => ({
         id: row.id,
         agentId: row.agentId,
         content: row.content,

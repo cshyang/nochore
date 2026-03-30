@@ -51,20 +51,28 @@ export function Button({
   children,
   onClick,
   style,
+  disabled,
 }: {
   variant?: ButtonVariant;
   size?: ButtonSize;
   children: React.ReactNode;
   onClick?: () => void;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }) {
+  const disabledStyle: React.CSSProperties = disabled
+    ? { opacity: 0.5, cursor: "not-allowed", pointerEvents: "none" }
+    : {};
+
   return (
     <button
       type="button"
       className="btn"
-      onClick={onClick}
-      style={{ ...base, ...sizes[size], ...variants[variant], ...style }}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{ ...base, ...sizes[size], ...variants[variant], ...disabledStyle, ...style }}
       onMouseEnter={(e) => {
+        if (disabled) return;
         const hover = hoverStyles[variant];
         if (hover.background) e.currentTarget.style.background = hover.background as string;
         if (hover.color) e.currentTarget.style.color = hover.color as string;
@@ -72,6 +80,7 @@ export function Button({
         if (hover.opacity !== undefined) e.currentTarget.style.opacity = String(hover.opacity);
       }}
       onMouseLeave={(e) => {
+        if (disabled) return;
         const v = variants[variant];
         e.currentTarget.style.background = (v.background as string) ?? "";
         e.currentTarget.style.color = (v.color as string) ?? "";

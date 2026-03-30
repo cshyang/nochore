@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { createDb } from "../../../../packages/harness/src/db/client";
+import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import { connections, projects } from "../../../../packages/harness/src/db/schema";
-import { getProjectDbPath, getProjectDirectory, getWebDataRoot } from "../../../../packages/harness/src/workspace";
+import { getProjectDirectory, getWebDataRoot } from "../../../../packages/harness/src/workspace";
 import { clearProjectDeps, getProjectDeps } from "./deps";
 import { buildAgentView, buildProjectView } from "./models";
 import { jsonSafe } from "./serializable";
@@ -51,7 +52,7 @@ export const createProject = createServerFn({ method: "POST" })
     }
 
     mkdirSync(projectDir, { recursive: true });
-    createDb(getProjectDbPath(projectId));
+    createDb(getProjectPersistence(projectId).dbPath);
 
     const { db } = getProjectDeps(projectId);
     const now = Date.now();
@@ -91,7 +92,7 @@ export const deleteProject = createServerFn({ method: "POST" })
 
 async function loadProjectView(projectId: string) {
   const projectDir = getProjectDirectory(projectId);
-  const dbPath = getProjectDbPath(projectId);
+  const { dbPath } = getProjectPersistence(projectId);
   if (!existsSync(projectDir) || !existsSync(dbPath)) {
     return null;
   }

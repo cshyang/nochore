@@ -46,8 +46,8 @@ function ProjectLayout() {
           })
         }
       />
-      <div style={{ marginLeft: 240, padding: "32px 48px", display: "flex", justifyContent: "center" }}>
-        <div style={{ width: "100%", maxWidth: 800 }}>
+      <div style={{ marginLeft: 240, padding: "32px 40px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 1200 }}>
           <Outlet />
         </div>
       </div>

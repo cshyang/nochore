@@ -8,7 +8,7 @@ import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
 
 describe("simplified repositories", () => {
-  it("creates, loads, and updates agents with derived workspace paths", async () => {
+  it("creates, loads, and updates agents", async () => {
     const db = createTestDb();
     const now = Date.now();
     db.insert(projects)
@@ -43,7 +43,6 @@ describe("simplified repositories", () => {
     const agent = await repo.getById(id);
     expect(agent?.status).toBe("live");
     expect(agent?.skills).toEqual(["campaign-analysis", "campaign-reviewer"]);
-    expect(agent?.workspacePath).toContain("/data/projects/proj_001/agents/");
   });
 
   it("tracks run lifecycle and summary state", async () => {

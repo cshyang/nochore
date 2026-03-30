@@ -1,9 +1,10 @@
 import { WarningCircle } from "@phosphor-icons/react";
+import { useMemo } from "react";
 import type { ActiveRunState } from "~/components/agent-workspace.types";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
 import { LiveRunView } from "~/components/LiveRunView";
-import { RunRail } from "~/components/RunRail";
-import { RunReport } from "~/components/RunReport";
+import { RunDetail } from "~/components/RunDetail";
+import { RunList } from "~/components/RunList";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import type { RunView } from "~/lib/types";
 
@@ -36,10 +37,30 @@ export function AgentWorkspaceActivityPane({
   onApprove,
   onReject,
 }: AgentWorkspaceActivityPaneProps) {
-  const selectedRun = runs.find((run) => run.id === selectedRunId) ?? runs[0] ?? null;
+  // Synthesize a placeholder for the live run if it hasn't appeared in the
+  // fetched runs list yet (loader data is stale until router.invalidate).
+  const displayRuns = useMemo(() => {
+    if (!activeRun) return runs;
+    if (runs.some((r) => r.id === activeRun.runId)) return runs;
+    const placeholder: RunView = {
+      id: activeRun.runId,
+      agentId: runs[0]?.agentId ?? "",
+      triggerType: "manual",
+      status: "running",
+      startedAt: new Date().toISOString(),
+      events: [],
+    };
+    return [placeholder, ...runs];
+  }, [activeRun, runs]);
+
+  const selectedRun =
+    displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
 
   return (
-    <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
+    <div
+      className="aw-panel-enter"
+      style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}
+    >
       {runError ? (
         <div
           style={{
@@ -60,28 +81,35 @@ export function AgentWorkspaceActivityPane({
         </div>
       ) : null}
 
-      {activeRun ? (
-        <LiveRunView
-          triggerRunId={activeRun.triggerRunId}
-          accessToken={activeRun.accessToken}
-          runId={activeRun.runId}
-          onComplete={onLiveRunComplete}
-          onApprove={onApprove}
-          onReject={onReject}
+      <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
+        <RunList
+          runs={displayRuns}
+          selectedRunId={selectedRun?.id ?? null}
+          onSelect={onSelectRun}
+          activeRunId={activeRun?.runId}
         />
-      ) : (
-        <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
-          <RunRail runs={runs} selectedRunId={selectedRun?.id ?? null} onSelect={onSelectRun} />
-          <RunReport
-            run={selectedRun}
-            hasRuns={runs.length > 0}
-            onRunNow={onRunNow}
-            checklistItems={checklistItems}
-            onGoLive={onGoLive}
-            goingLive={goingLive}
-          />
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          {activeRun ? (
+            <LiveRunView
+              triggerRunId={activeRun.triggerRunId}
+              accessToken={activeRun.accessToken}
+              runId={activeRun.runId}
+              onComplete={onLiveRunComplete}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          ) : (
+            <RunDetail
+              run={selectedRun}
+              hasRuns={displayRuns.length > 0}
+              onRunNow={onRunNow}
+              checklistItems={checklistItems}
+              onGoLive={onGoLive}
+              goingLive={goingLive}
+            />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

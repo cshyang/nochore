@@ -1,9 +1,9 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import type { createDb } from "../db/client";
+import type { HarnessDb } from "../db/client";
 import { approvals } from "../db/schema";
 import { type ApprovalRecord, ApprovalRecordSchema, type ApprovalStatus, ApprovalStatusSchema } from "../types";
 
-type Db = ReturnType<typeof createDb>;
+type Db = HarnessDb;
 
 export interface CreateApprovalInput {
   runId: string;

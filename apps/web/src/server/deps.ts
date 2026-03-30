@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
-import { createDb } from "../../../../packages/harness/src/db/client";
+import { createDb, type HarnessDb } from "../../../../packages/harness/src/db/client";
 import { agents, connections, projects } from "../../../../packages/harness/src/db/schema";
+import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import { AgentRepository } from "../../../../packages/harness/src/repositories/agent";
 import { ApprovalRepository } from "../../../../packages/harness/src/repositories/approval";
 import { RunEventRepository } from "../../../../packages/harness/src/repositories/event";
@@ -8,13 +9,13 @@ import { LessonRepository } from "../../../../packages/harness/src/repositories/
 import { RunRepository } from "../../../../packages/harness/src/repositories/run";
 import { listPromptSkills } from "../../../../packages/harness/src/skills";
 import type { AgentConfig } from "../../../../packages/harness/src/types";
-import { getAgentWorkspacePath, getProjectDbPath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
+import { getAgentWorkspacePath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
 import { buildAgentView, buildProjectView } from "./models";
 
-const dbCache = new Map<string, ReturnType<typeof createDb>>();
+const dbCache = new Map<string, HarnessDb>();
 
 export interface ProjectDeps {
-  db: ReturnType<typeof createDb>;
+  db: HarnessDb;
   agentRepository: AgentRepository;
   runRepository: RunRepository;
   runEventRepository: RunEventRepository;
@@ -115,7 +116,7 @@ export async function getProjectView(projectId: string) {
 
 function getDb(projectId: string) {
   if (!dbCache.has(projectId)) {
-    dbCache.set(projectId, createDb(getProjectDbPath(projectId)));
+    dbCache.set(projectId, createDb(getProjectPersistence(projectId).dbPath));
   }
   return dbCache.get(projectId)!;
 }

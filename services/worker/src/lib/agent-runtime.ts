@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
-import type { Composio } from "@composio/core";
 import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
+import { getAgentDefinitionById } from "../../../../packages/harness/src/catalog";
 import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
 import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
-import { createDb } from "../../../../packages/harness/src/db/client";
+import { createDb, type HarnessDb } from "../../../../packages/harness/src/db/client";
 import { connections } from "../../../../packages/harness/src/db/schema";
+import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import {
   type AgentRecord,
   AgentRepository,
@@ -15,15 +16,15 @@ import {
 } from "../../../../packages/harness/src/repositories";
 import { listPromptSkills, type PromptSkill } from "../../../../packages/harness/src/skills";
 import type { RunTrigger } from "../../../../packages/harness/src/types";
-import { getAgentWorkspacePath, getProjectDbPath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
+import { getAgentWorkspacePath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
 
 export interface WorkerRuntime {
-  db: ReturnType<typeof createDb>;
+  db: HarnessDb;
   agentRepository: AgentRepository;
   lessonRepository: LessonRepository;
   runEventRepository: RunEventRepository;
   runRepository: RunRepository;
-  composio: Composio;
+  composio: Awaited<ReturnType<typeof createComposioClient>>;
   userId: string;
   activeProviders: string[];
   providerConfigs: Record<string, Record<string, unknown>>;
@@ -41,7 +42,7 @@ export async function createModel(modelOverride?: string): Promise<LanguageModel
 }
 
 export async function createWorkerRuntime(projectId: string): Promise<WorkerRuntime> {
-  const db = createDb(getProjectDbPath(projectId));
+  const db = createDb(getProjectPersistence(projectId).dbPath);
   const composio = await createComposioClient();
 
   const { providers, configs } = await listActiveProvidersWithConfig(db, projectId);
@@ -63,8 +64,9 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
   const workspaceStore = new WorkspaceStore(getAgentWorkspacePath(params.agent.projectId, params.agent.id));
   const workspaceKnowledge = (await workspaceStore.readFile("KNOWLEDGE.md")) ?? "";
   const availableSkills = listPromptSkills({ productOnly: true });
-  const selectedSkills = params.agent.skills
-    .map((skillId: string) => availableSkills.find((skill) => skill.id === skillId))
+  const skillIds: string[] = params.agent.skills;
+  const selectedSkills = skillIds
+    .map((skillId) => availableSkills.find((skill) => skill.id === skillId))
     .filter((skill): skill is PromptSkill => skill != null);
   const skillSections = await Promise.all(
     selectedSkills.map(async (skill) => {
@@ -130,25 +132,13 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
   };
 }
 
-const SPECIALIST_ROLES: Record<string, string> = {
-  scout:
-    "You are a research specialist. Your job is to gather data, explore, and surface what's relevant. " +
-    "Use tools to fetch data. Report what you found factually — no speculation, no filler.",
-  analyst:
-    "You are an analysis specialist. Given data or findings, identify patterns, anomalies, and actionable insights. " +
-    "Be quantitative and specific. Support claims with numbers.",
-  builder:
-    "You are an execution specialist. When given a specific action to take, execute it precisely using the available tools. " +
-    "Confirm what you did and report any errors.",
-};
-
 export function buildSubRunPrompt(params: {
   role: string;
   task: string;
   context?: string;
   agentInstructions: string;
 }): string {
-  const rolePrompt = SPECIALIST_ROLES[params.role] ?? SPECIALIST_ROLES.scout;
+  const rolePrompt = loadSpecialistPrompt(params.role);
   const sections = [
     rolePrompt,
     params.agentInstructions ? `## Agent Context\n${params.agentInstructions}` : "",
@@ -159,16 +149,41 @@ export function buildSubRunPrompt(params: {
   return sections.join("\n\n");
 }
 
+function loadSpecialistPrompt(role: string): string {
+  const definition = getAgentDefinitionById(role);
+  if (!definition) {
+    const roleName = humanize(role);
+    return [
+      `# ${roleName}`,
+      "",
+      `You are a ${roleName} specialist.`,
+      "Use the available tools to complete the task precisely.",
+      "Report your work factually and concisely.",
+    ].join("\n");
+  }
+
+  return definition.instructions;
+}
+
+function humanize(value: string): string {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 async function listActiveProvidersWithConfig(
-  db: ReturnType<typeof createDb>,
+  db: HarnessDb,
   projectId: string,
 ): Promise<{ providers: string[]; configs: Record<string, Record<string, unknown>> }> {
-  const rows = db
-    .select()
-    .from(connections)
-    .where(eq(connections.projectId, projectId))
-    .all()
-    .filter((row) => row.status === "active");
+  const rows = (
+    db
+      .select()
+      .from(connections)
+      .where(eq(connections.projectId, projectId))
+      .all() as Array<{ provider: string; config: string | null; status: string }>
+  ).filter((row) => row.status === "active");
 
   const providers = Array.from(new Set(rows.map((row) => row.provider)));
   const configs: Record<string, Record<string, unknown>> = {};

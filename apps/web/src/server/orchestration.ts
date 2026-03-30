@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { tasks, wait } from "@trigger.dev/sdk/v3";
+import { runs, tasks, wait } from "@trigger.dev/sdk/v3";
 import type { RunTrigger } from "../../../../packages/harness/src/types";
 import { approveActionWithResolution } from "./approvals-core";
 import { getProjectDeps } from "./deps";
@@ -50,6 +50,31 @@ export async function startAgentRun(params: {
     });
     throw error;
   }
+}
+
+export async function cancelAgentRun(params: {
+  runId: string;
+  triggerRunId: string;
+  projectId: string;
+}): Promise<void> {
+  const { runRepository, runEventRepository } = getProjectDeps(params.projectId);
+
+  // Look up the run to get the agentId for the event log
+  const run = await runRepository.getById(params.runId);
+  const agentId = run?.agentId ?? "";
+
+  // Cancel on trigger.dev platform
+  await runs.cancel(params.triggerRunId);
+
+  // Update local DB status
+  await runRepository.fail(params.runId, new Date(), "Cancelled by user");
+  await runEventRepository.append({
+    runId: params.runId,
+    agentId,
+    timestamp: new Date(),
+    type: "run_failed",
+    payload: { error: "Cancelled by user", cancelledByUser: true },
+  });
 }
 
 export async function approvePendingAction(params: { actionId: string; projectId: string; reason: string }): Promise<{

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import type { createDb } from "../db/client";
+import type { HarnessDb } from "../db/client";
 import { runs } from "../db/schema";
 import {
   type RunRecord,
@@ -10,7 +10,7 @@ import {
   type RunTriggerType,
 } from "../types";
 
-type Db = ReturnType<typeof createDb>;
+type Db = HarnessDb;
 
 export interface CreateRunInput {
   id?: string;

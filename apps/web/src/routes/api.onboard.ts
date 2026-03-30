@@ -218,7 +218,7 @@ export const Route = createFileRoute("/api/onboard")({
                 "Call this once you have confirmed tools, notifications, and schedule with the user.",
               inputSchema: createAgentSchema,
               execute: async (input: CreateAgentInput) => {
-                const { createAgent } = await import("~/server/agents");
+                const { createAgent } = await import("~/server/agent-instances");
                 const { createComposioClient } = await import("../../../../packages/harness/src/connections/composio");
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
