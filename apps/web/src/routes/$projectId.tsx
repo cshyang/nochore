@@ -36,6 +36,7 @@ function ProjectLayout() {
           navigate({
             to: "/$projectId/agents/$agentId",
             params: { projectId: project.id, agentId: id },
+            search: { tab: undefined, runId: undefined, pendingActionId: undefined },
           })
         }
         onGoHome={() => navigate({ to: "/" })}

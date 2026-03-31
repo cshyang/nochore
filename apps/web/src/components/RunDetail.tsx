@@ -2,6 +2,7 @@ import { CheckCircle, CircleNotch, ListBullets, Play, TextAlignLeft, WarningCirc
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ApprovalCard } from "~/components/ApprovalCard";
 import { type ChecklistItem, DraftChecklist } from "~/components/agent-workspace-chrome";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
@@ -17,6 +18,9 @@ interface RunDetailProps {
   checklistItems?: ChecklistItem[];
   onGoLive?: () => void;
   goingLive?: boolean;
+  onApprove?: (actionId: string, reason: string) => void | Promise<void>;
+  onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -28,14 +32,9 @@ function extractFinding(run: RunView): string | null {
   return (finding?.payload?.text as string) ?? null;
 }
 
-function formatDuration(
-  start: string | undefined,
-  end: string | undefined,
-): string {
+function formatDuration(start: string | undefined, end: string | undefined): string {
   if (!start || !end) return "";
-  const seconds = Math.round(
-    (new Date(end).getTime() - new Date(start).getTime()) / 1000,
-  );
+  const seconds = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
@@ -67,9 +66,7 @@ function buildTimelineEvents(run: RunView): TimelineEvent[] {
 function RunHeader({ run }: { run: RunView }) {
   const duration = formatDuration(run.startedAt, run.completedAt);
   const toolCount = run.events.filter((e) => e.type === "tool_called").length;
-  const findingCount = run.events.filter(
-    (e) => e.type === "finding_recorded",
-  ).length;
+  const findingCount = run.events.filter((e) => e.type === "finding_recorded").length;
 
   const statusBadge =
     run.status === "completed" ? (
@@ -97,14 +94,8 @@ function RunHeader({ run }: { run: RunView }) {
       }}
     >
       {statusBadge}
-      {duration && (
-        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
-          {duration}
-        </span>
-      )}
-      <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>
-        {"\u00b7"}
-      </span>
+      {duration && <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{duration}</span>}
+      <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>{"\u00b7"}</span>
       <Badge color="gray">{humanize(run.triggerType ?? "manual")}</Badge>
 
       <span
@@ -114,11 +105,9 @@ function RunHeader({ run }: { run: RunView }) {
           marginLeft: "auto",
         }}
       >
-        {toolCount > 0 &&
-          `${toolCount} tool call${toolCount === 1 ? "" : "s"}`}
+        {toolCount > 0 && `${toolCount} tool call${toolCount === 1 ? "" : "s"}`}
         {toolCount > 0 && findingCount > 0 && " \u00b7 "}
-        {findingCount > 0 &&
-          `${findingCount} finding${findingCount === 1 ? "" : "s"}`}
+        {findingCount > 0 && `${findingCount} finding${findingCount === 1 ? "" : "s"}`}
       </span>
     </div>
   );
@@ -135,25 +124,21 @@ export function RunDetail({
   checklistItems,
   onGoLive,
   goingLive,
+  onApprove,
+  onReject,
+  onAskChat,
 }: RunDetailProps) {
   const [showEvents, setShowEvents] = useState(false);
   const hasDraftChecklist = checklistItems && checklistItems.length > 0;
 
-  const timelineEvents = useMemo(
-    () => (run ? buildTimelineEvents(run) : []),
-    [run],
-  );
+  const timelineEvents = useMemo(() => (run ? buildTimelineEvents(run) : []), [run]);
 
   // ── Empty state: no runs at all ────────────────────────────────────────
   if (!hasRuns || !run) {
     return (
       <div style={{ flex: 1, padding: "24px 0" }}>
         {hasDraftChecklist && onGoLive ? (
-          <DraftChecklist
-            items={checklistItems}
-            onGoLive={onGoLive}
-            goingLive={goingLive ?? false}
-          />
+          <DraftChecklist items={checklistItems} onGoLive={onGoLive} goingLive={goingLive ?? false} />
         ) : null}
 
         <div
@@ -200,8 +185,7 @@ export function RunDetail({
               marginBottom: 20,
             }}
           >
-            Your agent hasn&apos;t run yet. Click &quot;Run now&quot; to see it
-            in action.
+            Your agent hasn&apos;t run yet. Click &quot;Run now&quot; to see it in action.
           </div>
           {onRunNow && (
             <Button onClick={onRunNow}>
@@ -248,9 +232,7 @@ export function RunDetail({
         >
           {status === "queued" ? "Run queued..." : "Run in progress..."}
         </div>
-        <div
-          style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary }}
-        >
+        <div style={{ fontSize: TYPE.scale.base, color: COLORS.textSecondary }}>
           Results will appear here when complete.
         </div>
       </div>
@@ -262,6 +244,13 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <ApprovalArtifacts
+          run={run}
+          onRunNow={onRunNow}
+          onApprove={onApprove}
+          onReject={onReject}
+          onAskChat={onAskChat}
+        />
         <div
           style={{
             display: "flex",
@@ -274,12 +263,7 @@ export function RunDetail({
             marginBottom: 16,
           }}
         >
-          <WarningCircle
-            size={20}
-            weight="bold"
-            color={COLORS.red}
-            style={{ flexShrink: 0, marginTop: 2 }}
-          />
+          <WarningCircle size={20} weight="bold" color={COLORS.red} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
             <div
               style={{
@@ -303,17 +287,11 @@ export function RunDetail({
           </div>
         </div>
         {timelineEvents.length > 0 && (
-          <ViewEventsToggle
-            showEvents={showEvents}
-            onToggle={() => setShowEvents((v) => !v)}
-          />
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} />
         )}
         {showEvents && (
           <div style={timelineContainerStyle}>
-            <EventTimeline
-              events={timelineEvents}
-              timestampFormat="absolute"
-            />
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
       </div>
@@ -325,6 +303,13 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <ApprovalArtifacts
+          run={run}
+          onRunNow={onRunNow}
+          onApprove={onApprove}
+          onReject={onReject}
+          onAskChat={onAskChat}
+        />
         <div
           style={{
             display: "flex",
@@ -337,12 +322,7 @@ export function RunDetail({
             marginBottom: 16,
           }}
         >
-          <CheckCircle
-            size={20}
-            weight="bold"
-            color={COLORS.accent}
-            style={{ flexShrink: 0, marginTop: 2 }}
-          />
+          <CheckCircle size={20} weight="bold" color={COLORS.accent} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
             <div
               style={{
@@ -366,17 +346,11 @@ export function RunDetail({
           </div>
         </div>
         {timelineEvents.length > 0 && (
-          <ViewEventsToggle
-            showEvents={showEvents}
-            onToggle={() => setShowEvents((v) => !v)}
-          />
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} />
         )}
         {showEvents && (
           <div style={timelineContainerStyle}>
-            <EventTimeline
-              events={timelineEvents}
-              timestampFormat="absolute"
-            />
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
       </div>
@@ -387,12 +361,15 @@ export function RunDetail({
   return (
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
-
-      <ViewEventsToggle
-        showEvents={showEvents}
-        onToggle={() => setShowEvents((v) => !v)}
-        hasFinding
+      <ApprovalArtifacts
+        run={run}
+        onRunNow={onRunNow}
+        onApprove={onApprove}
+        onReject={onReject}
+        onAskChat={onAskChat}
       />
+
+      <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
 
       {showEvents ? (
         <div style={timelineContainerStyle}>
@@ -404,6 +381,39 @@ export function RunDetail({
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{finding}</ReactMarkdown>
         </div>
       )}
+    </div>
+  );
+}
+
+function ApprovalArtifacts({
+  run,
+  onRunNow,
+  onApprove,
+  onReject,
+  onAskChat,
+}: {
+  run: RunView;
+  onRunNow?: () => void;
+  onApprove?: (actionId: string, reason: string) => void | Promise<void>;
+  onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
+}) {
+  if (run.approvals.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
+      {run.approvals.map((approval) => (
+        <ApprovalCard
+          key={approval.id}
+          approval={approval}
+          onApprove={onApprove ? (item) => onApprove(item.id, "Approved from run detail") : undefined}
+          onReject={onReject ? (item) => onReject(item.id, "Rejected from run detail") : undefined}
+          onAskChat={onAskChat}
+          onRerun={approval.status === "expired" && onRunNow ? () => onRunNow() : undefined}
+        />
+      ))}
     </div>
   );
 }

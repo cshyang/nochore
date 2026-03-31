@@ -9,9 +9,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from "ai";
 import { z } from "zod";
-import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
 import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
+import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
 
 type AvailableSkill = {
   id: string;
@@ -116,10 +116,6 @@ export const Route = createFileRoute("/api/onboard")({
 
         type CreateAgentInput = z.infer<typeof createAgentSchema>;
 
-        // Build a toolkit description lookup from summaries for provider reasons
-        const toolkitDescriptions = new Map(toolkitSummaries.map((tk) => [tk.slug, tk.description]));
-        const toolkitLogos = new Map(toolkitSummaries.map((tk) => [tk.slug, tk.logo]));
-
         const result = streamText({
           model,
           system,
@@ -156,7 +152,9 @@ export const Route = createFileRoute("/api/onboard")({
                 allowCustom: z
                   .boolean()
                   .default(false)
-                  .describe("When true with empty options, renders a text input field. When true with options, adds a 'Something else' option."),
+                  .describe(
+                    "When true with empty options, renders a text input field. When true with options, adds a 'Something else' option.",
+                  ),
                 skippable: z
                   .boolean()
                   .default(false)
@@ -219,7 +217,6 @@ export const Route = createFileRoute("/api/onboard")({
               inputSchema: createAgentSchema,
               execute: async (input: CreateAgentInput) => {
                 const { createAgent } = await import("~/server/agent-instances");
-                const { createComposioClient } = await import("../../../../packages/harness/src/connections/composio");
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
@@ -233,7 +230,7 @@ export const Route = createFileRoute("/api/onboard")({
                     description: input.description.trim(),
                     instructions: input.instructions.trim(),
                     skills: resolvedSkills,
-                    toolConfig: { requiredProviders: [], tools: {} },
+                    toolConfig: { globalApprovalRequired: false, requiredProviders: [], tools: {} },
                     notificationConfig: { inApp: true, email: false, slack: false },
                     schedule: input.schedule,
                     status: "draft",

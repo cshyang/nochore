@@ -27,6 +27,7 @@ describe("simplified repositories", () => {
       instructions: "Focus on waste reduction.",
       skills: ["campaign-analysis"],
       toolConfig: {
+        globalApprovalRequired: false,
         requiredProviders: [{ provider: "googleads", reason: "Reads account data" }],
         tools: {},
       },
@@ -113,7 +114,10 @@ describe("simplified repositories", () => {
       waitTokenId: "wait_001",
       toolName: "googleads_adjust_budget",
       toolInput: { campaignId: "123", amount: 50 },
+      requestReason: "Budget changes require approval",
+      requestEventId: "evt_approval_requested",
       createdAt,
+      expiresAt: new Date("2026-03-25T10:02:00Z"),
     });
 
     await repo.markResolved(id, "approved", "Safe budget reduction", resolvedAt);
@@ -123,6 +127,9 @@ describe("simplified repositories", () => {
 
     expect(approval?.status).toBe("approved");
     expect(approval?.decisionReason).toBe("Safe budget reduction");
+    expect(approval?.requestReason).toBe("Budget changes require approval");
+    expect(approval?.requestEventId).toBe("evt_approval_requested");
+    expect(approval?.expiresAt?.toISOString()).toBe("2026-03-25T10:02:00.000Z");
     expect(approvals).toHaveLength(1);
   });
 

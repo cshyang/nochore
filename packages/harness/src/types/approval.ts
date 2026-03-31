@@ -12,8 +12,11 @@ export const ApprovalRecordSchema = z.object({
   toolName: z.string(),
   toolInput: z.record(z.string(), z.unknown()),
   status: ApprovalStatusSchema,
+  requestReason: z.string().optional(),
+  requestEventId: z.string().optional(),
   decisionReason: z.string().optional(),
   createdAt: z.date(),
+  expiresAt: z.date().optional(),
   resolvedAt: z.date().optional(),
 });
 export type ApprovalRecord = z.infer<typeof ApprovalRecordSchema>;

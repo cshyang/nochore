@@ -1,9 +1,10 @@
 import { ArrowRight } from "@phosphor-icons/react";
 import { useEffect } from "react";
-import { COLORS, RADIUS, TYPE } from "~/lib/colors";
-import type { AgentView, RunView } from "~/lib/types";
-import { ConversationMessage } from "~/components/onboarding-chat-messages";
+import { ApprovalCard } from "~/components/ApprovalCard";
 import { useAgentChatFlow } from "~/components/agent-chat-flow";
+import { ConversationMessage } from "~/components/onboarding-chat-messages";
+import { COLORS, RADIUS, TYPE } from "~/lib/colors";
+import type { AgentView, PendingActionView, RunView } from "~/lib/types";
 
 interface AgentChatPaneProps {
   agent: AgentView;
@@ -11,9 +12,23 @@ interface AgentChatPaneProps {
   runs: RunView[];
   onRunTriggered?: (runId: string, triggerRunId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
+  pendingApproval?: PendingActionView | null;
+  onApprove?: (actionId: string, reason: string) => void | Promise<void>;
+  onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onClearPendingApproval?: () => void;
 }
 
-export function AgentChatPane({ agent, projectId, runs, onRunTriggered, registerRunCompleteHandler }: AgentChatPaneProps) {
+export function AgentChatPane({
+  agent,
+  projectId,
+  runs,
+  onRunTriggered,
+  registerRunCompleteHandler,
+  pendingApproval,
+  onApprove,
+  onReject,
+  onClearPendingApproval,
+}: AgentChatPaneProps) {
   const {
     scrollRef,
     inputRef,
@@ -38,6 +53,24 @@ export function AgentChatPane({ agent, projectId, runs, onRunTriggered, register
     registerRunCompleteHandler?.(() => notifyRunCompleted());
   }, [registerRunCompleteHandler, notifyRunCompleted]);
 
+  useEffect(() => {
+    if (!pendingApproval) {
+      return;
+    }
+    setInputValue((current) =>
+      current.trim().length > 0
+        ? current
+        : `Should I approve ${pendingApproval.proposal.toolName}? Help me think through: ${pendingApproval.proposal.reason}`,
+    );
+  }, [pendingApproval, setInputValue]);
+
+  useEffect(() => {
+    if (pendingApproval?.status === "pending") {
+      return;
+    }
+    onClearPendingApproval?.();
+  }, [onClearPendingApproval, pendingApproval]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {/* Scrollable message area */}
@@ -51,15 +84,19 @@ export function AgentChatPane({ agent, projectId, runs, onRunTriggered, register
       >
         <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {pendingApproval?.status === "pending" ? (
+              <ApprovalCard
+                approval={pendingApproval}
+                title="Pending approval in chat"
+                onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from chat") : undefined}
+                onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
+              />
+            ) : null}
             {messages.map((message, index) => {
-              const isLastAssistant =
-                index === messages.length - 1 && message.role === "assistant";
+              const isLastAssistant = index === messages.length - 1 && message.role === "assistant";
 
               return (
-                <div
-                  key={message.id}
-                  ref={isLastAssistant ? latestAssistantRef : undefined}
-                >
+                <div key={message.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
                   <ConversationMessage
                     message={message as { role: string; parts: Array<Record<string, unknown>> }}
                     onOptionClick={isLastAssistant ? handleOptionClick : undefined}
@@ -68,9 +105,7 @@ export function AgentChatPane({ agent, projectId, runs, onRunTriggered, register
               );
             })}
 
-            {isLoading ? (
-              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking…</div>
-            ) : null}
+            {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking…</div> : null}
           </div>
         </div>
       </div>

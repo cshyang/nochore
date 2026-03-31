@@ -3,6 +3,7 @@ import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
 import { ProjectConnections } from "~/components/ProjectConnections";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { humanizeToolName } from "~/lib/narrate";
 import type { ConnectionView, ProjectView } from "~/lib/types";
 
 const transition = `${MOTION.duration} ${MOTION.ease}`;
@@ -10,7 +11,10 @@ const transition = `${MOTION.duration} ${MOTION.ease}`;
 interface ProjectHomeProps {
   project: ProjectView;
   connections: ConnectionView[];
-  onSelectAgent: (id: string) => void;
+  onSelectAgent: (
+    id: string,
+    options?: { runId?: string; pendingActionId?: string; tab?: "activity" | "chat" },
+  ) => void;
   onNewAgent?: () => void;
   onDeleteProject?: () => void;
 }
@@ -31,10 +35,28 @@ function draftHint(agent: ProjectView["agents"][number]): string {
   return `Needs ${missing.join(", ")}`;
 }
 
+function groupNeedsInput(project: ProjectView) {
+  const groups = new Map<string, { agentId: string; agentName: string; items: ProjectView["needsInput"] }>();
+
+  for (const item of project.needsInput) {
+    if (!groups.has(item.agentId)) {
+      groups.set(item.agentId, {
+        agentId: item.agentId,
+        agentName: item.agentName,
+        items: [],
+      });
+    }
+    groups.get(item.agentId)?.items.push(item);
+  }
+
+  return [...groups.values()];
+}
+
 export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, onDeleteProject }: ProjectHomeProps) {
   const [projectTab, setProjectTab] = useState("agents");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const needsAttention = project.agents.filter((a) => a.status === "attention");
+  const groupedNeedsInput = groupNeedsInput(project);
   const incompleteDrafts = project.agents.filter(isIncompleteDraft);
   const regularAgents = project.agents.filter((a) => !isIncompleteDraft(a));
 
@@ -192,6 +214,64 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
           </div>
         ) : (
           <>
+            {groupedNeedsInput.length > 0 && (
+              <Card style={{ marginBottom: 20, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <Badge color="orange">
+                    {project.needsInput.length} approval{project.needsInput.length === 1 ? "" : "s"} need input
+                  </Badge>
+                </div>
+                <div style={{ display: "grid", gap: 14 }}>
+                  {groupedNeedsInput.map((group) => (
+                    <div key={group.agentId} style={{ display: "grid", gap: 8 }}>
+                      <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+                        {group.agentName}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {group.items.map((item) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            onClick={() =>
+                              onSelectAgent(item.agentId, {
+                                runId: item.runId,
+                                pendingActionId: item.approval.id,
+                                tab: "activity",
+                              })
+                            }
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 12,
+                              padding: "10px 0",
+                              width: "100%",
+                              background: "none",
+                              border: "none",
+                              borderBottom: `1px solid ${COLORS.border}`,
+                              textAlign: "left",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <div style={{ display: "grid", gap: 3 }}>
+                              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
+                                {humanizeToolName(item.approval.proposal.toolName)}
+                              </div>
+                              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
+                                {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
+                                {item.approval.proposal.reason}
+                              </div>
+                            </div>
+                            <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {/* Attention-needed summary */}
             {needsAttention.length > 0 && (
               <Card style={{ marginBottom: 20, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
@@ -225,9 +305,7 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                       <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
                         {agent.name}
                       </div>
-                      <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>
-                        Needs attention
-                      </div>
+                      <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>Needs attention</div>
                     </div>
                     <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
                   </button>

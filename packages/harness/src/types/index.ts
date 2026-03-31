@@ -25,6 +25,20 @@ export {
   ApprovalStatusSchema,
 } from "./approval";
 export {
+  type LearnedDecision,
+  LearnedDecisionSchema,
+  type LearnedPolicyRule,
+  LearnedPolicyRuleSchema,
+  type LearnedRuleCondition,
+  LearnedRuleConditionSchema,
+  type LearnedRuleConditions,
+  LearnedRuleConditionsSchema,
+  type LearnedRuleStatus,
+  LearnedRuleStatusSchema,
+  type SuggestionSuppression,
+  SuggestionSuppressionSchema,
+} from "./learned-rule";
+export {
   type PolicyContext,
   type PolicyDecision,
   PolicyDecisionSchema,

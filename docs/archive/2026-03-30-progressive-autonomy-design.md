@@ -1,8 +1,10 @@
 # Progressive Autonomy — The Feedback Loop
 
 **Date:** 2026-03-30
-**Status:** Draft
+**Status:** Archived on 2026-03-31 after the core feedback loop shipped
 **Builds on:** Policy engine (`packages/harness/src/policy/engine.ts`), approval flow (`agent-run.ts`), lessons system
+
+> Archived note: the core implementation in this branch ships learned rule detection, suggestion/review UI, policy engine integration, and rule management in Settings. Later ideas in this draft, like a separate autonomy dashboard and deeper evidence drill-down, remain future work and should get a new plan if revived.
 
 ## Problem
 

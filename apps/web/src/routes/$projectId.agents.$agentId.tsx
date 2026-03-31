@@ -1,16 +1,17 @@
 import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
+import { isDirectProvider } from "~/lib/provider-metadata";
 import {
   parseAgentView,
   parseConnectionViews,
   parseProjectView,
   parseRunViews,
   parseSkillViews,
+  parseToolConfigEntryViews,
 } from "~/lib/view-models";
 import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { approveAction, rejectAction } from "~/server/approvals";
-import { isDirectProvider } from "~/lib/provider-metadata";
 import {
   createDirectConnection,
   disconnectProvider,
@@ -18,23 +19,47 @@ import {
   initiateConnection,
   listConnections,
 } from "~/server/connections";
+import {
+  acceptLearnedRuleSuggestion,
+  dismissLearnedRuleSuggestion,
+  revokeLearnedRule,
+  suppressLearnedRuleSuggestion,
+} from "~/server/learned-rules";
+import { getPolicyToolCatalog } from "~/server/policy-tools";
 import { getProject } from "~/server/projects";
 import { getRealtimeToken } from "~/server/realtime";
 import { getRunHistory } from "~/server/runs";
 import { listAvailableSkills } from "~/server/skills";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
+    tab?: "activity" | "chat" | "memory" | "settings";
+    runId?: string;
+    pendingActionId?: string;
+  } => ({
+    tab:
+      search.tab === "activity" || search.tab === "chat" || search.tab === "memory" || search.tab === "settings"
+        ? search.tab
+        : undefined,
+    runId: typeof search.runId === "string" ? search.runId : undefined,
+    pendingActionId: typeof search.pendingActionId === "string" ? search.pendingActionId : undefined,
+  }),
   loader: async ({ params }) => {
     const { projectId, agentId } = params;
     try {
-      const [project, agent, runs, skills, projectConnections, toolkitSummaries] = await Promise.all([
-        getProject({ data: { projectId } }),
-        getAgent({ data: { agentId, projectId } }),
-        getRunHistory({ data: { agentId, projectId, limit: 20 } }),
-        listAvailableSkills(),
-        listConnections({ data: { projectId } }),
-        fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
-      ]);
+      const [project, agent, runs, skills, projectConnections, toolkitSummaries, policyToolCatalog] = await Promise.all(
+        [
+          getProject({ data: { projectId } }),
+          getAgent({ data: { agentId, projectId } }),
+          getRunHistory({ data: { agentId, projectId, limit: 20 } }),
+          listAvailableSkills(),
+          listConnections({ data: { projectId } }),
+          fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
+          getPolicyToolCatalog({ data: { projectId } }).catch(() => []),
+        ],
+      );
       return {
         project,
         agent,
@@ -42,9 +67,18 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         skills: skills ?? [],
         projectConnections: projectConnections ?? [],
         toolkitSummaries: toolkitSummaries ?? [],
+        policyToolCatalog: policyToolCatalog ?? [],
       };
     } catch {
-      return { project: null, agent: null, runs: [], skills: [], projectConnections: [], toolkitSummaries: [] };
+      return {
+        project: null,
+        agent: null,
+        runs: [],
+        skills: [],
+        projectConnections: [],
+        toolkitSummaries: [],
+        policyToolCatalog: [],
+      };
     }
   },
   component: AgentDetailPage,
@@ -57,12 +91,14 @@ function AgentDetailPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const loaderData = Route.useLoaderData();
+  const search = Route.useSearch();
 
   const project = parseProjectView(loaderData.project);
   const agent = parseAgentView(loaderData.agent);
   const skills = parseSkillViews(loaderData.skills);
   const projectConnections = parseConnectionViews(loaderData.projectConnections);
   const runs = parseRunViews(loaderData.runs);
+  const policyToolCatalog = parseToolConfigEntryViews(loaderData.policyToolCatalog);
 
   // Build provider logo map from Composio toolkit summaries
   const toolkitSummaries = (loaderData.toolkitSummaries ?? []) as Array<{
@@ -152,7 +188,7 @@ function AgentDetailPage() {
     if (activeRun) return;
     const activeRunRecord = runs.find(
       (r) =>
-        (r.status === "running" || r.status === "queued") &&
+        (r.status === "running" || r.status === "queued" || r.status === "waiting_for_approval") &&
         !exhaustedRunIds.current.has(r.id),
     );
     if (!activeRunRecord) return;
@@ -219,6 +255,10 @@ function AgentDetailPage() {
       project={project}
       availableSkills={skills}
       projectConnections={projectConnections}
+      policyToolCatalog={policyToolCatalog}
+      initialTab={search.tab}
+      initialRunId={search.runId ?? null}
+      initialPendingActionId={search.pendingActionId ?? null}
       activeRun={activeRun}
       onLiveRunComplete={handleLiveRunComplete}
       onCancelRun={handleCancelRun}
@@ -258,9 +298,27 @@ function AgentDetailPage() {
       }}
       onApprove={async (actionId, reason) => {
         await approveAction({ data: { actionId, projectId, reason } });
+        void router.invalidate();
       }}
       onReject={async (actionId, reason) => {
         await rejectAction({ data: { actionId, projectId, reason } });
+        void router.invalidate();
+      }}
+      onAcceptLearnedRule={async (ruleId) => {
+        await acceptLearnedRuleSuggestion({ data: { projectId, ruleId } });
+        void router.invalidate();
+      }}
+      onDismissLearnedRule={async (ruleId) => {
+        await dismissLearnedRuleSuggestion({ data: { projectId, ruleId } });
+        void router.invalidate();
+      }}
+      onSuppressLearnedRule={async (ruleId) => {
+        await suppressLearnedRuleSuggestion({ data: { projectId, ruleId } });
+        void router.invalidate();
+      }}
+      onRevokeLearnedRule={async (ruleId) => {
+        await revokeLearnedRule({ data: { projectId, ruleId } });
+        void router.invalidate();
       }}
     />
   );

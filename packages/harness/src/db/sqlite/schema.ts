@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -70,8 +70,11 @@ export const approvals = sqliteTable(
     toolName: text("tool_name").notNull(),
     toolInput: text("tool_input").notNull(),
     status: text("status").notNull().default("pending"),
+    requestReason: text("request_reason"),
+    requestEventId: text("request_event_id"),
     decisionReason: text("decision_reason"),
     createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at"),
     resolvedAt: integer("resolved_at"),
   },
   (table) => [
@@ -79,6 +82,41 @@ export const approvals = sqliteTable(
     index("idx_approvals_agent_created").on(table.agentId, table.createdAt),
     index("idx_approvals_run").on(table.runId),
   ],
+);
+
+export const learnedPolicyRules = sqliteTable(
+  "learned_policy_rules",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    learnedDecision: text("learned_decision").notNull(),
+    conditions: text("conditions"),
+    evidenceCount: integer("evidence_count").notNull(),
+    consistencyRate: real("consistency_rate").notNull(),
+    status: text("status").notNull().default("suggested"),
+    suggestedAt: integer("suggested_at").notNull(),
+    acceptedAt: integer("accepted_at"),
+    revokedAt: integer("revoked_at"),
+    expiresAt: integer("expires_at"),
+    userNote: text("user_note"),
+    sourceApprovalIds: text("source_approval_ids").notNull(),
+  },
+  (table) => [
+    index("idx_learned_rules_agent_status").on(table.agentId, table.status),
+    index("idx_learned_rules_agent_tool").on(table.agentId, table.toolName),
+  ],
+);
+
+export const suggestionSuppressions = sqliteTable(
+  "suggestion_suppressions",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    suppressedAt: integer("suppressed_at").notNull(),
+  },
+  (table) => [uniqueIndex("idx_suppressions_agent_tool").on(table.agentId, table.toolName)],
 );
 
 export const lessons = sqliteTable(

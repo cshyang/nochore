@@ -22,6 +22,7 @@ const ToolConfigEntryViewSchema = z.object({
 });
 
 const ToolConfigViewSchema = z.object({
+  globalApprovalRequired: z.boolean().default(false),
   requiredProviders: z.array(ProviderRequirementViewSchema),
   tools: z.record(z.string(), ToolConfigEntryViewSchema),
 });
@@ -37,6 +38,23 @@ const RunEventViewSchema = z.object({
   type: z.string(),
   timestamp: z.string(),
   payload: z.record(z.string(), z.unknown()),
+});
+
+const LearnedRuleConditionViewSchema = z.object({
+  operator: z.enum(["eq", "lt", "gt", "lte", "gte", "in"]),
+  value: z.unknown(),
+});
+
+const LearnedRuleViewSchema = z.object({
+  id: z.string(),
+  toolName: z.string(),
+  learnedDecision: z.enum(["auto", "approval", "blocked"]),
+  conditions: z.record(z.string(), LearnedRuleConditionViewSchema).nullable(),
+  evidenceCount: z.number(),
+  consistencyRate: z.number(),
+  status: z.enum(["suggested", "accepted", "revoked", "expired", "dismissed"]),
+  suggestedAt: z.string(),
+  acceptedAt: z.string().optional(),
 });
 
 const RunResultViewSchema = z.object({
@@ -56,9 +74,28 @@ const RunResultViewSchema = z.object({
       toolName: z.string(),
       toolInput: z.record(z.string(), z.unknown()),
       reason: z.string(),
+      requestEventId: z.string().optional(),
     }),
   ),
   eventsLogged: z.number(),
+});
+
+const PendingActionViewSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  agentId: z.string(),
+  proposal: z.object({
+    id: z.string(),
+    toolName: z.string(),
+    toolInput: z.record(z.string(), z.unknown()),
+    reason: z.string(),
+    requestEventId: z.string().optional(),
+  }),
+  status: z.enum(["pending", "approved", "rejected", "blocked", "expired"]),
+  createdAt: z.string(),
+  expiresAt: z.string().optional(),
+  resolvedAt: z.string().optional(),
+  resolvedReason: z.string().optional(),
 });
 
 const RunViewSchema = z.object({
@@ -71,6 +108,7 @@ const RunViewSchema = z.object({
   error: z.string().optional(),
   triggerRunId: z.string().optional(),
   events: z.array(RunEventViewSchema).default([]),
+  approvals: z.array(PendingActionViewSchema).default([]),
   result: RunResultViewSchema.optional(),
 });
 
@@ -111,10 +149,20 @@ const AgentViewSchema = z.object({
   createdAt: z.number(),
   updatedAt: z.number().optional(),
   requiredProviders: z.array(ProviderRequirementViewSchema).optional(),
+  learnedRuleSuggestions: z.array(LearnedRuleViewSchema).optional(),
+  learnedRules: z.array(LearnedRuleViewSchema).optional(),
   intent: z.string().optional(),
   policyRules: z.array(z.string()).optional(),
   globalApprovalRequired: z.boolean().optional(),
   scopeStrategy: z.enum(["static", "llm"]).optional(),
+});
+
+const ProjectNeedsInputViewSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  agentName: z.string(),
+  runId: z.string(),
+  approval: PendingActionViewSchema,
 });
 
 const ProjectViewSchema: z.ZodType<ProjectView> = z.object({
@@ -123,6 +171,7 @@ const ProjectViewSchema: z.ZodType<ProjectView> = z.object({
   icon: z.string(),
   color: z.string(),
   agents: z.array(AgentViewSchema),
+  needsInput: z.array(ProjectNeedsInputViewSchema).default([]),
   connectionCount: z.number(),
   attentionCount: z.number(),
   createdAt: z.number(),
@@ -156,4 +205,8 @@ export function parseConnectionViews(value: unknown): ConnectionView[] {
 
 export function parseRunViews(value: unknown): RunView[] {
   return parseArraySchema(RunViewSchema, value);
+}
+
+export function parseToolConfigEntryViews(value: unknown) {
+  return parseArraySchema(ToolConfigEntryViewSchema, value);
 }

@@ -29,6 +29,9 @@ const EVENT_BORDER_COLORS: Record<string, string> = {
   sub_run_completed: COLORS.green,
   tool_approval_requested: COLORS.orange,
   tool_approval_resolved: COLORS.orange,
+  tool_approval_expired: COLORS.orange,
+  policy_rule_suggested: COLORS.orange,
+  policy_rule_accepted: COLORS.green,
   run_completed: COLORS.green,
   run_failed: COLORS.red,
 };
@@ -43,7 +46,11 @@ export function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red"
   if (type === "tool_called" || type === "tool_executed") return "blue";
   if (type === "finding_recorded" || type === "run_completed" || type === "sub_run_completed") return "green";
   if (type === "sub_run_started") return "blue";
-  if (type === "tool_approval_requested" || type === "tool_approval_resolved") return "yellow";
+  if (type === "tool_approval_requested" || type === "tool_approval_resolved" || type === "tool_approval_expired") {
+    return "yellow";
+  }
+  if (type === "policy_rule_suggested") return "yellow";
+  if (type === "policy_rule_accepted") return "green";
   if (type === "run_failed") return "red";
   if (type === "agent_message") return "gray";
   return "gray";
@@ -55,6 +62,8 @@ export function getEventIcon(type: string) {
   if (type === "sub_run_started") return CircleNotch;
   if (type === "sub_run_completed") return Check;
   if (type === "run_failed") return Warning;
+  if (type === "policy_rule_suggested") return ArrowRight;
+  if (type === "policy_rule_accepted") return Check;
   if (type.includes("approval")) return ArrowRight;
   return ArrowRight;
 }
@@ -109,9 +118,7 @@ export function EventTimeline({ events, timestampFormat, emptyMessage }: EventTi
   const formatTimestamp = timestampFormat === "relative" ? formatRelativeTime : formatAbsoluteTime;
 
   if (events.length === 0 && emptyMessage) {
-    return (
-      <div style={{ padding: 20, textAlign: "center", color: COLORS.textDim, fontSize: 13 }}>{emptyMessage}</div>
-    );
+    return <div style={{ padding: 20, textAlign: "center", color: COLORS.textDim, fontSize: 13 }}>{emptyMessage}</div>;
   }
 
   return (

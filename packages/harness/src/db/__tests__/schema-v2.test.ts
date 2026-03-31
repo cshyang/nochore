@@ -25,6 +25,7 @@ describe("simplified schema", () => {
         instructions: "Watch spend and waste closely.",
         skills: JSON.stringify(["campaign-analysis"]),
         toolConfig: JSON.stringify({
+          globalApprovalRequired: false,
           requiredProviders: [{ provider: "googleads", reason: "Reads campaigns" }],
           tools: {},
         }),
@@ -87,7 +88,10 @@ describe("simplified schema", () => {
         toolName: "googleads_adjust_budget",
         toolInput: JSON.stringify({ campaignId: "123", amount: 50 }),
         status: "pending",
+        requestReason: "Budget changes require approval",
+        requestEventId: "evt_002",
         createdAt: now,
+        expiresAt: now + 86_400_000,
       })
       .run();
 
@@ -98,6 +102,8 @@ describe("simplified schema", () => {
     expect(eventRows[1]?.type).toBe("tool_approval_requested");
     expect(approvalRow?.waitTokenId).toBe("wait_001");
     expect(approvalRow?.status).toBe("pending");
+    expect(approvalRow?.requestReason).toBe("Budget changes require approval");
+    expect(approvalRow?.requestEventId).toBe("evt_002");
   });
 
   it("stores lessons and slim project connections", () => {

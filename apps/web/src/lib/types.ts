@@ -8,12 +8,32 @@ export type RunEventType =
   | "tool_called"
   | "tool_approval_requested"
   | "tool_approval_resolved"
+  | "tool_approval_expired"
+  | "policy_rule_suggested"
+  | "policy_rule_accepted"
   | "tool_executed"
   | "finding_recorded"
   | "notification_sent"
   | "lesson_distilled"
   | "run_completed"
   | "run_failed";
+
+export interface LearnedRuleConditionView {
+  operator: "eq" | "lt" | "gt" | "lte" | "gte" | "in";
+  value: unknown;
+}
+
+export interface LearnedRuleView {
+  id: string;
+  toolName: string;
+  learnedDecision: "auto" | "approval" | "blocked";
+  conditions: Record<string, LearnedRuleConditionView> | null;
+  evidenceCount: number;
+  consistencyRate: number;
+  status: "suggested" | "accepted" | "revoked" | "expired" | "dismissed";
+  suggestedAt: string;
+  acceptedAt?: string;
+}
 
 export interface ProviderRequirementView {
   provider: string;
@@ -36,6 +56,7 @@ export interface ToolConfigEntryView {
 }
 
 export interface ToolConfigView {
+  globalApprovalRequired: boolean;
   requiredProviders: ProviderRequirementView[];
   tools: Record<string, ToolConfigEntryView>;
 }
@@ -64,6 +85,7 @@ export interface RunProposalView {
   toolName: string;
   toolInput: Record<string, unknown>;
   reason: string;
+  requestEventId?: string;
 }
 
 export interface RunResultView {
@@ -73,6 +95,32 @@ export interface RunResultView {
   steps: RunStepView[];
   proposals: RunProposalView[];
   eventsLogged: number;
+}
+
+export interface PendingActionView {
+  id: string;
+  runId: string;
+  agentId: string;
+  proposal: {
+    id: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    reason: string;
+    requestEventId?: string;
+  };
+  status: ApprovalStatus;
+  createdAt: string;
+  expiresAt?: string;
+  resolvedAt?: string;
+  resolvedReason?: string;
+}
+
+export interface ProjectNeedsInputView {
+  id: string;
+  agentId: string;
+  agentName: string;
+  runId: string;
+  approval: PendingActionView;
 }
 
 export interface RunEventView {
@@ -92,6 +140,7 @@ export interface RunView {
   error?: string;
   triggerRunId?: string;
   events: RunEventView[];
+  approvals: PendingActionView[];
   result?: RunResultView;
 }
 
@@ -104,8 +153,11 @@ export interface ApprovalView {
   toolName: string;
   toolInput: Record<string, unknown>;
   status: ApprovalStatus;
+  requestReason?: string;
+  requestEventId?: string;
   decisionReason?: string;
   createdAt: string;
+  expiresAt?: string;
   resolvedAt?: string;
 }
 
@@ -146,6 +198,8 @@ export interface AgentView {
   createdAt: number;
   updatedAt?: number;
   requiredProviders?: ProviderRequirementView[];
+  learnedRuleSuggestions?: LearnedRuleView[];
+  learnedRules?: LearnedRuleView[];
 
   // Transitional optional fields retained while route/component migration lands.
   intent?: string;
@@ -160,6 +214,7 @@ export interface ProjectView {
   icon: string;
   color: string;
   agents: AgentView[];
+  needsInput: ProjectNeedsInputView[];
   connectionCount: number;
   attentionCount: number;
   createdAt: number;

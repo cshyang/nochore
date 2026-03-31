@@ -2,11 +2,12 @@ import { WarningCircle } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import type { ActiveRunState } from "~/components/agent-workspace.types";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
+import { Button } from "~/components/Button";
 import { LiveRunView } from "~/components/LiveRunView";
 import { RunDetail } from "~/components/RunDetail";
 import { RunList } from "~/components/RunList";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
-import type { RunView } from "~/lib/types";
+import type { LearnedRuleView, PendingActionView, RunView } from "~/lib/types";
 
 interface AgentWorkspaceActivityPaneProps {
   runs: RunView[];
@@ -21,6 +22,11 @@ interface AgentWorkspaceActivityPaneProps {
   goingLive?: boolean;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onAskChat?: (approval: PendingActionView) => void | Promise<void>;
+  learnedRuleSuggestions?: LearnedRuleView[];
+  onAcceptLearnedRule?: (ruleId: string) => void | Promise<void>;
+  onDismissLearnedRule?: (ruleId: string) => void | Promise<void>;
+  onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
 }
 
 export function AgentWorkspaceActivityPane({
@@ -36,6 +42,11 @@ export function AgentWorkspaceActivityPane({
   goingLive,
   onApprove,
   onReject,
+  onAskChat,
+  learnedRuleSuggestions = [],
+  onAcceptLearnedRule,
+  onDismissLearnedRule,
+  onSuppressLearnedRule,
 }: AgentWorkspaceActivityPaneProps) {
   // Synthesize a placeholder for the live run if it hasn't appeared in the
   // fetched runs list yet (loader data is stale until router.invalidate).
@@ -49,18 +60,15 @@ export function AgentWorkspaceActivityPane({
       status: "running",
       startedAt: new Date().toISOString(),
       events: [],
+      approvals: [],
     };
     return [placeholder, ...runs];
   }, [activeRun, runs]);
 
-  const selectedRun =
-    displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
+  const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
 
   return (
-    <div
-      className="aw-panel-enter"
-      style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}
-    >
+    <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
       {runError ? (
         <div
           style={{
@@ -81,6 +89,49 @@ export function AgentWorkspaceActivityPane({
         </div>
       ) : null}
 
+      {learnedRuleSuggestions.length > 0 ? (
+        <div
+          style={{
+            padding: "12px 14px",
+            margin: "0 0 8px 0",
+            background: COLORS.orangeSubtle,
+            borderLeft: `3px solid ${COLORS.orange}`,
+            borderRadius: RADIUS.sm,
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          {learnedRuleSuggestions.map((rule) => (
+            <div key={rule.id} style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
+                <strong>Autonomy suggestion:</strong> {humanizeRule(rule)}
+              </div>
+              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
+                Based on {rule.evidenceCount} consistent decisions at {(rule.consistencyRate * 100).toFixed(0)}%
+                agreement.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {onAcceptLearnedRule ? (
+                  <Button size="sm" onClick={() => void onAcceptLearnedRule(rule.id)}>
+                    Accept
+                  </Button>
+                ) : null}
+                {onDismissLearnedRule ? (
+                  <Button variant="secondary" size="sm" onClick={() => void onDismissLearnedRule(rule.id)}>
+                    Dismiss
+                  </Button>
+                ) : null}
+                {onSuppressLearnedRule ? (
+                  <Button variant="ghost" size="sm" onClick={() => void onSuppressLearnedRule(rule.id)}>
+                    Never suggest this
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
         <RunList
           runs={displayRuns}
@@ -97,6 +148,7 @@ export function AgentWorkspaceActivityPane({
               onComplete={onLiveRunComplete}
               onApprove={onApprove}
               onReject={onReject}
+              onAskChat={onAskChat}
             />
           ) : (
             <RunDetail
@@ -106,10 +158,24 @@ export function AgentWorkspaceActivityPane({
               checklistItems={checklistItems}
               onGoLive={onGoLive}
               goingLive={goingLive}
+              onApprove={onApprove}
+              onReject={onReject}
+              onAskChat={onAskChat}
             />
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function humanizeRule(rule: LearnedRuleView): string {
+  const action =
+    rule.learnedDecision === "auto"
+      ? "auto-approve"
+      : rule.learnedDecision === "blocked"
+        ? "block"
+        : "require approval for";
+
+  return `${action} ${rule.toolName}`;
 }

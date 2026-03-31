@@ -34,10 +34,15 @@ function ProjectIndexPage() {
     <ProjectHome
       project={project}
       connections={connections}
-      onSelectAgent={(id) =>
+      onSelectAgent={(id, options) =>
         navigate({
           to: "/$projectId/agents/$agentId",
           params: { projectId: project.id, agentId: id },
+          search: {
+            tab: options?.tab,
+            runId: options?.runId,
+            pendingActionId: options?.pendingActionId,
+          },
         })
       }
       onNewAgent={() =>

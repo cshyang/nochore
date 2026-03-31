@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
-import { Button } from "~/components/Button";
+import { useEffect, useMemo, useState } from "react";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
-import { SettingsCard, SettingsRow, SectionHeading } from "~/components/SettingsComponents";
+import { Button } from "~/components/Button";
+import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
-import type { ConnectionView, NotificationConfigView } from "~/lib/types";
+import type {
+  ConnectionView,
+  LearnedRuleView,
+  NotificationConfigView,
+  ToolConfigEntryView,
+  ToolConfigView,
+} from "~/lib/types";
 import { updateConnectionConfig } from "~/server/connections";
 
 const fieldStyle = {
@@ -36,19 +42,31 @@ export function AgentWorkspaceSettingsPanel({
   agent,
   skills,
   connections,
-  requiredProviders,
+  policyToolCatalog = [],
+  learnedRuleSuggestions = [],
+  learnedRules = [],
   onUpdateAgent,
   onConnect,
   onDisconnect,
+  onAcceptLearnedRule,
+  onDismissLearnedRule,
+  onSuppressLearnedRule,
+  onRevokeLearnedRule,
   providerLogos = {},
 }: {
   agent: AgentWorkspaceProps["agent"];
   skills: NonNullable<AgentWorkspaceProps["availableSkills"]>;
   connections: NonNullable<AgentWorkspaceProps["projectConnections"]>;
-  requiredProviders: NonNullable<AgentWorkspaceProps["requiredProviders"]>;
+  policyToolCatalog?: NonNullable<AgentWorkspaceProps["policyToolCatalog"]>;
+  learnedRuleSuggestions?: LearnedRuleView[];
+  learnedRules?: LearnedRuleView[];
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: AgentWorkspaceProps["onConnect"];
   onDisconnect?: AgentWorkspaceProps["onDisconnect"];
+  onAcceptLearnedRule?: AgentWorkspaceProps["onAcceptLearnedRule"];
+  onDismissLearnedRule?: AgentWorkspaceProps["onDismissLearnedRule"];
+  onSuppressLearnedRule?: AgentWorkspaceProps["onSuppressLearnedRule"];
+  onRevokeLearnedRule?: AgentWorkspaceProps["onRevokeLearnedRule"];
   providerLogos?: Record<string, string>;
 }) {
   const [name, setName] = useState(agent.name);
@@ -79,10 +97,17 @@ export function AgentWorkspaceSettingsPanel({
   };
 
   const [showProviderPicker, setShowProviderPicker] = useState(false);
-  const connectedProviders = new Set(
-    connections.filter((c) => c.status === "active").map((c) => c.provider),
-  );
+  const connectedProviders = new Set(connections.filter((c) => c.status === "active").map((c) => c.provider));
   const projectId = agent.projectId ?? "";
+  const currentToolConfig = agent.toolConfig ?? { globalApprovalRequired: false, requiredProviders: [], tools: {} };
+  const policyTools = useMemo(
+    () => buildPolicyTools(currentToolConfig, policyToolCatalog, connectedProviders),
+    [currentToolConfig, policyToolCatalog, connectedProviders],
+  );
+
+  const persistToolConfig = async (nextToolConfig: ToolConfigView) => {
+    await persist({ toolConfig: nextToolConfig });
+  };
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -173,7 +198,9 @@ export function AgentWorkspaceSettingsPanel({
       <SectionHeading>Skills</SectionHeading>
       <SettingsCard>
         {skills.length === 0 ? (
-          <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>No skills selected yet.</div>
+          <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+            No skills selected yet.
+          </div>
         ) : (
           skills.map((skill, index) => {
             const isEnabled = selectedSkills.includes(skill.id);
@@ -309,6 +336,102 @@ export function AgentWorkspaceSettingsPanel({
         )}
       </div>
 
+      <SectionHeading>Policy</SectionHeading>
+      <SettingsCard>
+        <PolicyHeaderRow
+          checked={currentToolConfig.globalApprovalRequired}
+          onChange={(checked) =>
+            void persistToolConfig({
+              ...currentToolConfig,
+              globalApprovalRequired: checked,
+            })
+          }
+        />
+
+        {policyTools.length > 0 ? (
+          <div style={{ padding: "0 16px 16px", display: "grid", gap: 10 }}>
+            {policyTools.map((tool) => (
+              <PolicyToolRow
+                key={tool.toolName}
+                tool={tool}
+                onChange={(approvalMode) =>
+                  void persistToolConfig({
+                    ...currentToolConfig,
+                    tools: {
+                      ...currentToolConfig.tools,
+                      [tool.toolName]: {
+                        ...tool,
+                        approvalMode,
+                      },
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+            Connect a provider to configure manual approval policy for its tools.
+          </div>
+        )}
+
+        {learnedRules.length === 0 && learnedRuleSuggestions.length === 0 ? (
+          <div style={{ padding: "0 16px 16px", color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+            No learned rules yet. Repeated approval decisions will start surfacing here once the agent has enough
+            evidence.
+          </div>
+        ) : null}
+
+        {learnedRules.length > 0 ? (
+          <PolicyRuleGroup label="Learned">
+            {learnedRules.map((rule) => (
+              <PolicyRuleCard
+                key={rule.id}
+                rule={rule}
+                actions={
+                  onRevokeLearnedRule ? (
+                    <Button variant="secondary" size="sm" onClick={() => void onRevokeLearnedRule(rule.id)}>
+                      Revoke
+                    </Button>
+                  ) : null
+                }
+              />
+            ))}
+          </PolicyRuleGroup>
+        ) : null}
+
+        {learnedRuleSuggestions.length > 0 ? (
+          <PolicyRuleGroup label="Suggestions" bordered={learnedRules.length > 0}>
+            {learnedRuleSuggestions.map((rule) => (
+              <PolicyRuleCard
+                key={rule.id}
+                rule={rule}
+                highlight
+                actions={
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {onAcceptLearnedRule ? (
+                      <Button size="sm" onClick={() => void onAcceptLearnedRule(rule.id)}>
+                        Accept
+                      </Button>
+                    ) : null}
+                    {onDismissLearnedRule ? (
+                      <Button variant="secondary" size="sm" onClick={() => void onDismissLearnedRule(rule.id)}>
+                        Dismiss
+                      </Button>
+                    ) : null}
+                    {onSuppressLearnedRule ? (
+                      <Button variant="ghost" size="sm" onClick={() => void onSuppressLearnedRule(rule.id)}>
+                        Never
+                      </Button>
+                    ) : null}
+                  </div>
+                }
+              />
+            ))}
+          </PolicyRuleGroup>
+        ) : null}
+      </SettingsCard>
+
       <SectionHeading>Notifications</SectionHeading>
       <SettingsCard>
         <SettingsRow
@@ -362,6 +485,135 @@ export function AgentWorkspaceSettingsPanel({
   );
 }
 
+function PolicyHeaderRow({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <SettingsRow
+      icon="⚑"
+      title="Require approval for all write actions"
+      description="A global override. Reads stay auto unless you tighten a tool explicitly."
+      defaultExpanded
+      trailing={<Toggle checked={checked} onChange={onChange} />}
+    />
+  );
+}
+
+function PolicyToolRow({
+  tool,
+  onChange,
+}: {
+  tool: ToolConfigEntryView;
+  onChange: (mode: ToolConfigEntryView["approvalMode"]) => void;
+}) {
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        borderRadius: RADIUS.lg,
+        border: `1px solid ${COLORS.border}`,
+        background: COLORS.bg,
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+          {tool.title}
+        </div>
+        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
+          {humanize(tool.provider || "tool")} · {tool.mode === "write" ? "Write" : "Read"}
+        </div>
+        {tool.description ? (
+          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
+            {tool.description}
+          </div>
+        ) : null}
+      </div>
+
+      <ModeSegmentedControl value={tool.approvalMode} onChange={onChange} />
+    </div>
+  );
+}
+
+function ModeSegmentedControl({
+  value,
+  onChange,
+}: {
+  value: ToolConfigEntryView["approvalMode"];
+  onChange: (mode: ToolConfigEntryView["approvalMode"]) => void;
+}) {
+  const options: Array<{ value: ToolConfigEntryView["approvalMode"]; label: string }> = [
+    { value: "auto", label: "Auto" },
+    { value: "approval", label: "Approve" },
+    { value: "blocked", label: "Block" },
+  ];
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        gap: 4,
+        padding: 4,
+        borderRadius: RADIUS.pill,
+        border: `1px solid ${COLORS.border}`,
+        background: COLORS.surface,
+      }}
+    >
+      {options.map((option) => (
+        <button
+          type="button"
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          style={{
+            border: "none",
+            borderRadius: RADIUS.pill,
+            padding: "6px 12px",
+            background: value === option.value ? COLORS.accentDim : "transparent",
+            color: value === option.value ? COLORS.accent : COLORS.textSecondary,
+            fontFamily: TYPE.body,
+            fontSize: TYPE.scale.xs,
+            fontWeight: TYPE.weight.medium,
+            cursor: "pointer",
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function buildPolicyTools(
+  toolConfig: ToolConfigView,
+  catalog: ToolConfigEntryView[],
+  connectedProviders: Set<string>,
+): ToolConfigEntryView[] {
+  const tools = new Map<string, ToolConfigEntryView>();
+
+  for (const tool of catalog) {
+    if (!connectedProviders.has(tool.provider)) {
+      continue;
+    }
+    tools.set(tool.toolName, {
+      ...tool,
+      ...(toolConfig.tools[tool.toolName] ?? {}),
+    });
+  }
+
+  for (const tool of Object.values(toolConfig.tools)) {
+    if (!connectedProviders.has(tool.provider)) {
+      continue;
+    }
+    if (!tools.has(tool.toolName)) {
+      tools.set(tool.toolName, tool);
+    }
+  }
+
+  return [...tools.values()].sort((left, right) =>
+    `${left.provider}:${left.title}`.localeCompare(`${right.provider}:${right.title}`),
+  );
+}
+
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <button
@@ -394,7 +646,15 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: b
   );
 }
 
-function ProviderIcon({ provider, logos, size = 20 }: { provider: string; logos: Record<string, string>; size?: number }) {
+function ProviderIcon({
+  provider,
+  logos,
+  size = 20,
+}: {
+  provider: string;
+  logos: Record<string, string>;
+  size?: number;
+}) {
   const logoUrl = logos[provider];
   if (logoUrl) {
     return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: 4, flexShrink: 0 }} />;
@@ -423,6 +683,7 @@ function ConnectionRow({
   const meta = getProviderMetadata(connection.provider);
   const configField = PROVIDER_CONFIG_FIELDS[connection.provider];
   const existingValue = configField ? ((connection.config?.[configField.key] as string) ?? "") : "";
+  const configInputId = configField ? `connection-${connection.id}-${configField.key}` : undefined;
   const [configValue, setConfigValue] = useState(existingValue);
 
   const saveConfig = async () => {
@@ -459,7 +720,11 @@ function ConnectionRow({
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: TYPE.scale.xs, color: COLORS.green }}>Connected</span>
-          <button type="button" onClick={() => onConnect?.(connection.provider)} style={smallActionStyle(COLORS.textSecondary)}>
+          <button
+            type="button"
+            onClick={() => onConnect?.(connection.provider)}
+            style={smallActionStyle(COLORS.textSecondary)}
+          >
             Reconnect
           </button>
           {connection.connectedAccountId ? (
@@ -476,10 +741,14 @@ function ConnectionRow({
 
       {configField ? (
         <div style={{ padding: "0 16px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-          <label style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}>
+          <label
+            htmlFor={configInputId}
+            style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}
+          >
             {configField.label}
           </label>
           <input
+            id={configInputId}
             value={configValue}
             onChange={(e) => setConfigValue(e.target.value)}
             onBlur={() => void saveConfig()}
@@ -513,4 +782,127 @@ function smallActionStyle(color: string) {
     fontSize: TYPE.scale.xs,
     transition: `all ${MOTION.duration} ${MOTION.ease}`,
   };
+}
+
+function PolicyRuleGroup({
+  label,
+  bordered = false,
+  children,
+}: {
+  label: string;
+  bordered?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ borderTop: bordered ? `1px solid ${COLORS.border}` : "none" }}>
+      <div
+        style={{
+          padding: "14px 16px 0",
+          fontSize: TYPE.scale.xs,
+          fontWeight: TYPE.weight.semibold,
+          letterSpacing: TYPE.tracking.wide,
+          textTransform: "uppercase",
+          color: COLORS.textDim,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ padding: "10px 16px 16px", display: "grid", gap: 12 }}>{children}</div>
+    </div>
+  );
+}
+
+function PolicyRuleCard({
+  rule,
+  actions,
+  highlight = false,
+}: {
+  rule: LearnedRuleView;
+  actions?: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "14px 16px",
+        borderRadius: RADIUS.lg,
+        border: `1px solid ${highlight ? COLORS.orange : COLORS.border}`,
+        background: highlight ? COLORS.orangeSubtle : COLORS.bg,
+        display: "grid",
+        gap: 8,
+      }}
+    >
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
+      >
+        <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+          {describeDecision(rule.learnedDecision)} {humanize(rule.toolName)}
+        </div>
+        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
+          {(rule.consistencyRate * 100).toFixed(0)}% agreement
+        </div>
+      </div>
+
+      <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{describeConditions(rule)}</div>
+
+      <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
+        Based on {rule.evidenceCount} consistent decision{rule.evidenceCount === 1 ? "" : "s"}.
+      </div>
+
+      {actions ? <div>{actions}</div> : null}
+    </div>
+  );
+}
+
+function describeDecision(decision: LearnedRuleView["learnedDecision"]): string {
+  switch (decision) {
+    case "auto":
+      return "Auto-approve";
+    case "blocked":
+      return "Block";
+    default:
+      return "Require approval for";
+  }
+}
+
+function describeConditions(rule: LearnedRuleView): string {
+  if (!rule.conditions || Object.keys(rule.conditions).length === 0) {
+    return "When: always";
+  }
+
+  const parts = Object.entries(rule.conditions).map(([field, condition]) => {
+    const fieldLabel = humanize(field);
+    const valueLabel = formatConditionValue(condition.value);
+
+    switch (condition.operator) {
+      case "eq":
+        return `${fieldLabel} is ${valueLabel}`;
+      case "lt":
+        return `${fieldLabel} < ${valueLabel}`;
+      case "gt":
+        return `${fieldLabel} > ${valueLabel}`;
+      case "lte":
+        return `${fieldLabel} ≤ ${valueLabel}`;
+      case "gte":
+        return `${fieldLabel} ≥ ${valueLabel}`;
+      case "in":
+        return `${fieldLabel} in ${valueLabel}`;
+      default:
+        return `${fieldLabel} matches ${valueLabel}`;
+    }
+  });
+
+  return `When: ${parts.join(" and ")}`;
+}
+
+function formatConditionValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).join(", ");
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return String(value);
 }

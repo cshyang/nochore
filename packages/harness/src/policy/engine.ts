@@ -1,4 +1,5 @@
 import type { PolicyContext, PolicyDecision, PolicyRequest } from "../types";
+import { findMatchingLearnedRule, resolveDecision } from "./rule-resolver";
 
 export function evaluatePolicy(request: PolicyRequest, context: PolicyContext): PolicyDecision {
   const toolConfig = request.toolConfig;
@@ -46,6 +47,11 @@ export function evaluatePolicy(request: PolicyRequest, context: PolicyContext): 
       result: "approval",
       reason: "Global approval is required for write actions",
     };
+  }
+
+  const learnedRule = findMatchingLearnedRule(request.toolName, request.toolInput, context.learnedRules);
+  if (learnedRule) {
+    return resolveDecision(toolConfig, learnedRule.learnedDecision);
   }
 
   return {

@@ -1,8 +1,8 @@
 import { BookOpen, Play, Stop } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentChatPane } from "~/components/agent-chat-pane";
 import type { AgentWorkspaceProps, WorkspaceTab } from "~/components/agent-workspace.types";
 import { AgentWorkspaceActivityPane } from "~/components/agent-workspace-activity";
-import { AgentChatPane } from "~/components/agent-chat-pane";
 import {
   AgentWorkspaceHeader,
   type ChecklistItem,
@@ -14,6 +14,7 @@ import {
 import { AgentWorkspaceSettingsPanel } from "~/components/agent-workspace-settings";
 import { Button } from "~/components/Button";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import type { PendingActionView } from "~/lib/types";
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
   const {
@@ -34,16 +35,22 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     runError,
     onApprove,
     onReject,
+    onAcceptLearnedRule,
+    onDismissLearnedRule,
+    onSuppressLearnedRule,
+    onRevokeLearnedRule,
     providerLogos = {},
   } = props;
 
   const availableSkills = props.availableSkills ?? props.skills ?? [];
   const projectConnections = props.projectConnections ?? [];
+  const policyToolCatalog = props.policyToolCatalog ?? [];
   const runs = props.runs ?? [];
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
-  const [tab, setTab] = useState<WorkspaceTab>("activity");
+  const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "activity");
   const chatRunCompleteRef = useRef<(() => void) | null>(null);
+  const previousAgentIdRef = useRef(agent.id);
 
   // B+ auto-follow-up: when a chat-triggered run completes, notify the chat
   const handleLiveRunCompleteWithChat = useCallback(() => {
@@ -53,19 +60,52 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     }
   }, [onLiveRunComplete, tab]);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(props.initialRunId ?? null);
   const [goingLive, setGoingLive] = useState(false);
   const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(false);
+  const [chatApprovalContext, setChatApprovalContext] = useState<PendingActionView | null>(null);
 
   useEffect(() => {
+    if (props.initialRunId) {
+      setSelectedRunId(props.initialRunId);
+      return;
+    }
     if (runs.length > 0 && !selectedRunId) {
       setSelectedRunId(runs[0].id);
     }
-  }, [runs, selectedRunId]);
+  }, [props.initialRunId, runs, selectedRunId]);
 
   useEffect(() => {
-    setSelectedRunId(null);
-  }, [agent.id]);
+    if (previousAgentIdRef.current !== agent.id) {
+      previousAgentIdRef.current = agent.id;
+      setTab(props.initialTab ?? "activity");
+      setSelectedRunId(props.initialRunId ?? null);
+      setChatApprovalContext(resolvePendingApproval(runs, props.initialPendingActionId));
+    }
+  }, [agent.id, props.initialPendingActionId, props.initialRunId, props.initialTab, runs]);
+
+  useEffect(() => {
+    if (!props.initialPendingActionId) return;
+    const approval = resolvePendingApproval(runs, props.initialPendingActionId);
+    if (approval) {
+      setChatApprovalContext(approval);
+    }
+  }, [props.initialPendingActionId, runs]);
+
+  useEffect(() => {
+    if (!props.initialTab) return;
+    setTab(props.initialTab);
+  }, [props.initialTab]);
+
+  useEffect(() => {
+    if (!chatApprovalContext) return;
+    const latest = resolvePendingApproval(runs, chatApprovalContext.id);
+    if (!latest || latest.status !== "pending") {
+      setChatApprovalContext(null);
+      return;
+    }
+    setChatApprovalContext(latest);
+  }, [runs, chatApprovalContext]);
 
   const mergedRequiredProviders = useMemo(() => {
     const providers = new Map<string, { provider: string; reason: string; logo?: string }>();
@@ -150,6 +190,12 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
   const wrappedOnRunNow = onRunNow ? handleRunNowWithConfirm : undefined;
 
+  const handleAskChat = useCallback((approval: PendingActionView) => {
+    setSelectedRunId(approval.runId);
+    setChatApprovalContext(approval);
+    setTab("chat");
+  }, []);
+
   return (
     <div style={{ position: "relative", minHeight: "100vh" }}>
       <style>{`
@@ -229,6 +275,11 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             goingLive={goingLive}
             onApprove={onApprove}
             onReject={onReject}
+            onAskChat={handleAskChat}
+            learnedRuleSuggestions={agent.learnedRuleSuggestions}
+            onAcceptLearnedRule={onAcceptLearnedRule}
+            onDismissLearnedRule={onDismissLearnedRule}
+            onSuppressLearnedRule={onSuppressLearnedRule}
           />
         ) : null}
 
@@ -238,10 +289,16 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               agent={agent}
               skills={availableSkills}
               connections={projectConnections}
-              requiredProviders={mergedRequiredProviders}
+              policyToolCatalog={policyToolCatalog}
+              learnedRuleSuggestions={agent.learnedRuleSuggestions}
+              learnedRules={agent.learnedRules}
               onUpdateAgent={handleSave}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
+              onAcceptLearnedRule={onAcceptLearnedRule}
+              onDismissLearnedRule={onDismissLearnedRule}
+              onSuppressLearnedRule={onSuppressLearnedRule}
+              onRevokeLearnedRule={onRevokeLearnedRule}
               providerLogos={providerLogos}
             />
           </div>
@@ -254,7 +311,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               projectId={project.id}
               runs={runs}
               onRunTriggered={onRunTriggered}
-              registerRunCompleteHandler={(handler) => { chatRunCompleteRef.current = handler; }}
+              registerRunCompleteHandler={(handler) => {
+                chatRunCompleteRef.current = handler;
+              }}
+              pendingApproval={chatApprovalContext}
+              onApprove={onApprove}
+              onReject={onReject}
+              onClearPendingApproval={() => setChatApprovalContext(null)}
             />
           </div>
         ) : null}
@@ -274,6 +337,24 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
       </div>
     </div>
   );
+}
+
+function resolvePendingApproval(
+  runs: AgentWorkspaceProps["runs"],
+  approvalId?: string | null,
+): PendingActionView | null {
+  if (!approvalId || !runs) {
+    return null;
+  }
+
+  for (const run of runs) {
+    const approval = run.approvals.find((item) => item.id === approvalId);
+    if (approval) {
+      return approval;
+    }
+  }
+
+  return null;
 }
 
 const placeholderPanelStyle = {
@@ -311,4 +392,3 @@ const placeholderBodyStyle = {
   lineHeight: TYPE.leading.normal,
   marginBottom: 24,
 };
-

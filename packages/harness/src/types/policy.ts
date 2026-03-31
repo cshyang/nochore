@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolConfigEntry } from "./agent-config";
+import type { LearnedPolicyRule } from "./learned-rule";
 
 export const PolicyDecisionSchema = z.object({
   result: z.enum(["auto", "approval", "blocked"]),
@@ -20,4 +21,5 @@ export interface PolicyContext {
     toolName: string;
     timestamp: Date;
   }>;
+  learnedRules: LearnedPolicyRule[];
 }

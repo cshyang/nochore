@@ -3,8 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ToolkitSummary } from "~/server/onboard-prompt";
 import { isRequestInputPart } from "~/components/onboarding-chat-messages";
+import type { ToolkitSummary } from "~/server/onboard-prompt";
 
 export function useOnboardingChatFlow(params: {
   projectId: string;
@@ -40,6 +40,7 @@ export function useOnboardingChatFlow(params: {
         navigate({
           to: "/$projectId/agents/$agentId",
           params: { projectId: params.projectId, agentId },
+          search: { tab: undefined, runId: undefined, pendingActionId: undefined },
         });
       }, 1500);
     },
@@ -114,7 +115,7 @@ export function useOnboardingChatFlow(params: {
       }
     }, 80);
     return () => clearTimeout(timer);
-  }, [hasSubmitted, messages.length]);
+  }, [hasSubmitted]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -125,7 +126,7 @@ export function useOnboardingChatFlow(params: {
     if (!textarea) return;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, [inputValue]);
+  }, []);
 
   const handleSubmit = useCallback(
     (event?: FormEvent) => {
@@ -161,12 +162,10 @@ export function useOnboardingChatFlow(params: {
       setInputValue("");
 
       const lastAssistant = [...messagesRef.current].reverse().find((message) => message.role === "assistant");
-      const pendingToolParts = lastAssistant?.parts.filter(
-        (part) => {
-          const record = part as Record<string, unknown>;
-          return isRequestInputPart(record) && record.state === "input-available";
-        },
-      ) as Array<Record<string, unknown>> | undefined;
+      const pendingToolParts = lastAssistant?.parts.filter((part) => {
+        const record = part as Record<string, unknown>;
+        return isRequestInputPart(record) && record.state === "input-available";
+      }) as Array<Record<string, unknown>> | undefined;
 
       if (pendingToolParts?.length) {
         const answers = value.split("\n");

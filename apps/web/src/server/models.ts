@@ -1,7 +1,13 @@
 import type { createDb } from "../../../../packages/harness/src/db/client";
-import { connections } from "../../../../packages/harness/src/db/schema";
+import type { connections } from "../../../../packages/harness/src/db/schema";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories/agent";
-import type { ApprovalRecord, RunEvent, RunRecord } from "../../../../packages/harness/src/types";
+import type {
+  ApprovalRecord,
+  ApprovalStatus,
+  LearnedPolicyRule,
+  RunEvent,
+  RunRecord,
+} from "../../../../packages/harness/src/types";
 import type { AgentView, ConnectionView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;
@@ -17,12 +23,13 @@ export interface SerializedRun {
   id: string;
   agentId: string;
   triggerType: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
   startedAt: string;
   completedAt?: string;
   error?: string;
   triggerRunId?: string;
   events: SerializedRunEvent[];
+  approvals: SerializedPendingAction[];
   result?: {
     runId: string;
     agentId: string;
@@ -37,6 +44,7 @@ export interface SerializedRun {
       toolName: string;
       toolInput: Record<string, unknown>;
       reason: string;
+      requestEventId?: string;
     }>;
     eventsLogged: number;
   };
@@ -51,9 +59,11 @@ export interface SerializedPendingAction {
     toolName: string;
     toolInput: Record<string, unknown>;
     reason: string;
+    requestEventId?: string;
   };
-  status: string;
+  status: ApprovalStatus;
   createdAt: string;
+  expiresAt?: string;
   resolvedAt?: string;
   resolvedReason?: string;
 }
@@ -65,12 +75,18 @@ export function buildAgentView(params: {
   approvals: ApprovalRecord[];
   lessonsCount: number;
   activeConnections: Array<{ provider: string; reason?: string | null }>;
+  learnedRuleSuggestions?: LearnedPolicyRule[];
+  learnedRules?: LearnedPolicyRule[];
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
-  const pendingCount = 0;
+  const pendingCount = params.approvals.filter(
+    (approval) => approval.status === "pending" || approval.status === "expired",
+  ).length;
 
   let status: AgentView["status"] = "idle";
-  if (
+  if (pendingCount > 0) {
+    status = "attention";
+  } else if (
     latestRun &&
     (latestRun.status === "queued" || latestRun.status === "running" || latestRun.status === "waiting_for_approval")
   ) {
@@ -89,7 +105,7 @@ export function buildAgentView(params: {
     skills: params.agent.skills,
     schedule: params.agent.schedule,
     policyRules: Object.values(params.agent.toolConfig.tools).map((tool) => `${tool.title}: ${tool.approvalMode}`),
-    globalApprovalRequired: Object.values(params.agent.toolConfig.tools).some((tool) => tool.approvalMode !== "auto"),
+    globalApprovalRequired: params.agent.toolConfig.globalApprovalRequired,
     scopeStrategy: "static",
     lifecycleStatus: params.agent.status,
     status,
@@ -104,14 +120,19 @@ export function buildAgentView(params: {
       reason: connection.reason ?? "",
     })),
     toolConfig: {
-      requiredProviders: [],
-      tools: {},
+      ...params.agent.toolConfig,
+      requiredProviders: params.agent.toolConfig.requiredProviders.map((provider) => ({
+        provider: provider.provider,
+        reason: provider.reason ?? "",
+      })),
     },
     notificationConfig: params.agent.notificationConfig,
     requiredProviders: params.activeConnections.map((connection) => ({
       provider: connection.provider,
       reason: connection.reason ?? "",
     })),
+    learnedRuleSuggestions: (params.learnedRuleSuggestions ?? []).map(buildLearnedRuleView),
+    learnedRules: (params.learnedRules ?? []).map(buildLearnedRuleView),
     createdAt: params.agent.createdAt.getTime(),
     updatedAt: params.agent.updatedAt.getTime(),
   };
@@ -146,6 +167,13 @@ export function buildProjectView(params: {
     createdAt: number;
   };
   agents: AgentView[];
+  needsInput?: Array<{
+    id: string;
+    agentId: string;
+    agentName: string;
+    runId: string;
+    approval: ApprovalRecord;
+  }>;
   activeConnectionCount: number;
 }): ProjectView {
   return {
@@ -154,6 +182,13 @@ export function buildProjectView(params: {
     icon: resolveIcon(params.project.icon),
     color: params.project.color ?? "#5A7ACD",
     agents: params.agents,
+    needsInput: (params.needsInput ?? []).map((item) => ({
+      id: item.id,
+      agentId: item.agentId,
+      agentName: item.agentName,
+      runId: item.runId,
+      approval: buildSerializedPendingAction(item.approval),
+    })),
     connectionCount: params.activeConnectionCount,
     attentionCount: params.agents.filter((agent) => agent.status === "attention").length,
     createdAt: params.project.createdAt,
@@ -173,7 +208,8 @@ export function buildSerializedRun(run: RunRecord, events: RunEvent[], approvals
     id: approval.id,
     toolName: approval.toolName,
     toolInput: approval.toolInput,
-    reason: approval.decisionReason ?? "Approval requested",
+    reason: approval.requestReason ?? "Approval requested",
+    requestEventId: approval.requestEventId,
   }));
 
   return {
@@ -191,6 +227,7 @@ export function buildSerializedRun(run: RunRecord, events: RunEvent[], approvals
       timestamp: event.timestamp.toISOString(),
       payload: event.payload,
     })),
+    approvals: approvals.map(buildSerializedPendingAction),
     result: {
       runId: run.id,
       agentId: run.agentId,
@@ -211,10 +248,12 @@ export function buildSerializedPendingAction(approval: ApprovalRecord): Serializ
       id: approval.id,
       toolName: approval.toolName,
       toolInput: approval.toolInput,
-      reason: approval.decisionReason ?? "Approval requested",
+      reason: approval.requestReason ?? "Approval requested",
+      requestEventId: approval.requestEventId,
     },
     status: approval.status,
     createdAt: approval.createdAt.toISOString(),
+    expiresAt: approval.expiresAt?.toISOString(),
     resolvedAt: approval.resolvedAt?.toISOString(),
     resolvedReason: approval.decisionReason ?? undefined,
   };
@@ -229,9 +268,24 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
     case "queued":
       return "queued";
     case "running":
-    case "waiting_for_approval":
       return "running";
+    case "waiting_for_approval":
+      return "waiting_for_approval";
   }
+}
+
+function buildLearnedRuleView(rule: LearnedPolicyRule) {
+  return {
+    id: rule.id,
+    toolName: rule.toolName,
+    learnedDecision: rule.learnedDecision,
+    conditions: rule.conditions,
+    evidenceCount: rule.evidenceCount,
+    consistencyRate: rule.consistencyRate,
+    status: rule.status,
+    suggestedAt: rule.suggestedAt.toISOString(),
+    acceptedAt: rule.acceptedAt?.toISOString(),
+  };
 }
 
 function resolveIcon(icon: string | null): string {

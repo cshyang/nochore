@@ -1,9 +1,22 @@
 import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
-import { evaluatePolicy } from "../../../../packages/harness/src/policy";
+import {
+  getGoogleAdsToolsForPi,
+  type PiToolDefinition,
+} from "../../../../packages/harness/src/connections/google-ads/tools";
+import {
+  buildToolConfigEntry,
+  detectAndSuggestLearnedRules,
+  evaluatePolicy,
+} from "../../../../packages/harness/src/policy";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories";
-import type { RunSummary, RunTrigger } from "../../../../packages/harness/src/types";
+import type {
+  LearnedPolicyRule,
+  RunSummary,
+  RunTrigger,
+  ToolConfigEntry,
+  ToolMode,
+} from "../../../../packages/harness/src/types";
 import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
-import { getGoogleAdsToolsForPi, type PiToolDefinition } from "../../../../packages/harness/src/connections/google-ads/tools";
 import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
 import { getComposioToolsForPi } from "../lib/composio-pi-bridge";
 import { narrateEvent } from "../lib/narrate";
@@ -21,10 +34,23 @@ export const agentRunTask = task({
 
     const runId = await ensureRunRecord(runtime, agent, payload.runId, payload.trigger);
     const eventIds: string[] = [];
-    const liveEvents: Array<{ id: string; type: string; summary: string; timestamp: number }> = [];
+    const liveEvents: Array<{
+      id: string;
+      type: string;
+      summary: string;
+      timestamp: number;
+      payload: Record<string, unknown>;
+    }> = [];
+    const learnedRules = await runtime.learnedRuleRepository.listActive(agent.id);
 
     function emitLiveEvent(id: string, type: string, eventPayload: Record<string, unknown>) {
-      liveEvents.push({ id, type, summary: narrateEvent(type, eventPayload), timestamp: Date.now() });
+      liveEvents.push({
+        id,
+        type,
+        summary: narrateEvent(type, eventPayload),
+        timestamp: Date.now(),
+        payload: eventPayload,
+      });
       metadata.set("events", liveEvents);
     }
 
@@ -101,7 +127,9 @@ export const agentRunTask = task({
 
           if (subRunCount >= MAX_SUB_RUNS) {
             return {
-              content: [{ type: "text" as const, text: `Sub-run limit reached (${MAX_SUB_RUNS}). Cannot delegate further.` }],
+              content: [
+                { type: "text" as const, text: `Sub-run limit reached (${MAX_SUB_RUNS}). Cannot delegate further.` },
+              ],
               details: { blocked: true, reason: "maxSubRuns" },
             };
           }
@@ -121,6 +149,7 @@ export const agentRunTask = task({
 
           // Sub-run gets same tools minus spawn_sub_run (prevents recursion)
           const subTools = allTools.filter((t) => t.name !== "spawn_sub_run");
+          const subToolConfigLookup = createToolConfigLookup(agent, subTools);
 
           try {
             const subResult = await executePiAgent({
@@ -142,30 +171,31 @@ export const agentRunTask = task({
               },
               beforeToolCall: async (toolName, args) => {
                 const toolInput = normalizeToolInput(args);
-                const toolOverrides = (agent.toolConfig as any)?.toolOverrides as Record<string, string> | undefined;
-                const overrideMode = toolOverrides?.[toolName];
                 const policy = evaluatePolicy(
                   {
                     toolName,
                     toolInput,
-                    toolConfig: {
-                      toolName,
-                      slug: toolName,
-                      provider: "",
-                      title: toolName,
-                      description: "",
-                      mode: "write" as const,
-                      enabled: true,
-                      approvalMode: (overrideMode as "auto" | "approval" | "blocked") ?? "auto",
-                    },
+                    toolConfig: getToolConfigForCall(agent, subToolConfigLookup, toolName),
                   },
-                  { now: new Date(), globalApprovalRequired: false, recentToolCalls },
+                  {
+                    now: new Date(),
+                    globalApprovalRequired: agent.toolConfig.globalApprovalRequired,
+                    recentToolCalls,
+                    learnedRules,
+                  },
                 );
                 if (policy.result === "auto") return undefined;
                 if (policy.result === "blocked") return { block: true, reason: policy.reason };
                 return handleApprovalRequest({
-                  runtime, agent, runId, toolName, toolInput,
-                  policyReason: policy.reason, eventIds, emitLiveEvent, projectId: payload.projectId,
+                  runtime,
+                  agent,
+                  runId,
+                  toolName,
+                  toolInput,
+                  policyReason: policy.reason,
+                  eventIds,
+                  emitLiveEvent,
+                  projectId: payload.projectId,
                 });
               },
             });
@@ -195,6 +225,7 @@ export const agentRunTask = task({
       };
 
       allTools.push(spawnSubRunTool);
+      const toolConfigLookup = createToolConfigLookup(agent, allTools);
 
       logger.info("Prompt assembled", {
         systemPromptLength: promptBundle.system.length,
@@ -229,25 +260,19 @@ export const agentRunTask = task({
         },
         beforeToolCall: async (toolName, args) => {
           const toolInput = normalizeToolInput(args);
-          const toolOverrides = (agent.toolConfig as any)?.toolOverrides as Record<string, string> | undefined;
-          const overrideMode = toolOverrides?.[toolName];
 
           const policy = evaluatePolicy(
             {
               toolName,
               toolInput,
-              toolConfig: {
-                toolName,
-                slug: toolName,
-                provider: "",
-                title: toolName,
-                description: "",
-                mode: "write" as const,
-                enabled: true,
-                approvalMode: (overrideMode as "auto" | "approval" | "blocked") ?? "auto",
-              },
+              toolConfig: getToolConfigForCall(agent, toolConfigLookup, toolName),
             },
-            { now: new Date(), globalApprovalRequired: false, recentToolCalls },
+            {
+              now: new Date(),
+              globalApprovalRequired: agent.toolConfig.globalApprovalRequired,
+              recentToolCalls,
+              learnedRules,
+            },
           );
 
           if (policy.result === "auto") return undefined;
@@ -317,6 +342,7 @@ export const agentRunTask = task({
       return { runId, agentId: agent.id, summary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const isApprovalTerminal = error instanceof ApprovalCheckpointError;
       const summary = buildSummary({
         status: "failed",
         finalText: "",
@@ -333,7 +359,10 @@ export const agentRunTask = task({
       metadata.set("status", "failed");
       await runtime.runRepository.fail(runId, new Date(), message, summary);
       logger.error("Agent run failed", { runId, agentId: agent.id, error: message });
-      throw error;
+      if (!isApprovalTerminal) {
+        throw error;
+      }
+      return { runId, agentId: agent.id, summary };
     }
   },
 });
@@ -378,6 +407,8 @@ async function handleApprovalRequest(params: {
 }): Promise<{ block: boolean; reason?: string } | undefined> {
   const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, emitLiveEvent, projectId } = params;
   const approvalId = crypto.randomUUID();
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
 
   const token = await wait.createToken({
     idempotencyKey: `approval-${runId}-${approvalId}`,
@@ -392,43 +423,96 @@ async function handleApprovalRequest(params: {
     waitTokenId: token.id,
     toolName,
     toolInput,
-    createdAt: new Date(),
+    requestReason: policyReason,
+    createdAt,
+    expiresAt,
   });
 
-  const reqPayload = { approvalId: approvalRecordId, toolName, input: toolInput, reason: policyReason };
+  const reqPayload = {
+    approvalId: approvalRecordId,
+    toolName,
+    toolInput,
+    requestReason: policyReason,
+    reason: policyReason,
+    policy: "approval",
+    expiresAt: expiresAt.toISOString(),
+  };
   const reqId = await recordEvent(runtime, runId, agent.id, "tool_approval_requested", reqPayload);
   eventIds.push(reqId);
-  emitLiveEvent(approvalRecordId, "tool_approval_requested", reqPayload);
+  emitLiveEvent(reqId, "tool_approval_requested", reqPayload);
+  await runtime.approvalRepository.setRequestEventId(approvalRecordId, reqId);
 
   await runtime.runRepository.markWaitingForApproval(runId);
   metadata.set("status", "waiting_for_approval");
 
   // Container checkpoints here — resumes when human responds
   let decision: { decision: string; reason?: string };
+  let timedOut = false;
   try {
     decision = (await wait.forToken<{ decision: string; reason?: string }>(token).unwrap()) ?? {
       decision: "rejected",
       reason: "Token completed without data",
     };
   } catch (err) {
-    decision = { decision: "rejected", reason: err instanceof Error ? err.message : String(err) };
+    timedOut = isApprovalTimeoutError(err);
+    decision = {
+      decision: timedOut ? "expired" : "rejected",
+      reason: timedOut ? "Approval expired after 24 hours" : err instanceof Error ? err.message : String(err),
+    };
   }
 
-  const status = decision.decision === "approved" ? "approved" : "rejected";
-  const reason = decision.reason ?? policyReason;
+  const status =
+    decision.decision === "approved" ? "approved" : decision.decision === "expired" ? "expired" : "rejected";
+  let reason = decision.reason ?? policyReason;
 
-  await runtime.approvalRepository.markResolved(approvalRecordId, status, reason, new Date());
+  const approvalRow = await runtime.approvalRepository.getById(approvalRecordId);
+  const wasAlreadyResolved = approvalRow?.status && approvalRow.status !== "pending";
 
-  const resPayload = { approvalId: approvalRecordId, toolName, status, reason };
-  const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
-  eventIds.push(resId);
-  emitLiveEvent(resId, "tool_approval_resolved", resPayload);
+  if (!wasAlreadyResolved) {
+    if (status === "expired") {
+      await runtime.approvalRepository.markExpired(approvalRecordId, reason, new Date());
+      const expiryPayload = {
+        approvalId: approvalRecordId,
+        toolName,
+        reason,
+        expiresAt: expiresAt.toISOString(),
+      };
+      const expiryId = await recordEvent(runtime, runId, agent.id, "tool_approval_expired", expiryPayload);
+      eventIds.push(expiryId);
+      emitLiveEvent(expiryId, "tool_approval_expired", expiryPayload);
+    } else {
+      await runtime.approvalRepository.markResolved(approvalRecordId, status, reason, new Date());
 
-  await runtime.runRepository.markRunning(runId);
-  metadata.set("status", "running");
+      const resPayload = { approvalId: approvalRecordId, toolName, status, reason };
+      const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
+      eventIds.push(resId);
+      emitLiveEvent(resId, "tool_approval_resolved", resPayload);
 
-  if (status === "approved") return undefined;
-  return { block: true, reason };
+      const suggestions = await detectAndSuggestLearnedRules({
+        agentId: agent.id,
+        approvalRepository: runtime.approvalRepository,
+        learnedRuleRepository: runtime.learnedRuleRepository,
+      });
+      await appendPolicySuggestionEvents({
+        runtime,
+        runId,
+        agentId: agent.id,
+        suggestions,
+        eventIds,
+        emitLiveEvent,
+      });
+    }
+  } else {
+    reason = approvalRow?.decisionReason ?? reason;
+  }
+
+  if ((approvalRow?.status ?? status) === "approved") {
+    await runtime.runRepository.markRunning(runId);
+    metadata.set("status", "running");
+    return undefined;
+  }
+
+  throw new ApprovalCheckpointError(reason, (approvalRow?.status ?? status) === "expired" ? "expired" : "rejected");
 }
 
 function normalizeToolInput(input: unknown): Record<string, unknown> {
@@ -447,6 +531,8 @@ async function recordEvent(
     | "tool_executed"
     | "tool_approval_requested"
     | "tool_approval_resolved"
+    | "tool_approval_expired"
+    | "policy_rule_suggested"
     | "agent_message"
     | "finding_recorded"
     | "sub_run_started"
@@ -466,6 +552,109 @@ async function recordEvent(
 
   logger.info("Agent run event", { runId, agentId, type });
   return id;
+}
+
+const INTERNAL_TOOL_MODES: Record<string, ToolMode> = {
+  bash: "write",
+  edit: "write",
+  read: "read",
+  spawn_sub_run: "write",
+  submit_report: "read",
+  write: "write",
+};
+
+class ApprovalCheckpointError extends Error {
+  constructor(
+    message: string,
+    readonly status: "rejected" | "expired",
+  ) {
+    super(message);
+    this.name = "ApprovalCheckpointError";
+  }
+}
+
+function createToolConfigLookup(agent: AgentRecord, tools: PiToolDefinition[]): Map<string, ToolConfigEntry> {
+  const lookup = new Map<string, ToolConfigEntry>();
+
+  for (const tool of tools) {
+    lookup.set(
+      tool.name,
+      buildToolConfigEntry(
+        {
+          toolName: tool.name,
+          slug: tool.name,
+          provider: inferToolProvider(tool.name),
+          title: tool.label,
+          description: tool.description,
+          mode: INTERNAL_TOOL_MODES[tool.name],
+        },
+        agent.toolConfig.tools[tool.name],
+      ),
+    );
+  }
+
+  return lookup;
+}
+
+function getToolConfigForCall(
+  agent: AgentRecord,
+  lookup: Map<string, ToolConfigEntry>,
+  toolName: string,
+): ToolConfigEntry {
+  const existing = lookup.get(toolName) ?? agent.toolConfig.tools[toolName];
+  if (existing) {
+    return existing.provider === "internal" && !agent.toolConfig.tools[toolName]
+      ? { ...existing, approvalMode: "auto" }
+      : existing;
+  }
+
+  const inferred = buildToolConfigEntry({
+    toolName,
+    slug: toolName,
+    provider: inferToolProvider(toolName),
+    title: toolName,
+    description: "",
+    mode: INTERNAL_TOOL_MODES[toolName],
+  });
+
+  return inferred.provider === "internal" ? { ...inferred, approvalMode: "auto" } : inferred;
+}
+
+function inferToolProvider(toolName: string): string {
+  if (toolName in INTERNAL_TOOL_MODES) {
+    return "internal";
+  }
+
+  const [prefix] = toolName.split("_");
+  return prefix?.toLowerCase() ?? "";
+}
+
+function isApprovalTimeoutError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(timeout|timed out|expired)\b/i.test(message);
+}
+
+async function appendPolicySuggestionEvents(params: {
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  runId: string;
+  agentId: string;
+  suggestions: LearnedPolicyRule[];
+  eventIds: string[];
+  emitLiveEvent: (id: string, type: string, payload: Record<string, unknown>) => void;
+}) {
+  for (const suggestion of params.suggestions) {
+    const payload = {
+      ruleId: suggestion.id,
+      toolName: suggestion.toolName,
+      learnedDecision: suggestion.learnedDecision,
+      evidenceCount: suggestion.evidenceCount,
+      consistencyRate: suggestion.consistencyRate,
+      conditions: suggestion.conditions,
+    };
+    const eventId = await recordEvent(params.runtime, params.runId, params.agentId, "policy_rule_suggested", payload);
+    params.eventIds.push(eventId);
+    params.emitLiveEvent(eventId, "policy_rule_suggested", payload);
+  }
 }
 
 function buildSummary(params: {

@@ -12,6 +12,10 @@ export {
   RunEventRepository,
 } from "./event";
 export {
+  LearnedRuleRepository,
+  type SuggestLearnedRuleInput,
+} from "./learned-rule";
+export {
   type CreateLessonInput,
   type LessonRecord,
   LessonRepository,

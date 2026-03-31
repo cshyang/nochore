@@ -15,6 +15,9 @@ export type RunEventType =
   | "tool_executed"
   | "tool_approval_requested"
   | "tool_approval_resolved"
+  | "tool_approval_expired"
+  | "policy_rule_suggested"
+  | "policy_rule_accepted"
   | "notification_sent"
   | "agent_message"
   | "finding_recorded"
@@ -88,6 +91,24 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
       const name = payload.toolName as string | undefined;
       const status = payload.status as string | undefined;
       return `${humanizeToolName(name ?? "unknown")} ${status ?? "resolved"}`;
+    }
+
+    case "tool_approval_expired": {
+      const name = payload.toolName as string | undefined;
+      return `Approval expired for ${humanizeToolName(name ?? "unknown")}`;
+    }
+
+    case "policy_rule_suggested": {
+      const toolName = payload.toolName as string | undefined;
+      const learnedDecision = payload.learnedDecision as string | undefined;
+      const evidenceCount = payload.evidenceCount as number | undefined;
+      return `Suggested ${learnedDecision ?? "policy"} rule for ${humanizeToolName(toolName ?? "unknown")} (${evidenceCount ?? 0} decisions)`;
+    }
+
+    case "policy_rule_accepted": {
+      const toolName = payload.toolName as string | undefined;
+      const learnedDecision = payload.learnedDecision as string | undefined;
+      return `Accepted ${learnedDecision ?? "policy"} rule for ${humanizeToolName(toolName ?? "unknown")}`;
     }
 
     case "notification_sent": {

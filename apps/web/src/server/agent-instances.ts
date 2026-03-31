@@ -2,7 +2,15 @@ import crypto from "node:crypto";
 import { rmSync } from "node:fs";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { agents, approvals, lessons, runEvents, runs } from "../../../../packages/harness/src/db/schema";
+import {
+  agents,
+  approvals,
+  learnedPolicyRules,
+  lessons,
+  runEvents,
+  runs,
+  suggestionSuppressions,
+} from "../../../../packages/harness/src/db/schema";
 import type { AgentRecord } from "../../../../packages/harness/src/repositories";
 import type { AgentConfig, NotificationConfig, ToolConfig } from "../../../../packages/harness/src/types";
 import { getAgentWorkspacePath, initializeWorkspace } from "../../../../packages/harness/src/workspace";
@@ -139,6 +147,8 @@ export const deleteAgentInstance = createServerFn({ method: "POST" })
   .handler(async ({ data: { agentId, projectId } }) => {
     const { db } = getProjectDeps(projectId);
     db.delete(approvals).where(eq(approvals.agentId, agentId)).run();
+    db.delete(learnedPolicyRules).where(eq(learnedPolicyRules.agentId, agentId)).run();
+    db.delete(suggestionSuppressions).where(eq(suggestionSuppressions.agentId, agentId)).run();
     db.delete(runEvents).where(eq(runEvents.agentId, agentId)).run();
     db.delete(lessons).where(eq(lessons.agentId, agentId)).run();
     db.delete(runs).where(eq(runs.agentId, agentId)).run();
@@ -184,6 +194,7 @@ function resolveToolConfig(
   }
 
   return {
+    globalApprovalRequired: false,
     requiredProviders: requiredProviders ?? [],
     tools: {},
   };
@@ -222,9 +233,11 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
     agent,
     db: deps.db,
     runs: await deps.runRepository.getByAgent(agent.id),
-    approvals: [],
+    approvals: await deps.approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
     lessonsCount: (await deps.lessonRepository.listByAgent(agent.id)).length,
     activeConnections: agent.toolConfig.requiredProviders,
+    learnedRuleSuggestions: await deps.learnedRuleRepository.listSuggested(agent.id),
+    learnedRules: await deps.learnedRuleRepository.listAccepted(agent.id),
   });
 }
 

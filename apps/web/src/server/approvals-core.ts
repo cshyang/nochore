@@ -1,3 +1,4 @@
+import { detectAndSuggestLearnedRules } from "../../../../packages/harness/src/policy";
 import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction } from "./models";
 
@@ -14,7 +15,7 @@ export async function approveActionWithResolution(params: {
   actionStatus: string;
   triggered: boolean;
 }> {
-  const { approvalRepository, runEventRepository } = getProjectDeps(params.projectId);
+  const { approvalRepository, learnedRuleRepository, runEventRepository } = getProjectDeps(params.projectId);
   const approval = await approvalRepository.getById(params.actionId);
   if (!approval) {
     throw new Error(`Approval ${params.actionId} not found`);
@@ -42,6 +43,30 @@ export async function approveActionWithResolution(params: {
       toolInput: approval.toolInput,
     },
   });
+
+  const suggestions = await detectAndSuggestLearnedRules({
+    agentId: approval.agentId,
+    approvalRepository,
+    learnedRuleRepository,
+  });
+  await Promise.all(
+    suggestions.map((suggestion) =>
+      runEventRepository.append({
+        runId: approval.runId,
+        agentId: approval.agentId,
+        timestamp: new Date(),
+        type: "policy_rule_suggested",
+        payload: {
+          ruleId: suggestion.id,
+          toolName: suggestion.toolName,
+          learnedDecision: suggestion.learnedDecision,
+          evidenceCount: suggestion.evidenceCount,
+          consistencyRate: suggestion.consistencyRate,
+          conditions: suggestion.conditions,
+        },
+      }),
+    ),
+  );
 
   await params.wait.completeToken(
     { id: approval.waitTokenId },

@@ -6,6 +6,7 @@ import type {
   ProviderRequirementView,
   RunView,
   SkillView,
+  ToolConfigEntryView,
   ToolConfigView,
 } from "~/lib/types";
 
@@ -39,9 +40,13 @@ export interface AgentWorkspaceProps {
   availableSkills?: SkillView[];
   skills?: SkillView[];
   projectConnections?: ConnectionView[];
+  policyToolCatalog?: ToolConfigEntryView[];
   requiredProviders?: ProviderRequirementView[];
   runs?: RunView[];
   isDraft?: boolean;
+  initialTab?: WorkspaceTab;
+  initialRunId?: string | null;
+  initialPendingActionId?: string | null;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   activeRun?: ActiveRunState | null;
@@ -49,6 +54,10 @@ export interface AgentWorkspaceProps {
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onAcceptLearnedRule?: (ruleId: string) => void | Promise<void>;
+  onDismissLearnedRule?: (ruleId: string) => void | Promise<void>;
+  onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
+  onRevokeLearnedRule?: (ruleId: string) => void | Promise<void>;
   onCancelRun?: () => void;
   cancelling?: boolean;
   providerLogos?: Record<string, string>;

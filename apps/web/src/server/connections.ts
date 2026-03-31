@@ -202,29 +202,31 @@ export interface ComposioToolMeta {
   tags: string[];
 }
 
+export async function listComposioToolCatalogForProject(_projectId: string): Promise<ComposioToolMeta[]> {
+  try {
+    const composio = await createComposioClient();
+    const catalogClient = getCatalogClient(composio);
+
+    const results = await Promise.all(
+      TOOLKIT_CATALOG_PROVIDER_SLUGS.map((provider) =>
+        catalogClient.tools
+          .list({ toolkit_slug: provider, limit: 50 })
+          .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
+          .catch(() => [] as ComposioToolMeta[]),
+      ),
+    );
+
+    return results.flat();
+  } catch {
+    return [];
+  }
+}
+
 export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
-  .handler(async (): Promise<ComposioToolMeta[]> => {
-    try {
-      const composio = await createComposioClient();
-      const catalogClient = getCatalogClient(composio);
-
-      // composio.client.tools.list() is the REST API that returns tool metadata.
-      // composio.tools.* is the SDK wrapper for execution — no list() method.
-      const results = await Promise.all(
-        TOOLKIT_CATALOG_PROVIDER_SLUGS.map((provider) =>
-          catalogClient.tools
-            .list({ toolkit_slug: provider, limit: 50 })
-            .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
-            .catch(() => [] as ComposioToolMeta[]),
-        ),
-      );
-
-      return results.flat();
-    } catch {
-      return [];
-    }
-  });
+  .handler(
+    async ({ data: { projectId } }): Promise<ComposioToolMeta[]> => listComposioToolCatalogForProject(projectId),
+  );
 
 export const fetchToolkitSummaries = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)

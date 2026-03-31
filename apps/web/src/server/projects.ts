@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { createDb } from "../../../../packages/harness/src/db/client";
-import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import { connections, projects } from "../../../../packages/harness/src/db/schema";
+import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import { getProjectDirectory, getWebDataRoot } from "../../../../packages/harness/src/workspace";
 import { clearProjectDeps, getProjectDeps } from "./deps";
 import { buildAgentView, buildProjectView } from "./models";
@@ -72,6 +72,7 @@ export const createProject = createServerFn({ method: "POST" })
       icon: resolveIcon(data.icon ?? DEFAULT_PROJECT_ICON),
       color: data.color ?? DEFAULT_PROJECT_COLOR,
       agents: [],
+      needsInput: [],
       connectionCount: 0,
       attentionCount: 0,
       createdAt: now,
@@ -98,7 +99,8 @@ async function loadProjectView(projectId: string) {
   }
 
   try {
-    const { db, agentRepository, runRepository, lessonRepository } = getProjectDeps(projectId);
+    const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository } =
+      getProjectDeps(projectId);
     let projectRow = db.select().from(projects).get();
     if (!projectRow) {
       // Self-heal: directory exists but no DB row (created by older version)
@@ -117,6 +119,7 @@ async function loadProjectView(projectId: string) {
     }
 
     const agentRows = await agentRepository.listByProject(projectId);
+    const agentNameById = new Map(agentRows.map((agent) => [agent.id, agent.name]));
     const agentViews = await Promise.all(
       agentRows.map(async (agent) => {
         const runs = await runRepository.getByAgent(agent.id);
@@ -125,9 +128,11 @@ async function loadProjectView(projectId: string) {
           agent,
           db,
           runs,
-          approvals: [],
+          approvals: await approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
           lessonsCount: lessons.length,
           activeConnections: agent.toolConfig.requiredProviders,
+          learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
+          learnedRules: await learnedRuleRepository.listAccepted(agent.id),
         });
       }),
     );
@@ -148,6 +153,13 @@ async function loadProjectView(projectId: string) {
         createdAt: projectRow.createdAt,
       },
       agents: agentViews,
+      needsInput: (await approvalRepository.listByProject(projectId, ["pending", "expired"])).map((approval) => ({
+        id: approval.id,
+        agentId: approval.agentId,
+        agentName: agentNameById.get(approval.agentId) ?? "Agent",
+        runId: approval.runId,
+        approval,
+      })),
       activeConnectionCount,
     });
   } catch {

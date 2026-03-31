@@ -32,8 +32,9 @@ export const ProviderRequirementSchema = z.object({
 export type ProviderRequirement = z.infer<typeof ProviderRequirementSchema>;
 
 export const ToolConfigSchema = z.object({
-  requiredProviders: z.array(ProviderRequirementSchema),
-  tools: z.record(z.string(), ToolConfigEntrySchema),
+  globalApprovalRequired: z.boolean().default(false),
+  requiredProviders: z.array(ProviderRequirementSchema).default([]),
+  tools: z.record(z.string(), ToolConfigEntrySchema).default({}),
 });
 export type ToolConfig = z.infer<typeof ToolConfigSchema>;
 

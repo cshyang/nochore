@@ -6,16 +6,12 @@ import { jsonSafe } from "./serializable";
 export const getRunHistory = createServerFn({ method: "GET" })
   .inputValidator((input: { agentId: string; projectId: string; limit?: number }) => input)
   .handler(async ({ data: { agentId, projectId, limit } }) => {
-    const { runRepository, runEventRepository } = getProjectDeps(projectId);
+    const { runRepository, runEventRepository, approvalRepository } = getProjectDeps(projectId);
     const runs = await runRepository.getByAgent(agentId, limit ?? 20);
 
     const result = await Promise.all(
       runs.map(async (run) =>
-        buildSerializedRun(
-          run,
-          await runEventRepository.listByRun(run.id),
-          [],
-        ),
+        buildSerializedRun(run, await runEventRepository.listByRun(run.id), await approvalRepository.listByRun(run.id)),
       ),
     );
 
@@ -25,17 +21,13 @@ export const getRunHistory = createServerFn({ method: "GET" })
 export const getRun = createServerFn({ method: "GET" })
   .inputValidator((input: { runId: string; projectId: string }) => input)
   .handler(async ({ data: { runId, projectId } }) => {
-    const { runRepository, runEventRepository } = getProjectDeps(projectId);
+    const { runRepository, runEventRepository, approvalRepository } = getProjectDeps(projectId);
     const run = await runRepository.getById(runId);
     if (!run) {
       return jsonSafe(null);
     }
 
     return jsonSafe(
-      buildSerializedRun(
-        run,
-        await runEventRepository.listByRun(run.id),
-        [],
-      ),
+      buildSerializedRun(run, await runEventRepository.listByRun(run.id), await approvalRepository.listByRun(run.id)),
     );
   });

@@ -1,14 +1,17 @@
 import { Check, CircleNotch, Warning } from "@phosphor-icons/react";
 import { useRealtimeRun } from "@trigger.dev/react-hooks";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { ApprovalCard } from "~/components/ApprovalCard";
 import { EventTimeline } from "~/components/EventTimeline";
 import { COLORS, RADIUS } from "~/lib/colors";
+import type { PendingActionView } from "~/lib/types";
 
 type LiveEvent = {
   id: string;
   type: string;
   summary: string;
   timestamp: number;
+  payload?: Record<string, unknown>;
 };
 
 type RunMetadata = {
@@ -24,6 +27,7 @@ interface LiveRunViewProps {
   onComplete?: () => void;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
+  onAskChat?: (approval: PendingActionView) => void | Promise<void>;
 }
 
 const pulseKeyframes = `
@@ -33,7 +37,15 @@ const pulseKeyframes = `
 }
 `;
 
-export function LiveRunView({ triggerRunId, accessToken, runId, onComplete }: LiveRunViewProps) {
+export function LiveRunView({
+  triggerRunId,
+  accessToken,
+  runId,
+  onComplete,
+  onApprove,
+  onReject,
+  onAskChat,
+}: LiveRunViewProps) {
   const { run, error } = useRealtimeRun(triggerRunId, {
     accessToken,
   });
@@ -102,6 +114,7 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete }: Li
 
   const isActive = status === "running" || status === "waiting_for_approval";
   const isFinished = status === "completed" || status === "failed";
+  const pendingApproval = derivePendingApproval(runId, events);
 
   return (
     <div style={containerStyle}>
@@ -150,15 +163,64 @@ export function LiveRunView({ triggerRunId, accessToken, runId, onComplete }: Li
         </div>
       )}
 
+      {pendingApproval ? (
+        <div style={{ padding: "12px 12px 0" }}>
+          <ApprovalCard
+            approval={pendingApproval}
+            onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from live run") : undefined}
+            onReject={onReject ? (approval) => onReject(approval.id, "Rejected from live run") : undefined}
+            onAskChat={onAskChat}
+          />
+        </div>
+      ) : null}
+
       <div ref={scrollRef} style={scrollAreaStyle}>
-        <EventTimeline
-          events={events}
-          timestampFormat="relative"
-          emptyMessage="Waiting for first event..."
-        />
+        <EventTimeline events={events} timestampFormat="relative" emptyMessage="Waiting for first event..." />
       </div>
     </div>
   );
+}
+
+function derivePendingApproval(runId: string, events: LiveEvent[]): PendingActionView | null {
+  const requestEvent = [...events].reverse().find((event) => event.type === "tool_approval_requested");
+  if (!requestEvent) {
+    return null;
+  }
+
+  const resolvedAfterRequest = events.find(
+    (event) =>
+      event.timestamp >= requestEvent.timestamp &&
+      (event.type === "tool_approval_resolved" || event.type === "tool_approval_expired"),
+  );
+  if (resolvedAfterRequest) {
+    return null;
+  }
+
+  const payload = requestEvent.payload ?? {};
+  const approvalId = payload.approvalId;
+  const toolName = payload.toolName;
+  const toolInput = payload.toolInput;
+  const requestReason = payload.requestReason ?? payload.reason;
+
+  if (typeof approvalId !== "string" || typeof toolName !== "string" || !toolInput || typeof toolInput !== "object") {
+    return null;
+  }
+
+  return {
+    id: approvalId,
+    runId,
+    agentId: "",
+    proposal: {
+      id: approvalId,
+      toolName,
+      toolInput: toolInput as Record<string, unknown>,
+      reason: typeof requestReason === "string" ? requestReason : "Approval requested",
+      requestEventId: requestEvent.id,
+    },
+    status: "pending",
+    createdAt: new Date(requestEvent.timestamp).toISOString(),
+    expiresAt: typeof payload.expiresAt === "string" ? payload.expiresAt : undefined,
+  };
 }
 
 const containerStyle: CSSProperties = {

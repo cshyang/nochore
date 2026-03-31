@@ -9,6 +9,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { stepCountIs, ToolLoopAgent, tool } from "ai";
 import { z } from "zod";
+import { CONNECTABLE_PROVIDER_SLUGS, getProviderDefaultReason, getProviderName } from "~/lib/provider-metadata";
 import { createAiSdkModel, resolveAiSdkProvider } from "../../../../packages/harness/src/llm/model";
 import type {
   AgentSchedule,
@@ -16,7 +17,6 @@ import type {
   ProviderRequirement,
   ToolConfig,
 } from "../../../../packages/harness/src/types";
-import { CONNECTABLE_PROVIDER_SLUGS, getProviderDefaultReason, getProviderName } from "~/lib/provider-metadata";
 
 const DraftScheduleSchema = z.enum(["hourly", "6hours", "daily", "weekly", "manual"]);
 
@@ -75,7 +75,7 @@ function expandBlueprint(raw: ToolInput): BlueprintDraft {
     instructions: raw.instructions.trim(),
     skills: raw.skills ?? [],
     requiredProviders: [],
-    toolConfig: { requiredProviders: [], tools: {} },
+    toolConfig: { globalApprovalRequired: false, requiredProviders: [], tools: {} },
     notificationConfig: { inApp: true, email: false, slack: false },
     schedule: raw.schedule,
   };
@@ -109,9 +109,9 @@ export const Route = createFileRoute("/api/blueprint")({
           .map((skill) => `- ${skill.id}: ${skill.name} — ${skill.description}`)
           .join("\n");
 
-        const providerList = CONNECTABLE_PROVIDER_SLUGS
-          .map((slug) => `- ${slug}: ${getProviderName(slug)} — ${getProviderDefaultReason(slug)}`)
-          .join("\n");
+        const providerList = CONNECTABLE_PROVIDER_SLUGS.map(
+          (slug) => `- ${slug}: ${getProviderName(slug)} — ${getProviderDefaultReason(slug)}`,
+        ).join("\n");
 
         const prompt = `You design draft agents for Nochore's simplified platform.
 

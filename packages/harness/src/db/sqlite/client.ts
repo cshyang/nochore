@@ -10,6 +10,8 @@ const RESET_TABLES = [
   "agent_events",
   "runs",
   "approvals",
+  "learned_policy_rules",
+  "suggestion_suppressions",
   "run_events",
   "lessons",
   "agents",
@@ -77,13 +79,43 @@ const CREATE_DDL = `
     tool_name TEXT NOT NULL,
     tool_input TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    request_reason TEXT,
+    request_event_id TEXT,
     decision_reason TEXT,
     created_at INTEGER NOT NULL,
+    expires_at INTEGER,
     resolved_at INTEGER
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_approvals_approval_id ON approvals (approval_id);
   CREATE INDEX IF NOT EXISTS idx_approvals_agent_created ON approvals (agent_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_approvals_run ON approvals (run_id);
+
+  CREATE TABLE IF NOT EXISTS learned_policy_rules (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    learned_decision TEXT NOT NULL,
+    conditions TEXT,
+    evidence_count INTEGER NOT NULL,
+    consistency_rate REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'suggested',
+    suggested_at INTEGER NOT NULL,
+    accepted_at INTEGER,
+    revoked_at INTEGER,
+    expires_at INTEGER,
+    user_note TEXT,
+    source_approval_ids TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_learned_rules_agent_status ON learned_policy_rules (agent_id, status);
+  CREATE INDEX IF NOT EXISTS idx_learned_rules_agent_tool ON learned_policy_rules (agent_id, tool_name);
+
+  CREATE TABLE IF NOT EXISTS suggestion_suppressions (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    suppressed_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_suppressions_agent_tool ON suggestion_suppressions (agent_id, tool_name);
 
   CREATE TABLE IF NOT EXISTS lessons (
     id TEXT PRIMARY KEY,
@@ -153,6 +185,17 @@ function migrateAddColumns(sqlite: Database.Database) {
   const runCols = sqlite.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
   if (runCols.length > 0 && !runCols.some((c) => c.name === "trigger_run_id")) {
     sqlite.exec("ALTER TABLE runs ADD COLUMN trigger_run_id TEXT");
+  }
+
+  const approvalCols = sqlite.prepare("PRAGMA table_info(approvals)").all() as Array<{ name: string }>;
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "request_reason")) {
+    sqlite.exec("ALTER TABLE approvals ADD COLUMN request_reason TEXT");
+  }
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "request_event_id")) {
+    sqlite.exec("ALTER TABLE approvals ADD COLUMN request_event_id TEXT");
+  }
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "expires_at")) {
+    sqlite.exec("ALTER TABLE approvals ADD COLUMN expires_at INTEGER");
   }
 }
 

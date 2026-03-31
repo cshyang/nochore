@@ -5,6 +5,7 @@ import { getProjectPersistence } from "../../../../packages/harness/src/persiste
 import { AgentRepository } from "../../../../packages/harness/src/repositories/agent";
 import { ApprovalRepository } from "../../../../packages/harness/src/repositories/approval";
 import { RunEventRepository } from "../../../../packages/harness/src/repositories/event";
+import { LearnedRuleRepository } from "../../../../packages/harness/src/repositories/learned-rule";
 import { LessonRepository } from "../../../../packages/harness/src/repositories/lesson";
 import { RunRepository } from "../../../../packages/harness/src/repositories/run";
 import { listPromptSkills } from "../../../../packages/harness/src/skills";
@@ -21,6 +22,7 @@ export interface ProjectDeps {
   runEventRepository: RunEventRepository;
   approvalRepository: ApprovalRepository;
   lessonRepository: LessonRepository;
+  learnedRuleRepository: LearnedRuleRepository;
 }
 
 export function getProjectDeps(projectId: string): ProjectDeps {
@@ -32,6 +34,7 @@ export function getProjectDeps(projectId: string): ProjectDeps {
     runEventRepository: new RunEventRepository(db),
     approvalRepository: new ApprovalRepository(db),
     lessonRepository: new LessonRepository(db),
+    learnedRuleRepository: new LearnedRuleRepository(db),
   };
 }
 
@@ -85,17 +88,21 @@ export async function getProjectView(projectId: string) {
     return null;
   }
 
-  const { db, agentRepository, runRepository, lessonRepository } = getProjectDeps(projectId);
+  const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository } =
+    getProjectDeps(projectId);
   const agentRows = await agentRepository.listByProject(projectId);
+  const agentNameById = new Map(agentRows.map((agent) => [agent.id, agent.name]));
   const agents = await Promise.all(
     agentRows.map(async (agent) =>
       buildAgentView({
         agent,
         db,
         runs: await runRepository.getByAgent(agent.id),
-        approvals: [],
+        approvals: await approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
         lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
         activeConnections: agent.toolConfig.requiredProviders,
+        learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
+        learnedRules: await learnedRuleRepository.listAccepted(agent.id),
       }),
     ),
   );
@@ -110,6 +117,13 @@ export async function getProjectView(projectId: string) {
   return buildProjectView({
     project,
     agents,
+    needsInput: (await approvalRepository.listByProject(projectId, ["pending", "expired"])).map((approval) => ({
+      id: approval.id,
+      agentId: approval.agentId,
+      agentName: agentNameById.get(approval.agentId) ?? "Agent",
+      runId: approval.runId,
+      approval,
+    })),
     activeConnectionCount,
   });
 }

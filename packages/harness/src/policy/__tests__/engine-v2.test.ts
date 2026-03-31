@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ToolConfigEntry } from "../../types";
 import { evaluatePolicy } from "../engine";
+import { buildToolConfigEntry } from "../tool-catalog";
 
 function makeToolConfig(patch: Partial<ToolConfigEntry> = {}): ToolConfigEntry {
   return {
@@ -28,6 +29,7 @@ describe("simplified policy engine", () => {
         now: new Date(),
         globalApprovalRequired: false,
         recentToolCalls: [],
+        learnedRules: [],
       },
     );
 
@@ -45,6 +47,7 @@ describe("simplified policy engine", () => {
         now: new Date(),
         globalApprovalRequired: false,
         recentToolCalls: [],
+        learnedRules: [],
       },
     );
 
@@ -68,6 +71,7 @@ describe("simplified policy engine", () => {
             timestamp: new Date("2026-03-24T09:45:00Z"),
           },
         ],
+        learnedRules: [],
       },
     );
 
@@ -89,6 +93,7 @@ describe("simplified policy engine", () => {
         now: new Date(),
         globalApprovalRequired: false,
         recentToolCalls: [],
+        learnedRules: [],
       },
     );
 
@@ -106,6 +111,7 @@ describe("simplified policy engine", () => {
         now: new Date(),
         globalApprovalRequired: true,
         recentToolCalls: [],
+        learnedRules: [],
       },
     );
 
@@ -130,9 +136,98 @@ describe("simplified policy engine", () => {
         now: new Date(),
         globalApprovalRequired: false,
         recentToolCalls: [],
+        learnedRules: [],
       },
     );
 
     expect(decision.result).toBe("auto");
+  });
+
+  it("uses learned auto rules after static checks pass", () => {
+    const decision = evaluatePolicy(
+      {
+        toolName: "googleads_adjust_budget",
+        toolInput: { amount: 75 },
+        toolConfig: makeToolConfig({ approvalMode: "approval" }),
+      },
+      {
+        now: new Date(),
+        globalApprovalRequired: false,
+        recentToolCalls: [],
+        learnedRules: [
+          {
+            id: "rule_001",
+            agentId: "agent_001",
+            toolName: "googleads_adjust_budget",
+            learnedDecision: "auto",
+            conditions: { amount: { operator: "lte", value: 100 } },
+            evidenceCount: 6,
+            consistencyRate: 1,
+            status: "accepted",
+            suggestedAt: new Date("2026-03-30T00:00:00Z"),
+            acceptedAt: new Date("2026-03-31T00:00:00Z"),
+            sourceApprovalIds: ["approval_001"],
+          },
+        ],
+      },
+    );
+
+    expect(decision.result).toBe("auto");
+  });
+
+  it("defaults uncatalogued read tools to auto", () => {
+    const tool = buildToolConfigEntry({
+      toolName: "googleads_list_campaigns",
+      provider: "googleads",
+      title: "List Campaigns",
+      description: "List campaign metrics.",
+    });
+
+    expect(tool.mode).toBe("read");
+    expect(tool.approvalMode).toBe("auto");
+  });
+
+  it("defaults uncatalogued write tools to approval", () => {
+    const tool = buildToolConfigEntry({
+      toolName: "googleads_adjust_budget",
+      provider: "googleads",
+      title: "Adjust Budget",
+      description: "Update campaign budget.",
+    });
+
+    expect(tool.mode).toBe("write");
+    expect(tool.approvalMode).toBe("approval");
+  });
+
+  it("keeps blocked static policy stricter than learned auto rules", () => {
+    const decision = evaluatePolicy(
+      {
+        toolName: "googleads_adjust_budget",
+        toolInput: { amount: 75 },
+        toolConfig: makeToolConfig({ approvalMode: "blocked" }),
+      },
+      {
+        now: new Date(),
+        globalApprovalRequired: false,
+        recentToolCalls: [],
+        learnedRules: [
+          {
+            id: "rule_002",
+            agentId: "agent_001",
+            toolName: "googleads_adjust_budget",
+            learnedDecision: "auto",
+            conditions: { amount: { operator: "lte", value: 100 } },
+            evidenceCount: 6,
+            consistencyRate: 1,
+            status: "accepted",
+            suggestedAt: new Date("2026-03-30T00:00:00Z"),
+            acceptedAt: new Date("2026-03-31T00:00:00Z"),
+            sourceApprovalIds: ["approval_001"],
+          },
+        ],
+      },
+    );
+
+    expect(decision.result).toBe("blocked");
   });
 });
