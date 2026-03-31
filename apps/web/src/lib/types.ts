@@ -20,7 +20,7 @@ export type RunEventType =
 
 export interface LearnedRuleConditionView {
   operator: "eq" | "lt" | "gt" | "lte" | "gte" | "in";
-  value: unknown;
+  value?: unknown;
 }
 
 export interface LearnedRuleView {
@@ -77,7 +77,7 @@ export interface RunSummaryView {
 export interface RunStepView {
   step: string;
   duration: number;
-  data: unknown;
+  data?: unknown;
 }
 
 export interface RunProposalView {

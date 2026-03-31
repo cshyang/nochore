@@ -8,7 +8,7 @@ import type {
   RunEvent,
   RunRecord,
 } from "../../../../packages/harness/src/types";
-import type { AgentView, ConnectionView, ProjectView } from "../lib/types";
+import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -105,7 +105,7 @@ export function buildAgentView(params: {
     skills: params.agent.skills,
     schedule: params.agent.schedule,
     policyRules: Object.values(params.agent.toolConfig.tools).map((tool) => `${tool.title}: ${tool.approvalMode}`),
-    globalApprovalRequired: params.agent.toolConfig.globalApprovalRequired,
+    globalApprovalRequired: params.agent.toolConfig.globalApprovalRequired ?? false,
     scopeStrategy: "static",
     lifecycleStatus: params.agent.status,
     status,
@@ -120,11 +120,12 @@ export function buildAgentView(params: {
       reason: connection.reason ?? "",
     })),
     toolConfig: {
-      ...params.agent.toolConfig,
+      globalApprovalRequired: params.agent.toolConfig.globalApprovalRequired ?? false,
       requiredProviders: params.agent.toolConfig.requiredProviders.map((provider) => ({
         provider: provider.provider,
         reason: provider.reason ?? "",
       })),
+      tools: params.agent.toolConfig.tools,
     },
     notificationConfig: params.agent.notificationConfig,
     requiredProviders: params.activeConnections.map((connection) => ({
@@ -274,12 +275,22 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
   }
 }
 
-function buildLearnedRuleView(rule: LearnedPolicyRule) {
+function buildLearnedRuleView(rule: LearnedPolicyRule): LearnedRuleView {
   return {
     id: rule.id,
     toolName: rule.toolName,
     learnedDecision: rule.learnedDecision,
-    conditions: rule.conditions,
+    conditions: rule.conditions
+      ? Object.fromEntries(
+          Object.entries(rule.conditions).map(([key, condition]) => [
+            key,
+            {
+              operator: condition.operator,
+              value: condition.value,
+            },
+          ]),
+        )
+      : null,
     evidenceCount: rule.evidenceCount,
     consistencyRate: rule.consistencyRate,
     status: rule.status,
