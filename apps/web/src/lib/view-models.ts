@@ -1,24 +1,7 @@
 import { z } from "zod";
-import type {
-  AgentView,
-  ConnectionView,
-  LearnedRuleConditionView,
-  LearnedRuleView,
-  NotificationConfigView,
-  PendingActionView,
-  ProjectNeedsInputView,
-  ProjectView,
-  ProviderRequirementView,
-  RunEventView,
-  RunResultView,
-  RunView,
-  SkillView,
-  ToolConfigView,
-} from "./types";
+import type { AgentView, ConnectionView, ProjectView, RunView, SkillView, ToolConfigEntryView } from "./types";
 
-type ViewSchema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
-
-const ProviderRequirementViewSchema: ViewSchema<ProviderRequirementView> = z.object({
+const ProviderRequirementViewSchema = z.object({
   provider: z.string(),
   reason: z.string(),
   status: z.string().optional(),
@@ -38,31 +21,31 @@ const ToolConfigEntryViewSchema = z.object({
   budgetThreshold: z.number().optional(),
 });
 
-const ToolConfigViewSchema: ViewSchema<ToolConfigView> = z.object({
+const ToolConfigViewSchema = z.object({
   globalApprovalRequired: z.boolean().default(false),
   requiredProviders: z.array(ProviderRequirementViewSchema),
   tools: z.record(z.string(), ToolConfigEntryViewSchema),
 });
 
-const NotificationConfigViewSchema: ViewSchema<NotificationConfigView> = z.object({
+const NotificationConfigViewSchema = z.object({
   inApp: z.boolean(),
   email: z.boolean(),
   slack: z.boolean(),
 });
 
-const RunEventViewSchema: ViewSchema<RunEventView> = z.object({
+const RunEventViewSchema = z.object({
   id: z.string(),
   type: z.string(),
   timestamp: z.string(),
   payload: z.record(z.string(), z.unknown()),
 });
 
-const LearnedRuleConditionViewSchema: ViewSchema<LearnedRuleConditionView> = z.object({
+const LearnedRuleConditionViewSchema = z.object({
   operator: z.enum(["eq", "lt", "gt", "lte", "gte", "in"]),
   value: z.unknown(),
 });
 
-const LearnedRuleViewSchema: ViewSchema<LearnedRuleView> = z.object({
+const LearnedRuleViewSchema = z.object({
   id: z.string(),
   toolName: z.string(),
   learnedDecision: z.enum(["auto", "approval", "blocked"]),
@@ -74,7 +57,7 @@ const LearnedRuleViewSchema: ViewSchema<LearnedRuleView> = z.object({
   acceptedAt: z.string().optional(),
 });
 
-const RunResultViewSchema: ViewSchema<RunResultView> = z.object({
+const RunResultViewSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   duration: z.number(),
@@ -97,7 +80,7 @@ const RunResultViewSchema: ViewSchema<RunResultView> = z.object({
   eventsLogged: z.number(),
 });
 
-const PendingActionViewSchema: ViewSchema<PendingActionView> = z.object({
+const PendingActionViewSchema = z.object({
   id: z.string(),
   runId: z.string(),
   agentId: z.string(),
@@ -115,7 +98,7 @@ const PendingActionViewSchema: ViewSchema<PendingActionView> = z.object({
   resolvedReason: z.string().optional(),
 });
 
-const RunViewSchema: ViewSchema<RunView> = z.object({
+const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   triggerType: z.string(),
@@ -129,13 +112,13 @@ const RunViewSchema: ViewSchema<RunView> = z.object({
   result: RunResultViewSchema.optional(),
 });
 
-const SkillViewSchema: ViewSchema<SkillView> = z.object({
+const SkillViewSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().optional().default(""),
 });
 
-const ConnectionViewSchema: ViewSchema<ConnectionView> = z.object({
+const ConnectionViewSchema = z.object({
   id: z.string(),
   provider: z.string(),
   status: z.string(),
@@ -144,7 +127,7 @@ const ConnectionViewSchema: ViewSchema<ConnectionView> = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
-const AgentViewSchema: ViewSchema<AgentView> = z.object({
+const AgentViewSchema = z.object({
   id: z.string(),
   projectId: z.string().optional(),
   name: z.string(),
@@ -174,7 +157,7 @@ const AgentViewSchema: ViewSchema<AgentView> = z.object({
   scopeStrategy: z.enum(["static", "llm"]).optional(),
 });
 
-const ProjectNeedsInputViewSchema: ViewSchema<ProjectNeedsInputView> = z.object({
+const ProjectNeedsInputViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   agentName: z.string(),
@@ -182,7 +165,7 @@ const ProjectNeedsInputViewSchema: ViewSchema<ProjectNeedsInputView> = z.object(
   approval: PendingActionViewSchema,
 });
 
-const ProjectViewSchema: ViewSchema<ProjectView> = z.object({
+const ProjectViewSchema = z.object({
   id: z.string(),
   name: z.string(),
   icon: z.string(),
@@ -194,14 +177,14 @@ const ProjectViewSchema: ViewSchema<ProjectView> = z.object({
   createdAt: z.number(),
 });
 
-function parseNullableSchema<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T | null {
+function parseNullableSchema<T>(schema: z.ZodTypeAny, value: unknown): T | null {
   const result = schema.safeParse(value);
-  return result.success ? result.data : null;
+  return result.success ? (result.data as T) : null;
 }
 
-function parseArraySchema<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown): T[] {
+function parseArraySchema<T>(schema: z.ZodTypeAny, value: unknown): T[] {
   const result = z.array(schema).safeParse(value);
-  return result.success ? result.data : [];
+  return result.success ? (result.data as T[]) : [];
 }
 
 export function parseProjectView(value: unknown): ProjectView | null {
@@ -224,6 +207,6 @@ export function parseRunViews(value: unknown): RunView[] {
   return parseArraySchema(RunViewSchema, value);
 }
 
-export function parseToolConfigEntryViews(value: unknown) {
+export function parseToolConfigEntryViews(value: unknown): ToolConfigEntryView[] {
   return parseArraySchema(ToolConfigEntryViewSchema, value);
 }
