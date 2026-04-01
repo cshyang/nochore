@@ -43,6 +43,69 @@ export const runs = sqliteTable(
   (table) => [index("idx_runs_agent_started").on(table.agentId, table.startedAt)],
 );
 
+export const conversationThreads = sqliteTable(
+  "conversation_threads",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    scope: text("scope").notNull(),
+    channelKind: text("channel_kind").notNull(),
+    channelKey: text("channel_key"),
+    title: text("title").notNull().default(""),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    lastMessageAt: integer("last_message_at"),
+    lastInputTokens: integer("last_input_tokens"),
+    lastOutputTokens: integer("last_output_tokens"),
+    lastTotalTokens: integer("last_total_tokens"),
+    lastCompactedAt: integer("last_compacted_at"),
+    consecutiveCompactionFailures: integer("consecutive_compaction_failures").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("idx_conversation_threads_agent_scope").on(table.agentId, table.scope),
+    index("idx_conversation_threads_agent_updated").on(table.agentId, table.updatedAt),
+  ],
+);
+
+export const conversationEvents = sqliteTable(
+  "conversation_events",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    source: text("source").notNull(),
+    role: text("role").notNull(),
+    eventType: text("event_type").notNull(),
+    messageId: text("message_id"),
+    eventKey: text("event_key"),
+    payload: text("payload").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_conversation_events_thread_created").on(table.threadId, table.createdAt),
+    index("idx_conversation_events_agent_created").on(table.agentId, table.createdAt),
+    uniqueIndex("idx_conversation_events_thread_message").on(table.threadId, table.messageId),
+    uniqueIndex("idx_conversation_events_thread_event_key").on(table.threadId, table.eventKey),
+  ],
+);
+
+export const conversationCheckpoints = sqliteTable(
+  "conversation_checkpoints",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    kind: text("kind").notNull(),
+    summary: text("summary").notNull(),
+    messageCount: integer("message_count").notNull().default(0),
+    estimatedTokens: integer("estimated_tokens"),
+    coversThroughMessageId: text("covers_through_message_id"),
+    summaryVersion: integer("summary_version").notNull().default(1),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("idx_conversation_checkpoints_thread_kind").on(table.threadId, table.kind)],
+);
+
 export const runEvents = sqliteTable(
   "run_events",
   {
@@ -127,7 +190,7 @@ export const lessons = sqliteTable(
     content: text("content").notNull(),
     scope: text("scope").notNull(),
     confidence: text("confidence").notNull(),
-    sourceRunEventIds: text("source_run_event_ids").notNull(),
+    sourceEventIds: text("source_run_event_ids").notNull(),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at"),
   },

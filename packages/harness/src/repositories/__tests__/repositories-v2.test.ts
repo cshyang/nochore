@@ -3,6 +3,9 @@ import { createTestDb } from "../../db/client";
 import { projects } from "../../db/schema";
 import { AgentRepository } from "../agent";
 import { ApprovalRepository } from "../approval";
+import { ConversationCheckpointRepository } from "../conversation-checkpoint";
+import { ConversationEventRepository } from "../conversation-event";
+import { ConversationThreadRepository } from "../conversation-thread";
 import { RunEventRepository } from "../event";
 import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
@@ -165,7 +168,7 @@ describe("simplified repositories", () => {
       content: "Exclude coupon-seeking traffic.",
       scope: "search_terms",
       confidence: "high",
-      sourceRunEventIds: ["evt_001"],
+      sourceEventIds: ["evt_001"],
       createdAt: now,
     });
     await repo.create({
@@ -173,7 +176,7 @@ describe("simplified repositories", () => {
       content: "Old pacing observation",
       scope: "budget",
       confidence: "low",
-      sourceRunEventIds: ["evt_002"],
+      sourceEventIds: ["evt_002"],
       createdAt: now,
       expiresAt: new Date(now.getTime() - 60_000),
     });
@@ -181,5 +184,159 @@ describe("simplified repositories", () => {
     const lessons = await repo.listByAgent("agent_001");
     expect(lessons).toHaveLength(1);
     expect(lessons[0]?.scope).toBe("search_terms");
+  });
+
+  it("separates durable and episodic lessons", async () => {
+    const db = createTestDb();
+    const repo = new LessonRepository(db);
+    const now = new Date();
+
+    await repo.create({
+      agentId: "agent_001",
+      content: "Use weekly summaries.",
+      scope: "memory:preference",
+      confidence: "high",
+      sourceEventIds: ["evt_001"],
+      createdAt: now,
+    });
+    await repo.create({
+      agentId: "agent_001",
+      content: "Checked this yesterday and found no issue.",
+      scope: "episode:no-finding",
+      confidence: "low",
+      sourceEventIds: ["evt_002"],
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 60_000),
+    });
+
+    const durable = await repo.listDurableByAgent("agent_001");
+    const episodic = await repo.listEpisodicByAgent("agent_001");
+
+    expect(durable).toHaveLength(1);
+    expect(durable[0]?.scope).toBe("memory:preference");
+    expect(episodic).toHaveLength(1);
+    expect(episodic[0]?.scope).toBe("episode:no-finding");
+  });
+
+  it("creates one primary conversation thread per agent and reuses it", async () => {
+    const db = createTestDb();
+    const repo = new ConversationThreadRepository(db);
+
+    const first = await repo.getOrCreatePrimary("agent_001");
+    const second = await repo.getOrCreatePrimary("agent_001");
+
+    expect(second.id).toBe(first.id);
+    expect(second.scope).toBe("primary");
+    expect(second.channelKind).toBe("web");
+  });
+
+  it("upserts conversation messages and rolling checkpoints", async () => {
+    const db = createTestDb();
+    const threadRepo = new ConversationThreadRepository(db);
+    const eventRepo = new ConversationEventRepository(db);
+    const checkpointRepo = new ConversationCheckpointRepository(db);
+    const thread = await threadRepo.getOrCreatePrimary("agent_001");
+
+    await eventRepo.upsertMessages([
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        createdAt: new Date("2026-04-01T10:00:00Z"),
+        message: {
+          id: "msg_001",
+          role: "assistant",
+          parts: [{ type: "text", text: "Initial answer" }],
+        },
+      },
+    ]);
+
+    await eventRepo.upsertMessages([
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        createdAt: new Date("2026-04-01T10:01:00Z"),
+        message: {
+          id: "msg_001",
+          role: "assistant",
+          parts: [{ type: "text", text: "Updated answer" }],
+        },
+      },
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        createdAt: new Date("2026-04-01T10:02:00Z"),
+        message: {
+          id: "msg_002",
+          role: "user",
+          parts: [{ type: "text", text: "Follow-up question" }],
+        },
+      },
+    ]);
+
+    const messages = await eventRepo.listAllMessagesByThread(thread.id);
+    const firstMessage = eventRepo.toUIMessage(messages[0]!);
+    expect(messages).toHaveLength(2);
+    expect(firstMessage?.parts[0]).toMatchObject({ type: "text", text: "Updated answer" });
+
+    await checkpointRepo.upsert({
+      threadId: thread.id,
+      summary: "Earlier conversation summary (1 messages):\n- Assistant: Updated answer",
+      messageCount: 1,
+      estimatedTokens: 42,
+      coversThroughMessageId: "msg_001",
+    });
+
+    const checkpoint = await checkpointRepo.getByThread(thread.id);
+    expect(checkpoint?.messageCount).toBe(1);
+    expect(checkpoint?.estimatedTokens).toBe(42);
+    expect(checkpoint?.summaryVersion).toBe(1);
+    expect(checkpoint?.coversThroughMessageId).toBe("msg_001");
+  });
+
+  it("upserts structured conversation events by event key", async () => {
+    const db = createTestDb();
+    const threadRepo = new ConversationThreadRepository(db);
+    const eventRepo = new ConversationEventRepository(db);
+    const thread = await threadRepo.getOrCreatePrimary("agent_001");
+
+    await eventRepo.upsertStructuredEvents([
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        role: "assistant",
+        eventType: "tool_call",
+        eventKey: "tool:tool_001:call",
+        messageId: "msg_001",
+        payload: {
+          toolCallId: "tool_001",
+          toolName: "request_input",
+          input: { question: "Approve?" },
+        },
+        createdAt: new Date("2026-04-01T10:00:00Z"),
+      },
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        role: "tool",
+        eventType: "tool_output",
+        eventKey: "tool:tool_001:output",
+        messageId: "msg_001",
+        payload: {
+          toolCallId: "tool_001",
+          toolName: "request_input",
+          output: { selectedKeys: ["yes"] },
+        },
+        createdAt: new Date("2026-04-01T10:00:01Z"),
+      },
+    ]);
+
+    const events = await eventRepo.listStructuredEventsByThread(thread.id);
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.eventType)).toEqual(["tool_call", "tool_output"]);
   });
 });

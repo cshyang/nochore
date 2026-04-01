@@ -123,7 +123,7 @@ async function loadProjectView(projectId: string) {
     const agentViews = await Promise.all(
       agentRows.map(async (agent) => {
         const runs = await runRepository.getByAgent(agent.id);
-        const lessons = await lessonRepository.listByAgent(agent.id);
+        const lessons = await lessonRepository.listDurableByAgent(agent.id);
         return buildAgentView({
           agent,
           db,

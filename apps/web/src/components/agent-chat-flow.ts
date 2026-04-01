@@ -1,7 +1,7 @@
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentView, RunView } from "~/lib/types";
 import { isRequestInputPart } from "~/components/onboarding-chat-messages";
 
@@ -19,8 +19,10 @@ function computeGreeting(agent: AgentView, runs: RunView[]): string {
 export function useAgentChatFlow(params: {
   agentId: string;
   projectId: string;
+  threadId?: string;
   agent: AgentView;
   runs: RunView[];
+  initialMessages?: UIMessage[];
   onRunTriggered?: (runId: string, triggerRunId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -29,26 +31,33 @@ export function useAgentChatFlow(params: {
   const [inputValue, setInputValue] = useState("");
 
   const greeting = computeGreeting(params.agent, params.runs);
+  const initialMessages =
+    params.initialMessages && params.initialMessages.length > 0
+      ? params.initialMessages
+      : [
+          {
+            id: "greeting",
+            role: "assistant" as const,
+            parts: [{ type: "text" as const, text: greeting }],
+          },
+        ];
 
-  const transport = useRef(
-    new DefaultChatTransport({
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
       api: "/api/agent-chat",
       body: {
         agentId: params.agentId,
         projectId: params.projectId,
+        threadId: params.threadId,
       },
     }),
-  ).current;
+    [params.agentId, params.projectId, params.threadId],
+  );
 
   const { messages, sendMessage, addToolOutput, status } = useChat({
     transport,
-    messages: [
-      {
-        id: "greeting",
-        role: "assistant" as const,
-        parts: [{ type: "text" as const, text: greeting }],
-      },
-    ],
+    messages: initialMessages,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onFinish: ({ message }) => {
       for (const part of message.parts) {

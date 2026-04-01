@@ -4,6 +4,9 @@ import { agents, connections, projects } from "../../../../packages/harness/src/
 import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import { AgentRepository } from "../../../../packages/harness/src/repositories/agent";
 import { ApprovalRepository } from "../../../../packages/harness/src/repositories/approval";
+import { ConversationCheckpointRepository } from "../../../../packages/harness/src/repositories/conversation-checkpoint";
+import { ConversationEventRepository } from "../../../../packages/harness/src/repositories/conversation-event";
+import { ConversationThreadRepository } from "../../../../packages/harness/src/repositories/conversation-thread";
 import { RunEventRepository } from "../../../../packages/harness/src/repositories/event";
 import { LearnedRuleRepository } from "../../../../packages/harness/src/repositories/learned-rule";
 import { LessonRepository } from "../../../../packages/harness/src/repositories/lesson";
@@ -18,6 +21,9 @@ const dbCache = new Map<string, HarnessDb>();
 export interface ProjectDeps {
   db: HarnessDb;
   agentRepository: AgentRepository;
+  conversationThreadRepository: ConversationThreadRepository;
+  conversationEventRepository: ConversationEventRepository;
+  conversationCheckpointRepository: ConversationCheckpointRepository;
   runRepository: RunRepository;
   runEventRepository: RunEventRepository;
   approvalRepository: ApprovalRepository;
@@ -30,6 +36,9 @@ export function getProjectDeps(projectId: string): ProjectDeps {
   return {
     db,
     agentRepository: new AgentRepository(db),
+    conversationThreadRepository: new ConversationThreadRepository(db),
+    conversationEventRepository: new ConversationEventRepository(db),
+    conversationCheckpointRepository: new ConversationCheckpointRepository(db),
     runRepository: new RunRepository(db),
     runEventRepository: new RunEventRepository(db),
     approvalRepository: new ApprovalRepository(db),
@@ -99,7 +108,7 @@ export async function getProjectView(projectId: string) {
         db,
         runs: await runRepository.getByAgent(agent.id),
         approvals: await approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
-        lessonsCount: (await lessonRepository.listByAgent(agent.id)).length,
+        lessonsCount: (await lessonRepository.listDurableByAgent(agent.id)).length,
         activeConnections: agent.toolConfig.requiredProviders,
         learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
         learnedRules: await learnedRuleRepository.listAccepted(agent.id),

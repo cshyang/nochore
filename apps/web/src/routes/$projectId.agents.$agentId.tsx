@@ -5,6 +5,7 @@ import { isDirectProvider } from "~/lib/provider-metadata";
 import {
   parseAgentView,
   parseConnectionViews,
+  parseConversationStateView,
   parseProjectView,
   parseRunViews,
   parseSkillViews,
@@ -12,6 +13,7 @@ import {
 } from "~/lib/view-models";
 import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { approveAction, rejectAction } from "~/server/approvals";
+import { getPrimaryConversationState } from "~/server/chat";
 import {
   createDirectConnection,
   disconnectProvider,
@@ -49,21 +51,22 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
     const { projectId, agentId } = params;
     try {
-      const [project, agent, runs, skills, projectConnections, toolkitSummaries, policyToolCatalog] = await Promise.all(
-        [
+      const [project, agent, runs, conversation, skills, projectConnections, toolkitSummaries, policyToolCatalog] =
+        await Promise.all([
           getProject({ data: { projectId } }),
           getAgent({ data: { agentId, projectId } }),
           getRunHistory({ data: { agentId, projectId, limit: 20 } }),
+          getPrimaryConversationState({ data: { agentId, projectId, limit: 12 } }),
           listAvailableSkills(),
           listConnections({ data: { projectId } }),
           fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
           getPolicyToolCatalog({ data: { projectId } }).catch(() => []),
-        ],
-      );
+        ]);
       return {
         project,
         agent,
         runs: runs ?? [],
+        conversation,
         skills: skills ?? [],
         projectConnections: projectConnections ?? [],
         toolkitSummaries: toolkitSummaries ?? [],
@@ -74,6 +77,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         project: null,
         agent: null,
         runs: [],
+        conversation: null,
         skills: [],
         projectConnections: [],
         toolkitSummaries: [],
@@ -98,6 +102,7 @@ function AgentDetailPage() {
   const skills = parseSkillViews(loaderData.skills);
   const projectConnections = parseConnectionViews(loaderData.projectConnections);
   const runs = parseRunViews(loaderData.runs);
+  const conversation = parseConversationStateView(loaderData.conversation);
   const policyToolCatalog = parseToolConfigEntryViews(loaderData.policyToolCatalog);
 
   // Build provider logo map from Composio toolkit summaries
@@ -312,6 +317,7 @@ function AgentDetailPage() {
         void router.invalidate();
       }}
       runs={runs}
+      conversation={conversation ?? undefined}
       onRunTriggered={async (runId, triggerRunId) => {
         void activateRun(runId, triggerRunId);
         void router.invalidate();

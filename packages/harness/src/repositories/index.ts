@@ -1,4 +1,15 @@
 export {
+  ConversationCheckpointRepository,
+} from "./conversation-checkpoint";
+export {
+  ConversationEventRepository,
+  type UpsertConversationMessageInput,
+} from "./conversation-event";
+export {
+  ConversationThreadRepository,
+  type CreateConversationThreadInput,
+} from "./conversation-thread";
+export {
   type AgentRecord,
   AgentRepository,
   type CreateAgentInput,
@@ -17,6 +28,8 @@ export {
 } from "./learned-rule";
 export {
   type CreateLessonInput,
+  isDurableLessonScope,
+  isEpisodicLessonScope,
   type LessonRecord,
   LessonRepository,
 } from "./lesson";

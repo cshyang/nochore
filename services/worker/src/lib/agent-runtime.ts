@@ -11,6 +11,8 @@ import {
   type AgentRecord,
   AgentRepository,
   ApprovalRepository,
+  ConversationEventRepository,
+  ConversationThreadRepository,
   LearnedRuleRepository,
   LessonRepository,
   RunEventRepository,
@@ -24,6 +26,8 @@ export interface WorkerRuntime {
   db: HarnessDb;
   agentRepository: AgentRepository;
   approvalRepository: ApprovalRepository;
+  conversationEventRepository: ConversationEventRepository;
+  conversationThreadRepository: ConversationThreadRepository;
   lessonRepository: LessonRepository;
   learnedRuleRepository: LearnedRuleRepository;
   runEventRepository: RunEventRepository;
@@ -55,6 +59,8 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
     db,
     agentRepository: new AgentRepository(db),
     approvalRepository: new ApprovalRepository(db),
+    conversationEventRepository: new ConversationEventRepository(db),
+    conversationThreadRepository: new ConversationThreadRepository(db),
     lessonRepository: new LessonRepository(db),
     learnedRuleRepository: new LearnedRuleRepository(db),
     runEventRepository: new RunEventRepository(db),

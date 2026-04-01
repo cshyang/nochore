@@ -234,7 +234,7 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
     db: deps.db,
     runs: await deps.runRepository.getByAgent(agent.id),
     approvals: await deps.approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
-    lessonsCount: (await deps.lessonRepository.listByAgent(agent.id)).length,
+    lessonsCount: (await deps.lessonRepository.listDurableByAgent(agent.id)).length,
     activeConnections: agent.toolConfig.requiredProviders,
     learnedRuleSuggestions: await deps.learnedRuleRepository.listSuggested(agent.id),
     learnedRules: await deps.learnedRuleRepository.listAccepted(agent.id),

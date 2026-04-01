@@ -8,6 +8,9 @@ const RESET_TABLES = [
   "action_executions",
   "pending_actions",
   "agent_events",
+  "conversation_checkpoints",
+  "conversation_events",
+  "conversation_threads",
   "runs",
   "approvals",
   "learned_policy_rules",
@@ -58,6 +61,56 @@ const CREATE_DDL = `
     trigger_run_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_runs_agent_started ON runs (agent_id, started_at);
+
+  CREATE TABLE IF NOT EXISTS conversation_threads (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    channel_kind TEXT NOT NULL,
+    channel_key TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_message_at INTEGER,
+    last_input_tokens INTEGER,
+    last_output_tokens INTEGER,
+    last_total_tokens INTEGER,
+    last_compacted_at INTEGER,
+    consecutive_compaction_failures INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_threads_agent_scope ON conversation_threads (agent_id, scope);
+  CREATE INDEX IF NOT EXISTS idx_conversation_threads_agent_updated ON conversation_threads (agent_id, updated_at);
+
+  CREATE TABLE IF NOT EXISTS conversation_events (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    role TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    message_id TEXT,
+    event_key TEXT,
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_conversation_events_thread_created ON conversation_events (thread_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_conversation_events_agent_created ON conversation_events (agent_id, created_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_events_thread_message ON conversation_events (thread_id, message_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_events_thread_event_key ON conversation_events (thread_id, event_key);
+
+  CREATE TABLE IF NOT EXISTS conversation_checkpoints (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    estimated_tokens INTEGER,
+    covers_through_message_id TEXT,
+    summary_version INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_checkpoints_thread_kind ON conversation_checkpoints (thread_id, kind);
 
   CREATE TABLE IF NOT EXISTS run_events (
     id TEXT PRIMARY KEY,
@@ -185,6 +238,44 @@ function migrateAddColumns(sqlite: Database.Database) {
   const runCols = sqlite.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
   if (runCols.length > 0 && !runCols.some((c) => c.name === "trigger_run_id")) {
     sqlite.exec("ALTER TABLE runs ADD COLUMN trigger_run_id TEXT");
+  }
+
+  const conversationThreadCols = sqlite.prepare("PRAGMA table_info(conversation_threads)").all() as Array<{ name: string }>;
+  if (conversationThreadCols.length > 0 && !conversationThreadCols.some((c) => c.name === "last_input_tokens")) {
+    sqlite.exec("ALTER TABLE conversation_threads ADD COLUMN last_input_tokens INTEGER");
+  }
+  if (conversationThreadCols.length > 0 && !conversationThreadCols.some((c) => c.name === "last_output_tokens")) {
+    sqlite.exec("ALTER TABLE conversation_threads ADD COLUMN last_output_tokens INTEGER");
+  }
+  if (conversationThreadCols.length > 0 && !conversationThreadCols.some((c) => c.name === "last_total_tokens")) {
+    sqlite.exec("ALTER TABLE conversation_threads ADD COLUMN last_total_tokens INTEGER");
+  }
+  if (conversationThreadCols.length > 0 && !conversationThreadCols.some((c) => c.name === "last_compacted_at")) {
+    sqlite.exec("ALTER TABLE conversation_threads ADD COLUMN last_compacted_at INTEGER");
+  }
+  if (
+    conversationThreadCols.length > 0 &&
+    !conversationThreadCols.some((c) => c.name === "consecutive_compaction_failures")
+  ) {
+    sqlite.exec(
+      "ALTER TABLE conversation_threads ADD COLUMN consecutive_compaction_failures INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+
+  const conversationEventCols = sqlite.prepare("PRAGMA table_info(conversation_events)").all() as Array<{ name: string }>;
+  if (conversationEventCols.length > 0 && !conversationEventCols.some((c) => c.name === "event_key")) {
+    sqlite.exec("ALTER TABLE conversation_events ADD COLUMN event_key TEXT");
+  }
+  sqlite.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_events_thread_event_key ON conversation_events (thread_id, event_key)",
+  );
+
+  const conversationCheckpointCols = sqlite.prepare("PRAGMA table_info(conversation_checkpoints)").all() as Array<{ name: string }>;
+  if (conversationCheckpointCols.length > 0 && !conversationCheckpointCols.some((c) => c.name === "estimated_tokens")) {
+    sqlite.exec("ALTER TABLE conversation_checkpoints ADD COLUMN estimated_tokens INTEGER");
+  }
+  if (conversationCheckpointCols.length > 0 && !conversationCheckpointCols.some((c) => c.name === "summary_version")) {
+    sqlite.exec("ALTER TABLE conversation_checkpoints ADD COLUMN summary_version INTEGER NOT NULL DEFAULT 1");
   }
 
   const approvalCols = sqlite.prepare("PRAGMA table_info(approvals)").all() as Array<{ name: string }>;

@@ -1,4 +1,5 @@
 import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
+import { classifyRunLessonWrites } from "../../../../packages/harness/src/conversation/runtime";
 import {
   getGoogleAdsToolsForPi,
   type PiToolDefinition,
@@ -316,16 +317,26 @@ export const agentRunTask = task({
       emitLiveEvent(completeId, "run_completed", completePayload);
       metadata.set("status", "completed");
 
-      if (summary.finalText && summary.finalText.trim().length > 0) {
+      await recordRunResultInConversation(runtime, agent.id, summary);
+
+      const lessonWrites = classifyRunLessonWrites({
+        headline: summary.headline,
+        finalText: summary.finalText,
+        details: summary.details,
+        findingCount: 0,
+        toolCallCount: piResult.toolCalls.length,
+      });
+      for (const lessonWrite of lessonWrites) {
         const lessonId = await runtime.lessonRepository.create({
           agentId: agent.id,
-          content: summary.finalText.slice(0, 2000),
-          scope: "run-summary",
-          confidence: "medium",
-          sourceRunEventIds: eventIds.slice(-10),
+          content: lessonWrite.content,
+          scope: lessonWrite.scope,
+          confidence: lessonWrite.confidence,
+          sourceEventIds: eventIds.slice(-10),
           createdAt: new Date(),
+          expiresAt: lessonWrite.expiresInMs ? new Date(Date.now() + lessonWrite.expiresInMs) : undefined,
         });
-        const lessonPayload = { lessonId, scope: "run-summary" };
+        const lessonPayload = { lessonId, scope: lessonWrite.scope };
         const lessonEventId = await recordEvent(runtime, runId, agent.id, "lesson_distilled", lessonPayload);
         eventIds.push(lessonEventId);
         emitLiveEvent(lessonEventId, "lesson_distilled", lessonPayload);
@@ -358,6 +369,7 @@ export const agentRunTask = task({
       emitLiveEvent(failId, "run_failed", failPayload);
       metadata.set("status", "failed");
       await runtime.runRepository.fail(runId, new Date(), message, summary);
+      await recordRunResultInConversation(runtime, agent.id, summary);
       logger.error("Agent run failed", { runId, agentId: agent.id, error: message });
       if (!isApprovalTerminal) {
         throw error;
@@ -552,6 +564,28 @@ async function recordEvent(
 
   logger.info("Agent run event", { runId, agentId, type });
   return id;
+}
+
+async function recordRunResultInConversation(
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>,
+  agentId: string,
+  summary: RunSummary,
+) {
+  const thread = await runtime.conversationThreadRepository.getOrCreatePrimary(agentId);
+  await runtime.conversationEventRepository.append({
+    threadId: thread.id,
+    agentId,
+    source: "run",
+    role: "system",
+    eventType: "run_result",
+    payload: {
+      status: summary.status,
+      headline: summary.headline,
+      details: summary.details,
+      finalText: summary.finalText,
+    },
+    createdAt: new Date(),
+  });
 }
 
 const INTERNAL_TOOL_MODES: Record<string, ToolMode> = {

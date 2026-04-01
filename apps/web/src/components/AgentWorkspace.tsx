@@ -46,6 +46,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const projectConnections = props.projectConnections ?? [];
   const policyToolCatalog = props.policyToolCatalog ?? [];
   const runs = props.runs ?? [];
+  const conversation = props.conversation;
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
   const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "activity");
@@ -318,9 +319,11 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         {tab === "chat" ? (
           <div className="aw-panel-enter" style={{ height: "100%", minHeight: 0 }}>
             <AgentChatPane
+              key={conversation?.threadId ?? agent.id}
               agent={agent}
               projectId={project.id}
               runs={runs}
+              conversation={conversation}
               onRunTriggered={(runId, triggerRunId) => {
                 setSelectedRunId(runId);
                 onRunTriggered?.(runId, triggerRunId);
@@ -337,15 +340,52 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         ) : null}
 
         {tab === "memory" ? (
-          <div className="aw-panel-enter" style={placeholderPanelStyle}>
-            <div style={placeholderIconStyle}>
-              <BookOpen size={20} weight="bold" color={COLORS.accent} />
+          <div className="aw-panel-enter" style={memoryPanelStyle}>
+            <div style={memoryHeaderStyle}>
+              <div style={placeholderIconStyle}>
+                <BookOpen size={20} weight="bold" color={COLORS.accent} />
+              </div>
+              <div>
+                <div style={placeholderTitleStyle}>Memory dossier</div>
+                <div style={memorySubtitleStyle}>
+                  Relationship summary, distilled run learnings, and context the agent can carry forward.
+                </div>
+              </div>
             </div>
-            <div style={placeholderTitleStyle}>{agent.name} hasn&apos;t learned anything yet</div>
-            <div style={placeholderBodyStyle}>
-              After each run, the agent extracts lessons, patterns, and decisions that make future runs smarter. This
-              view stays quiet until that memory layer starts accumulating real observations.
-            </div>
+
+            {conversation?.checkpointSummary ? (
+              <section style={memorySectionStyle}>
+                <div style={memorySectionLabelStyle}>Relationship summary</div>
+                <div style={memoryCardStyle}>
+                  <div style={memoryMetaStyle}>
+                    Covers {conversation.checkpointMessageCount} earlier
+                    {conversation.checkpointMessageCount === 1 ? " message" : " messages"}
+                  </div>
+                  <div style={memoryBodyStyle}>{conversation.checkpointSummary}</div>
+                </div>
+              </section>
+            ) : null}
+
+            <section style={memorySectionStyle}>
+              <div style={memorySectionLabelStyle}>Durable memory</div>
+              {conversation?.lessons.length ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {conversation.lessons.map((lesson) => (
+                    <div key={lesson.id} style={memoryCardStyle}>
+                      <div style={memoryMetaStyle}>
+                        {lesson.scope} · {lesson.confidence} confidence
+                      </div>
+                      <div style={memoryBodyStyle}>{lesson.content}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={placeholderBodyStyle}>
+                  No durable memory yet. As this agent completes runs and learns stable preferences, corrections, or
+                  decisions, they will show up here and feed future chat context.
+                </div>
+              )}
+            </section>
           </div>
         ) : null}
       </div>
@@ -405,4 +445,59 @@ const placeholderBodyStyle = {
   maxWidth: 440,
   lineHeight: TYPE.leading.normal,
   marginBottom: 24,
+};
+
+const memoryPanelStyle = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 24,
+  padding: "8px 0 24px",
+  width: "100%",
+  maxWidth: 760,
+};
+
+const memoryHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+};
+
+const memorySubtitleStyle = {
+  fontSize: TYPE.scale.sm,
+  color: COLORS.textSecondary,
+  lineHeight: TYPE.leading.normal,
+  maxWidth: 560,
+};
+
+const memorySectionStyle = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 12,
+};
+
+const memorySectionLabelStyle = {
+  fontSize: TYPE.scale.xs,
+  letterSpacing: 0.8,
+  textTransform: "uppercase" as const,
+  color: COLORS.textDim,
+};
+
+const memoryCardStyle = {
+  borderRadius: RADIUS.lg,
+  border: `1px solid ${COLORS.border}`,
+  background: COLORS.surface,
+  padding: 16,
+};
+
+const memoryMetaStyle = {
+  fontSize: TYPE.scale.xs,
+  color: COLORS.textDim,
+  marginBottom: 8,
+};
+
+const memoryBodyStyle = {
+  fontSize: TYPE.scale.base,
+  color: COLORS.textSecondary,
+  lineHeight: TYPE.leading.normal,
+  whiteSpace: "pre-wrap" as const,
 };

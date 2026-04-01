@@ -1,6 +1,7 @@
 import type {
   AgentView,
   ConnectionView,
+  ConversationStateView,
   NotificationConfigView,
   ProjectView,
   ProviderRequirementView,
@@ -43,6 +44,7 @@ export interface AgentWorkspaceProps {
   policyToolCatalog?: ToolConfigEntryView[];
   requiredProviders?: ProviderRequirementView[];
   runs?: RunView[];
+  conversation?: ConversationStateView;
   isDraft?: boolean;
   initialTab?: WorkspaceTab;
   initialRunId?: string | null;

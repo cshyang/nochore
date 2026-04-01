@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { loadConversationLoaderState } from "./chat-memory";
 import { getAgentRow, getProjectDeps } from "./deps";
 import { startAgentRun } from "./orchestration";
 import { jsonSafe } from "./serializable";
@@ -48,4 +49,33 @@ export const getChatHistory = createServerFn({ method: "GET" })
         createdAt: run.completedAt?.toISOString() ?? run.startedAt.toISOString(),
       })),
     );
+  });
+
+export const getPrimaryConversationState = createServerFn({ method: "GET" })
+  .inputValidator((input: { agentId: string; projectId: string; limit?: number }) => input)
+  .handler(async ({ data: { agentId, projectId, limit } }) => {
+    const state = await loadConversationLoaderState({
+      deps: getProjectDeps(projectId),
+      agentId,
+      limit,
+    });
+
+    return jsonSafe({
+      threadId: state.thread.id,
+      checkpointSummary: state.checkpoint?.summary,
+      checkpointMessageCount: state.checkpoint?.messageCount ?? 0,
+      checkpointSummaryVersion: state.checkpoint?.summaryVersion ?? 0,
+      messages: state.messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          parts: message.parts as Array<Record<string, unknown>>,
+        })),
+      lessons: state.durableLessons.map((lesson) => ({
+        id: lesson.id,
+        content: lesson.content,
+        scope: lesson.scope,
+        confidence: lesson.confidence,
+        createdAt: lesson.createdAt.toISOString(),
+      })),
+    });
   });

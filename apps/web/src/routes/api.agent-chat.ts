@@ -6,10 +6,16 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import type { UIMessage } from "ai";
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
+import { stepCountIs, streamText } from "ai";
 import { z } from "zod";
 import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
+import {
+  assembleConversation,
+  persistConversationAfterResponse,
+  persistConversationMessages,
+  resolveConversationThread,
+} from "~/server/chat-memory";
 import { buildAgentChatSystemPrompt } from "~/server/agent-chat-prompt";
 import { getAgentRow, getProjectDeps } from "~/server/deps";
 import { startAgentRun } from "~/server/orchestration";
@@ -20,36 +26,19 @@ type IncomingMessage = {
   parts: unknown[];
 };
 
-type MessagePart = Record<string, unknown>;
-
 type AgentChatRequestBody = {
   messages: IncomingMessage[];
   agentId: string;
   projectId: string;
+  threadId?: string;
 };
-
-/** Strip tool parts that haven't been answered yet (no output). */
-function stripUnansweredToolParts(messages: IncomingMessage[]) {
-  return messages
-    .map((message) => ({
-      ...message,
-      parts: message.parts.filter((part) => {
-        const record = part as MessagePart;
-        const type = record.type as string | undefined;
-        const isToolPart = typeof type === "string" && (type.startsWith("tool-") || type === "dynamic-tool");
-        if (!isToolPart) return true;
-        return record.state === "output-available";
-      }),
-    }))
-    .filter((message) => message.parts.length > 0);
-}
 
 export const Route = createFileRoute("/api/agent-chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as AgentChatRequestBody;
-        const { messages: rawMessages, agentId, projectId } = body;
+        const { messages: rawMessages, agentId, projectId, threadId } = body;
 
         const agent = getAgentRow(projectId, agentId);
         if (!agent) {
@@ -61,24 +50,52 @@ export const Route = createFileRoute("/api/agent-chat")({
 
         const model = createAiSdkModel();
         const deps = getProjectDeps(projectId);
-        const system = buildAgentChatSystemPrompt({
-          name: agent.name,
-          description: agent.description,
-          instructions: agent.config.instructions,
-          schedule: agent.config.schedule,
-          skills: agent.config.skills,
+        const thread = await resolveConversationThread({
+          deps,
+          agentId,
+          requestedThreadId: threadId,
         });
 
-        const cleanedMessages = stripUnansweredToolParts(rawMessages);
-        const modelMessages = await convertToModelMessages(cleanedMessages as UIMessage[]);
+        await persistConversationMessages({
+          deps,
+          threadId: thread.id,
+          agentId,
+          messages: rawMessages as UIMessage[],
+        });
+
+        const assembled = await assembleConversation({
+          deps,
+          agent,
+          thread,
+          model,
+        });
+
+        const system = [
+          buildAgentChatSystemPrompt({
+            name: agent.name,
+            description: agent.description,
+            instructions: agent.config.instructions,
+            schedule: agent.config.schedule,
+            skills: agent.config.skills,
+          }),
+          assembled.memoryContext,
+        ]
+          .filter((section) => section.trim().length > 0)
+          .join("\n\n");
+
+        let totalUsage: LanguageModelUsage | undefined;
+        const latestUserText = extractLatestUserText(rawMessages);
 
         const result = streamText({
           model,
           system,
-          messages: modelMessages,
+          messages: assembled.modelMessages,
           stopWhen: stepCountIs(10),
           providerOptions: {
             anthropic: { thinking: { type: "enabled", budgetTokens: 5000 } },
+          },
+          onFinish: async ({ totalUsage: usage }) => {
+            totalUsage = usage;
           },
           tools: {
             trigger_run: {
@@ -126,7 +143,6 @@ export const Route = createFileRoute("/api/agent-chat")({
                 customText: z.string().optional(),
                 skipped: z.boolean().optional(),
               }),
-              // No execute — UI-only tool. Client renders OptionCards and calls addToolOutput.
             },
 
             review_findings: {
@@ -149,33 +165,33 @@ export const Route = createFileRoute("/api/agent-chat")({
                 if (input.includeFindings) {
                   const events = await deps.runEventRepository.listByAgent(agentId, 50);
                   findings = events
-                    .filter((e) => e.type === "finding_recorded")
-                    .map((e) => ({
-                      runId: e.runId,
-                      text: ((e.payload as Record<string, unknown>).text as string) ?? "",
-                      timestamp: e.timestamp.toISOString(),
+                    .filter((event) => event.type === "finding_recorded")
+                    .map((event) => ({
+                      runId: event.runId,
+                      text: ((event.payload as Record<string, unknown>).text as string) ?? "",
+                      timestamp: event.timestamp.toISOString(),
                     }));
                 }
 
                 let lessons: Array<{ content: string; scope: string; confidence: string }> = [];
                 if (input.includeLessons) {
-                  const lessonRecords = await deps.lessonRepository.listByAgent(agentId);
-                  lessons = lessonRecords.map((l) => ({
-                    content: l.content,
-                    scope: l.scope,
-                    confidence: l.confidence,
+                  const lessonRecords = await deps.lessonRepository.listDurableByAgent(agentId);
+                  lessons = lessonRecords.map((lesson) => ({
+                    content: lesson.content,
+                    scope: lesson.scope,
+                    confidence: lesson.confidence,
                   }));
                 }
 
                 return {
-                  runs: recentRuns.map((r) => ({
-                    id: r.id,
-                    status: r.status,
-                    triggerType: r.triggerType,
-                    startedAt: r.startedAt.toISOString(),
-                    completedAt: r.completedAt?.toISOString(),
-                    headline: r.summary?.headline,
-                    finalText: r.summary?.finalText,
+                  runs: recentRuns.map((run) => ({
+                    id: run.id,
+                    status: run.status,
+                    triggerType: run.triggerType,
+                    startedAt: run.startedAt.toISOString(),
+                    completedAt: run.completedAt?.toISOString(),
+                    headline: run.summary?.headline,
+                    finalText: run.summary?.finalText,
                   })),
                   findings,
                   lessons,
@@ -206,9 +222,11 @@ export const Route = createFileRoute("/api/agent-chat")({
                     ...(input.query ? { search: input.query } : {}),
                     limit: 20,
                   } as never);
-                  return (tools as Array<{ slug: string; name: string; description: string }>).map(
-                    (t) => ({ slug: t.slug, name: t.name, description: t.description }),
-                  );
+                  return (tools as Array<{ slug: string; name: string; description: string }>).map((tool) => ({
+                    slug: tool.slug,
+                    name: tool.name,
+                    description: tool.description,
+                  }));
                 } catch (err) {
                   return [{ slug: "error", name: "Search failed", description: String(err) }];
                 }
@@ -229,15 +247,12 @@ export const Route = createFileRoute("/api/agent-chat")({
                 if (!currentAgent) return { success: false, error: "Agent not found" };
 
                 const currentProviders = currentAgent.toolConfig.requiredProviders ?? [];
-                const alreadyExists = currentProviders.some((p) => p.provider === input.provider);
+                const alreadyExists = currentProviders.some((provider) => provider.provider === input.provider);
                 if (alreadyExists) {
                   return { success: true, alreadyExists: true, provider: input.provider };
                 }
 
-                const updatedProviders = [
-                  ...currentProviders,
-                  { provider: input.provider, reason: input.reason },
-                ];
+                const updatedProviders = [...currentProviders, { provider: input.provider, reason: input.reason }];
                 await deps.agentRepository.update(agentId, {
                   toolConfig: { ...currentAgent.toolConfig, requiredProviders: updatedProviders },
                 });
@@ -298,8 +313,45 @@ export const Route = createFileRoute("/api/agent-chat")({
           },
         });
 
-        return result.toUIMessageStreamResponse();
+        return result.toUIMessageStreamResponse({
+          originalMessages: rawMessages as UIMessage[],
+          onFinish: async ({ messages, responseMessage }) => {
+            await persistConversationAfterResponse({
+              deps,
+              agent,
+              thread,
+              messages,
+              responseMessage,
+              model,
+              totalUsage: totalUsage
+                ? {
+                    inputTokens: totalUsage.inputTokens,
+                    outputTokens: totalUsage.outputTokens,
+                    totalTokens: totalUsage.totalTokens,
+                  }
+                : undefined,
+              latestUserText,
+            });
+          },
+        });
       },
     },
   },
 });
+
+function extractLatestUserText(messages: IncomingMessage[]): string {
+  const latestUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!latestUser) {
+    return "";
+  }
+
+  return latestUser.parts
+    .filter(
+      (part): part is { type: string; text?: string } =>
+        typeof part === "object" && part != null && "type" in part && (part as { type?: string }).type === "text",
+    )
+    .map((part) => String(part.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}

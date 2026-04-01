@@ -168,6 +168,28 @@ export interface SkillView {
   description: string;
 }
 
+export interface ChatMessageView {
+  id: string;
+  role: "user" | "assistant";
+  parts: Array<Record<string, unknown>>;
+}
+
+export interface LessonView {
+  id: string;
+  content: string;
+  scope: string;
+  confidence: "high" | "medium" | "low";
+  createdAt: string;
+}
+
+export interface ConversationStateView {
+  threadId: string;
+  checkpointSummary?: string;
+  checkpointMessageCount: number;
+  messages: ChatMessageView[];
+  lessons: LessonView[];
+}
+
 export interface ConnectionView {
   id: string;
   provider: string;

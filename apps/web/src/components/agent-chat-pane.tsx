@@ -1,15 +1,17 @@
+import type { UIMessage } from "ai";
 import { ArrowRight } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { ApprovalCard } from "~/components/ApprovalCard";
 import { useAgentChatFlow } from "~/components/agent-chat-flow";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
-import type { AgentView, PendingActionView, RunView } from "~/lib/types";
+import type { AgentView, ConversationStateView, PendingActionView, RunView } from "~/lib/types";
 
 interface AgentChatPaneProps {
   agent: AgentView;
   projectId: string;
   runs: RunView[];
+  conversation?: ConversationStateView;
   onRunTriggered?: (runId: string, triggerRunId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
   pendingApproval?: PendingActionView | null;
@@ -22,6 +24,7 @@ export function AgentChatPane({
   agent,
   projectId,
   runs,
+  conversation,
   onRunTriggered,
   registerRunCompleteHandler,
   pendingApproval,
@@ -44,8 +47,10 @@ export function AgentChatPane({
   } = useAgentChatFlow({
     agentId: agent.id,
     projectId,
+    threadId: conversation?.threadId,
     agent,
     runs,
+    initialMessages: conversation?.messages as UIMessage[] | undefined,
     onRunTriggered,
   });
 
@@ -91,6 +96,39 @@ export function AgentChatPane({
                 onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from chat") : undefined}
                 onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
               />
+            ) : null}
+            {conversation?.checkpointSummary ? (
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: RADIUS.lg,
+                  border: `1px solid ${COLORS.border}`,
+                  background: COLORS.surface,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: TYPE.scale.xs,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.8,
+                    color: COLORS.textDim,
+                    marginBottom: 6,
+                  }}
+                >
+                  Earlier conversation summarized
+                  {conversation.checkpointMessageCount > 0 ? ` · ${conversation.checkpointMessageCount} messages` : ""}
+                </div>
+                <div
+                  style={{
+                    fontSize: TYPE.scale.sm,
+                    lineHeight: TYPE.leading.normal,
+                    color: COLORS.textSecondary,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {conversation.checkpointSummary}
+                </div>
+              </div>
             ) : null}
             {messages.map((message, index) => {
               const isLastAssistant = index === messages.length - 1 && message.role === "assistant";

@@ -1,7 +1,18 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "../client";
-import { agents, approvals, connections, lessons, projects, runEvents, runs } from "../schema";
+import {
+  agents,
+  approvals,
+  connections,
+  conversationCheckpoints,
+  conversationEvents,
+  conversationThreads,
+  lessons,
+  projects,
+  runEvents,
+  runs,
+} from "../schema";
 
 describe("simplified schema", () => {
   it("stores agents with the new persisted contract", () => {
@@ -117,7 +128,7 @@ describe("simplified schema", () => {
         content: "Search terms with student intent should be excluded.",
         scope: "search_terms",
         confidence: "high",
-        sourceRunEventIds: JSON.stringify(["evt_001", "evt_002"]),
+        sourceEventIds: JSON.stringify(["evt_001", "evt_002"]),
         createdAt: now,
       })
       .run();
@@ -138,8 +149,73 @@ describe("simplified schema", () => {
     const lessonRow = db.select().from(lessons).where(eq(lessons.id, "lesson_001")).get();
     const connectionRow = db.select().from(connections).where(eq(connections.id, "conn_001")).get();
 
-    expect(JSON.parse(lessonRow?.sourceRunEventIds ?? "[]")).toEqual(["evt_001", "evt_002"]);
+    expect(JSON.parse(lessonRow?.sourceEventIds ?? "[]")).toEqual(["evt_001", "evt_002"]);
     expect(connectionRow?.provider).toBe("googleads");
     expect(connectionRow?.status).toBe("active");
+  });
+
+  it("stores conversation threads, events, and checkpoints", () => {
+    const db = createTestDb();
+    const now = Date.now();
+
+    db.insert(conversationThreads)
+      .values({
+        id: "thread_001",
+        agentId: "agent_001",
+        scope: "primary",
+        channelKind: "web",
+        title: "Main chat",
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      })
+      .run();
+
+    db.insert(conversationEvents)
+      .values({
+        id: "evt_msg_001",
+        threadId: "thread_001",
+        agentId: "agent_001",
+        source: "web",
+        role: "assistant",
+        eventType: "message",
+        messageId: "msg_001",
+        eventKey: null,
+        payload: JSON.stringify({
+          messageId: "msg_001",
+          parts: [{ type: "text", text: "Persisted answer" }],
+        }),
+        createdAt: now,
+      })
+      .run();
+
+    db.insert(conversationCheckpoints)
+      .values({
+        id: "checkpoint_001",
+        threadId: "thread_001",
+        kind: "rolling_summary",
+        summary: "Earlier conversation summary",
+        messageCount: 1,
+        estimatedTokens: 42,
+        coversThroughMessageId: "msg_001",
+        summaryVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const threadRow = db.select().from(conversationThreads).where(eq(conversationThreads.id, "thread_001")).get();
+    const eventRow = db.select().from(conversationEvents).where(eq(conversationEvents.id, "evt_msg_001")).get();
+    const checkpointRow = db
+      .select()
+      .from(conversationCheckpoints)
+      .where(eq(conversationCheckpoints.id, "checkpoint_001"))
+      .get();
+
+    expect(threadRow?.scope).toBe("primary");
+    expect(eventRow?.messageId).toBe("msg_001");
+    expect(checkpointRow?.messageCount).toBe(1);
+    expect(checkpointRow?.estimatedTokens).toBe(42);
+    expect(checkpointRow?.summaryVersion).toBe(2);
   });
 });

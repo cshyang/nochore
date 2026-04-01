@@ -1,5 +1,13 @@
 import { z } from "zod";
-import type { AgentView, ConnectionView, ProjectView, RunView, SkillView, ToolConfigEntryView } from "./types";
+import type {
+  AgentView,
+  ConnectionView,
+  ConversationStateView,
+  ProjectView,
+  RunView,
+  SkillView,
+  ToolConfigEntryView,
+} from "./types";
 
 const ProviderRequirementViewSchema = z.object({
   provider: z.string(),
@@ -127,6 +135,28 @@ const ConnectionViewSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
+const ChatMessageViewSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant"]),
+  parts: z.array(z.record(z.string(), z.unknown())),
+});
+
+const LessonViewSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  scope: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  createdAt: z.string(),
+});
+
+const ConversationStateViewSchema = z.object({
+  threadId: z.string(),
+  checkpointSummary: z.string().optional(),
+  checkpointMessageCount: z.number().int().nonnegative(),
+  messages: z.array(ChatMessageViewSchema),
+  lessons: z.array(LessonViewSchema),
+});
+
 const AgentViewSchema = z.object({
   id: z.string(),
   projectId: z.string().optional(),
@@ -201,6 +231,10 @@ export function parseSkillViews(value: unknown): SkillView[] {
 
 export function parseConnectionViews(value: unknown): ConnectionView[] {
   return parseArraySchema(ConnectionViewSchema, value);
+}
+
+export function parseConversationStateView(value: unknown): ConversationStateView | null {
+  return parseNullableSchema(ConversationStateViewSchema, value);
 }
 
 export function parseRunViews(value: unknown): RunView[] {
