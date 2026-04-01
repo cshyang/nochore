@@ -33,6 +33,7 @@ const EVENT_BORDER_COLORS: Record<string, string> = {
   policy_rule_suggested: COLORS.orange,
   policy_rule_accepted: COLORS.green,
   run_completed: COLORS.green,
+  run_cancelled: COLORS.orange,
   run_failed: COLORS.red,
 };
 
@@ -51,6 +52,7 @@ export function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red"
   }
   if (type === "policy_rule_suggested") return "yellow";
   if (type === "policy_rule_accepted") return "green";
+  if (type === "run_cancelled") return "yellow";
   if (type === "run_failed") return "red";
   if (type === "agent_message") return "gray";
   return "gray";
@@ -61,6 +63,7 @@ export function getEventIcon(type: string) {
   if (type === "finding_recorded" || type === "run_completed") return Check;
   if (type === "sub_run_started") return CircleNotch;
   if (type === "sub_run_completed") return Check;
+  if (type === "run_cancelled") return Warning;
   if (type === "run_failed") return Warning;
   if (type === "policy_rule_suggested") return ArrowRight;
   if (type === "policy_rule_accepted") return Check;

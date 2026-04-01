@@ -31,6 +31,8 @@ export class LearnedRuleRepository {
       return { created: false, rule: existing };
     }
 
+    await this.supersedeConflicting(input.agentId, input.toolName);
+
     const id = crypto.randomUUID();
     const suggestedAt = new Date();
 
@@ -110,11 +112,7 @@ export class LearnedRuleRepository {
         and(
           eq(learnedPolicyRules.agentId, agentId),
           eq(learnedPolicyRules.status, "accepted"),
-          or(
-            isNull(learnedPolicyRules.expiresAt),
-            eq(learnedPolicyRules.expiresAt, 0),
-            gt(learnedPolicyRules.expiresAt, now.getTime()),
-          ),
+          or(isNull(learnedPolicyRules.expiresAt), gt(learnedPolicyRules.expiresAt, now.getTime())),
         ),
       )
       .orderBy(desc(learnedPolicyRules.acceptedAt), desc(learnedPolicyRules.suggestedAt))
@@ -194,6 +192,28 @@ export class LearnedRuleRepository {
       (candidate: typeof learnedPolicyRules.$inferSelect) => (candidate.conditions ?? "null") === serializedConditions,
     );
     return row ? toLearnedRule(row) : null;
+  }
+
+  private async supersedeConflicting(agentId: string, toolName: string): Promise<void> {
+    const conflicting = this.db
+      .select()
+      .from(learnedPolicyRules)
+      .where(
+        and(
+          eq(learnedPolicyRules.agentId, agentId),
+          eq(learnedPolicyRules.toolName, toolName),
+          inArray(learnedPolicyRules.status, ["suggested", "accepted"] as LearnedRuleStatus[]),
+        ),
+      )
+      .all();
+
+    for (const row of conflicting) {
+      this.db
+        .update(learnedPolicyRules)
+        .set({ status: "revoked", revokedAt: Date.now() })
+        .where(eq(learnedPolicyRules.id, row.id))
+        .run();
+    }
   }
 
   private async updateStatus(id: string, status: Extract<LearnedRuleStatus, "dismissed" | "expired">): Promise<void> {

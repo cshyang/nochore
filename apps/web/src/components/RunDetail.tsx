@@ -73,8 +73,12 @@ function RunHeader({ run }: { run: RunView }) {
       <Badge color="green">Completed</Badge>
     ) : run.status === "failed" ? (
       <Badge color="red">Failed</Badge>
+    ) : run.status === "cancelled" ? (
+      <Badge color="yellow">Cancelled</Badge>
     ) : run.status === "waiting_for_approval" ? (
       <Badge color="yellow">Waiting</Badge>
+    ) : run.status === "queued" ? (
+      <Badge color="gray">Queued</Badge>
     ) : (
       <Badge color="blue">Running</Badge>
     );
@@ -239,6 +243,122 @@ export function RunDetail({
     );
   }
 
+  if (status === "waiting_for_approval") {
+    return (
+      <div style={{ flex: 1, padding: "24px 20px" }}>
+        <RunHeader run={run} />
+        <ApprovalArtifacts
+          run={run}
+          onRunNow={onRunNow}
+          onApprove={onApprove}
+          onReject={onReject}
+          onAskChat={onAskChat}
+        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 14,
+            padding: 20,
+            background: COLORS.orangeSubtle,
+            border: `1px solid ${COLORS.orange}`,
+            borderRadius: RADIUS.sm,
+            marginBottom: 16,
+          }}
+        >
+          <WarningCircle size={20} weight="bold" color={COLORS.orange} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                marginBottom: 4,
+              }}
+            >
+              Waiting for approval
+            </div>
+            <div
+              style={{
+                fontSize: TYPE.scale.sm,
+                color: COLORS.textSecondary,
+                lineHeight: TYPE.leading.normal,
+              }}
+            >
+              This run is paused until an approval decision is made.
+            </div>
+          </div>
+        </div>
+        {timelineEvents.length > 0 && (
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((value) => !value)} />
+        )}
+        {showEvents && (
+          <div style={timelineContainerStyle}>
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (status === "cancelled") {
+    return (
+      <div style={{ flex: 1, padding: "24px 20px" }}>
+        <RunHeader run={run} />
+        <ApprovalArtifacts
+          run={run}
+          onRunNow={onRunNow}
+          onApprove={onApprove}
+          onReject={onReject}
+          onAskChat={onAskChat}
+        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 14,
+            padding: 20,
+            background: COLORS.orangeSubtle,
+            border: `1px solid ${COLORS.orange}`,
+            borderRadius: RADIUS.sm,
+            marginBottom: 16,
+          }}
+        >
+          <WarningCircle size={20} weight="bold" color={COLORS.orange} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                marginBottom: 4,
+              }}
+            >
+              Run cancelled
+            </div>
+            <div
+              style={{
+                fontSize: TYPE.scale.sm,
+                color: COLORS.textSecondary,
+                lineHeight: TYPE.leading.normal,
+              }}
+            >
+              {run.error || "This run was cancelled before it finished."}
+            </div>
+          </div>
+        </div>
+        {timelineEvents.length > 0 && (
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((value) => !value)} />
+        )}
+        {showEvents && (
+          <div style={timelineContainerStyle}>
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── Failed with no finding ─────────────────────────────────────────────
   if (status === "failed" && !finding) {
     return (
@@ -299,7 +419,7 @@ export function RunDetail({
   }
 
   // ── Completed with no finding ──────────────────────────────────────────
-  if (!finding) {
+  if (status === "completed" && !finding) {
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />

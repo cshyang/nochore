@@ -21,6 +21,8 @@ function statusColor(status: string): string {
       return COLORS.green;
     case "failed":
       return COLORS.red;
+    case "cancelled":
+      return COLORS.orange;
     case "waiting_for_approval":
       return COLORS.orange;
     case "running":
@@ -32,10 +34,7 @@ function statusColor(status: string): string {
   }
 }
 
-function formatDuration(
-  start: string | undefined,
-  end: string | undefined,
-): string {
+function formatDuration(start: string | undefined, end: string | undefined): string {
   if (!start || !end) return "";
   const startMs = new Date(start).getTime();
   const endMs = new Date(end).getTime();
@@ -57,6 +56,7 @@ function formatTime(dateStr: string): string {
 
 function statusLabel(status: string): string {
   if (status === "waiting_for_approval") return "waiting";
+  if (status === "cancelled") return "cancelled";
   return status;
 }
 
@@ -65,11 +65,7 @@ function getDateGroup(dateStr: string): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);
-  const runDay = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  );
+  const runDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
   if (runDay.getTime() === today.getTime()) return "Today";
   if (runDay.getTime() === yesterday.getTime()) return "Yesterday";
@@ -179,8 +175,7 @@ function CollapsedRail({
         {runs.map((run, index) => {
           const color = statusColor(run.status);
           const isSelected = run.id === selectedRunId;
-          const isRunning =
-            run.status === "running" || run.id === activeRunId;
+          const isRunning = run.status === "running" || run.id === activeRunId;
           const isHovered = run.id === hoveredId;
 
           return (
@@ -203,15 +198,11 @@ function CollapsedRail({
                   height: isSelected ? 12 : 8,
                   borderRadius: RADIUS.pill,
                   background: color,
-                  border: isSelected
-                    ? `2px solid ${COLORS.text}`
-                    : "2px solid transparent",
+                  border: isSelected ? `2px solid ${COLORS.text}` : "2px solid transparent",
                   cursor: "pointer",
                   padding: 0,
                   transition: `all ${MOTION.duration} ${MOTION.ease}`,
-                  animation: isRunning
-                    ? "railPulse 2s ease-in-out infinite"
-                    : "none",
+                  animation: isRunning ? "railPulse 2s ease-in-out infinite" : "none",
                   outline: "none",
                 }}
                 aria-label={`Run ${index + 1}: ${run.status}`}
@@ -362,8 +353,7 @@ function ExpandedList({
             {group.runs.map((run) => {
               const isSelected = run.id === selectedRunId;
               const isHovered = run.id === hoveredId;
-              const isRunning =
-                run.status === "running" || run.id === activeRunId;
+              const isRunning = run.status === "running" || run.id === activeRunId;
               const color = statusColor(run.status);
 
               const duration = formatDuration(run.startedAt, run.completedAt);
@@ -390,14 +380,8 @@ function ExpandedList({
                     cursor: "pointer",
                     borderRadius: RADIUS.sm,
                     border: "none",
-                    borderLeft: isSelected
-                      ? `2px solid ${COLORS.accent}`
-                      : "2px solid transparent",
-                    background: isSelected
-                      ? COLORS.accentDim
-                      : isHovered
-                        ? COLORS.surfaceHover
-                        : "transparent",
+                    borderLeft: isSelected ? `2px solid ${COLORS.accent}` : "2px solid transparent",
+                    background: isSelected ? COLORS.accentDim : isHovered ? COLORS.surfaceHover : "transparent",
                     transition: `background ${MOTION.duration} ${MOTION.ease}`,
                     outline: "none",
                     textAlign: "left",
@@ -412,9 +396,7 @@ function ExpandedList({
                       borderRadius: RADIUS.pill,
                       background: color,
                       flexShrink: 0,
-                      animation: isRunning
-                        ? "railPulse 2s ease-in-out infinite"
-                        : "none",
+                      animation: isRunning ? "railPulse 2s ease-in-out infinite" : "none",
                     }}
                   />
 
@@ -457,12 +439,7 @@ function ExpandedList({
 // Main component
 // ---------------------------------------------------------------------------
 
-export function RunList({
-  runs,
-  selectedRunId,
-  onSelect,
-  activeRunId,
-}: RunListProps) {
+export function RunList({ runs, selectedRunId, onSelect, activeRunId }: RunListProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   if (runs.length === 0) return null;

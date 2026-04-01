@@ -21,11 +21,8 @@ export function resolveDecision(toolConfig: ToolConfigEntry, learnedDecision: Le
       };
     case "blocked":
       return {
-        result: toolConfig.approvalMode === "auto" ? "approval" : "blocked",
-        reason:
-          toolConfig.approvalMode === "auto"
-            ? "Learned rule tightens this action to approval based on prior operator decisions"
-            : "Learned rule blocks this action based on prior operator decisions",
+        result: "approval",
+        reason: "Learned rule escalates this action to approval based on prior operator decisions",
       };
   }
 }

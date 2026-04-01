@@ -23,7 +23,7 @@ export interface SerializedRun {
   id: string;
   agentId: string;
   triggerType: string;
-  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
+  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
   startedAt: string;
   completedAt?: string;
   error?: string;
@@ -266,6 +266,8 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
       return "completed";
     case "failed":
       return "failed";
+    case "cancelled":
+      return "cancelled";
     case "queued":
       return "queued";
     case "running":

@@ -57,7 +57,7 @@ export async function cancelAgentRun(params: {
   triggerRunId: string;
   projectId: string;
 }): Promise<void> {
-  const { runRepository, runEventRepository } = getProjectDeps(params.projectId);
+  const { runRepository, runEventRepository, approvalRepository } = getProjectDeps(params.projectId);
 
   // Look up the run to get the agentId for the event log
   const run = await runRepository.getById(params.runId);
@@ -66,14 +66,33 @@ export async function cancelAgentRun(params: {
   // Cancel on trigger.dev platform
   await runs.cancel(params.triggerRunId);
 
-  // Update local DB status
-  await runRepository.fail(params.runId, new Date(), "Cancelled by user");
+  const resolvedAt = new Date();
+  const cancellationReason = "Cancelled by user";
+
+  await runRepository.cancel(params.runId, resolvedAt, cancellationReason);
+  const pendingApprovals = await approvalRepository.listByRun(params.runId, ["pending"]);
+  for (const approval of pendingApprovals) {
+    const approvalReason = "Run cancelled before approval was resolved";
+    await approvalRepository.markExpired(approval.id, approvalReason, resolvedAt);
+    await runEventRepository.append({
+      runId: params.runId,
+      agentId,
+      timestamp: resolvedAt,
+      type: "tool_approval_expired",
+      payload: {
+        approvalId: approval.id,
+        toolName: approval.toolName,
+        reason: approvalReason,
+      },
+    });
+  }
+
   await runEventRepository.append({
     runId: params.runId,
     agentId,
-    timestamp: new Date(),
-    type: "run_failed",
-    payload: { error: "Cancelled by user", cancelledByUser: true },
+    timestamp: resolvedAt,
+    type: "run_cancelled",
+    payload: { reason: cancellationReason, cancelledByUser: true },
   });
 }
 

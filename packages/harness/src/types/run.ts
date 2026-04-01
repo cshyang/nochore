@@ -4,7 +4,14 @@ import { z } from "zod";
 // Run status & trigger
 // ---------------------------------------------------------------------------
 
-export const RunStatusSchema = z.enum(["queued", "running", "waiting_for_approval", "completed", "failed"]);
+export const RunStatusSchema = z.enum([
+  "queued",
+  "running",
+  "waiting_for_approval",
+  "completed",
+  "failed",
+  "cancelled",
+]);
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
 export const RunTriggerTypeSchema = z.enum(["cron", "manual", "chat", "webhook"]);
@@ -66,6 +73,7 @@ export const RunEventTypeSchema = z.enum([
   "sub_run_started",
   "sub_run_completed",
   "run_completed",
+  "run_cancelled",
   "run_failed",
 ]);
 export type RunEventType = z.infer<typeof RunEventTypeSchema>;

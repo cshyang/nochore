@@ -50,7 +50,7 @@ export interface AgentWorkspaceProps {
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   activeRun?: ActiveRunState | null;
-  onLiveRunComplete?: () => void;
+  onLiveRunComplete?: (status: "completed" | "failed" | "cancelled") => void | Promise<void>;
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;

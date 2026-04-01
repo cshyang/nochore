@@ -78,6 +78,19 @@ export class RunRepository {
       .run();
   }
 
+  async cancel(id: string, completedAt: Date, error: string): Promise<void> {
+    this.db
+      .update(runs)
+      .set({
+        status: "cancelled",
+        completedAt: completedAt.getTime(),
+        error,
+        summary: null,
+      })
+      .where(eq(runs.id, id))
+      .run();
+  }
+
   async getById(id: string): Promise<RunRecord | null> {
     const row = this.db.select().from(runs).where(eq(runs.id, id)).get();
     return row ? toRunRecord(row) : null;

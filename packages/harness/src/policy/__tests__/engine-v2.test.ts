@@ -199,6 +199,39 @@ describe("simplified policy engine", () => {
     expect(tool.approvalMode).toBe("approval");
   });
 
+  it("caps learned blocked at approval, never fully blocks", () => {
+    const decision = evaluatePolicy(
+      {
+        toolName: "googleads_adjust_budget",
+        toolInput: { amount: 75 },
+        toolConfig: makeToolConfig({ approvalMode: "approval" }),
+      },
+      {
+        now: new Date(),
+        globalApprovalRequired: false,
+        recentToolCalls: [],
+        learnedRules: [
+          {
+            id: "rule_003",
+            agentId: "agent_001",
+            toolName: "googleads_adjust_budget",
+            learnedDecision: "blocked",
+            conditions: null,
+            evidenceCount: 6,
+            consistencyRate: 1,
+            status: "accepted",
+            suggestedAt: new Date("2026-03-30T00:00:00Z"),
+            acceptedAt: new Date("2026-03-31T00:00:00Z"),
+            sourceApprovalIds: ["approval_001"],
+          },
+        ],
+      },
+    );
+
+    // Learned blocked should cap at approval, not fully block
+    expect(decision.result).toBe("approval");
+  });
+
   it("keeps blocked static policy stricter than learned auto rules", () => {
     const decision = evaluatePolicy(
       {

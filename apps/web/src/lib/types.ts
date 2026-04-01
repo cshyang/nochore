@@ -1,6 +1,6 @@
 export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
 export type AgentOperationalStatus = "running" | "attention" | "idle" | "error";
-export type RunStatus = "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
+export type RunStatus = "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "blocked" | "expired";
 export type RunEventType =
   | "run_started"
@@ -16,6 +16,7 @@ export type RunEventType =
   | "notification_sent"
   | "lesson_distilled"
   | "run_completed"
+  | "run_cancelled"
   | "run_failed";
 
 export interface LearnedRuleConditionView {

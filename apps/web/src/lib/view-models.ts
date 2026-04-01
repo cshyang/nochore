@@ -102,7 +102,7 @@ const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   triggerType: z.string(),
-  status: z.enum(["queued", "running", "waiting_for_approval", "completed", "failed"]),
+  status: z.enum(["queued", "running", "waiting_for_approval", "completed", "failed", "cancelled"]),
   startedAt: z.string(),
   completedAt: z.string().optional(),
   error: z.string().optional(),

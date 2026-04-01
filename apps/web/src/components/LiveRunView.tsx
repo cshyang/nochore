@@ -3,6 +3,7 @@ import { useRealtimeRun } from "@trigger.dev/react-hooks";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { ApprovalCard } from "~/components/ApprovalCard";
 import { EventTimeline } from "~/components/EventTimeline";
+import { deriveLiveRunStatus, derivePendingApproval } from "~/components/run-lifecycle";
 import { COLORS, RADIUS } from "~/lib/colors";
 import type { PendingActionView } from "~/lib/types";
 
@@ -16,7 +17,7 @@ type LiveEvent = {
 
 type RunMetadata = {
   events?: LiveEvent[];
-  status?: "running" | "waiting_for_approval" | "completed" | "failed";
+  status?: "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
   cycle?: number;
 };
 
@@ -24,7 +25,8 @@ interface LiveRunViewProps {
   triggerRunId: string;
   accessToken: string;
   runId: string;
-  onComplete?: () => void;
+  persistedApprovals?: PendingActionView[];
+  onComplete?: (status: "completed" | "failed" | "cancelled") => void | Promise<void>;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: PendingActionView) => void | Promise<void>;
@@ -41,6 +43,7 @@ export function LiveRunView({
   triggerRunId,
   accessToken,
   runId,
+  persistedApprovals = [],
   onComplete,
   onApprove,
   onReject,
@@ -58,16 +61,8 @@ export function LiveRunView({
   const events = meta.events ?? [];
   const cycle = meta.cycle;
 
-  // Derive status from two sources:
-  // 1. Our custom metadata.status (granular: includes "waiting_for_approval")
-  // 2. trigger.dev's platform run.status (safety net: fires even if task crashes before our catch block)
-  const platformStatus = (run?.status ?? "").toUpperCase();
-  const platformDone =
-    platformStatus === "COMPLETED" ||
-    platformStatus === "FAILED" ||
-    platformStatus === "CANCELED" ||
-    platformStatus === "SYSTEM_FAILURE";
-  const status = platformDone ? (platformStatus === "COMPLETED" ? "completed" : "failed") : (meta.status ?? "running");
+  const platformStatus = run?.status;
+  const status = deriveLiveRunStatus(platformStatus, meta.status);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -76,9 +71,9 @@ export function LiveRunView({
   }, []);
 
   useEffect(() => {
-    if ((status === "completed" || status === "failed") && !completeFiredRef.current) {
+    if ((status === "completed" || status === "failed" || status === "cancelled") && !completeFiredRef.current) {
       completeFiredRef.current = true;
-      const timer = setTimeout(() => onComplete?.(), 1500);
+      const timer = setTimeout(() => void onComplete?.(status), 1500);
       return () => clearTimeout(timer);
     }
   }, [status, onComplete]);
@@ -113,8 +108,14 @@ export function LiveRunView({
   }
 
   const isActive = status === "running" || status === "waiting_for_approval";
-  const isFinished = status === "completed" || status === "failed";
-  const pendingApproval = derivePendingApproval(runId, events);
+  const isFinished = status === "completed" || status === "failed" || status === "cancelled";
+  const pendingApproval = isActive ? derivePendingApproval(runId, events, persistedApprovals) : null;
+  const finishTone =
+    status === "completed"
+      ? { background: COLORS.greenDim, border: COLORS.green, text: COLORS.green, label: "Run completed successfully" }
+      : status === "cancelled"
+        ? { background: COLORS.orangeSubtle, border: COLORS.orange, text: COLORS.orange, label: "Run cancelled" }
+        : { background: COLORS.redDim, border: COLORS.red, text: COLORS.red, label: "Run failed" };
 
   return (
     <div style={containerStyle}>
@@ -135,7 +136,15 @@ export function LiveRunView({
             />
           )}
           <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>
-            {isActive ? "Live" : isFinished ? (status === "completed" ? "Completed" : "Failed") : "Run"}
+            {isActive
+              ? "Live"
+              : isFinished
+                ? status === "completed"
+                  ? "Completed"
+                  : status === "cancelled"
+                    ? "Cancelled"
+                    : "Failed"
+                : "Run"}
           </span>
           {cycle != null && isActive && <span style={{ fontSize: 12, color: COLORS.textDim }}>Cycle {cycle + 1}</span>}
         </div>
@@ -146,20 +155,20 @@ export function LiveRunView({
         <div
           style={{
             padding: "10px 14px",
-            background: status === "completed" ? COLORS.greenDim : COLORS.redDim,
-            borderLeft: `3px solid ${status === "completed" ? COLORS.green : COLORS.red}`,
+            background: finishTone.background,
+            borderLeft: `3px solid ${finishTone.border}`,
             borderRadius: RADIUS.sm,
             display: "flex",
             alignItems: "center",
             gap: 8,
             fontSize: 13,
             fontWeight: 600,
-            color: status === "completed" ? COLORS.green : COLORS.red,
+            color: finishTone.text,
             marginBottom: 4,
           }}
         >
           {status === "completed" ? <Check size={14} weight="bold" /> : <Warning size={14} weight="bold" />}
-          {status === "completed" ? "Run completed successfully" : "Run failed"}
+          {finishTone.label}
         </div>
       )}
 
@@ -179,48 +188,6 @@ export function LiveRunView({
       </div>
     </div>
   );
-}
-
-function derivePendingApproval(runId: string, events: LiveEvent[]): PendingActionView | null {
-  const requestEvent = [...events].reverse().find((event) => event.type === "tool_approval_requested");
-  if (!requestEvent) {
-    return null;
-  }
-
-  const resolvedAfterRequest = events.find(
-    (event) =>
-      event.timestamp >= requestEvent.timestamp &&
-      (event.type === "tool_approval_resolved" || event.type === "tool_approval_expired"),
-  );
-  if (resolvedAfterRequest) {
-    return null;
-  }
-
-  const payload = requestEvent.payload ?? {};
-  const approvalId = payload.approvalId;
-  const toolName = payload.toolName;
-  const toolInput = payload.toolInput;
-  const requestReason = payload.requestReason ?? payload.reason;
-
-  if (typeof approvalId !== "string" || typeof toolName !== "string" || !toolInput || typeof toolInput !== "object") {
-    return null;
-  }
-
-  return {
-    id: approvalId,
-    runId,
-    agentId: "",
-    proposal: {
-      id: approvalId,
-      toolName,
-      toolInput: toolInput as Record<string, unknown>,
-      reason: typeof requestReason === "string" ? requestReason : "Approval requested",
-      requestEventId: requestEvent.id,
-    },
-    status: "pending",
-    createdAt: new Date(requestEvent.timestamp).toISOString(),
-    expiresAt: typeof payload.expiresAt === "string" ? payload.expiresAt : undefined,
-  };
 }
 
 const containerStyle: CSSProperties = {

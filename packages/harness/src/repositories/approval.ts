@@ -96,7 +96,7 @@ export class ApprovalRepository {
       )
       .orderBy(desc(approvals.createdAt));
 
-    return query.all().map((row) => toApprovalRecord(row.approvals));
+    return query.all().map((row: { approvals: typeof approvals.$inferSelect }) => toApprovalRecord(row.approvals));
   }
 
   async setRequestEventId(id: string, requestEventId: string): Promise<void> {

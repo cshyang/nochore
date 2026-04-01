@@ -1,9 +1,8 @@
 import crypto from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { and, eq } from "drizzle-orm";
-import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
 import { connections } from "../../../../packages/harness/src/db/schema";
-import { TOOLKIT_CATALOG_PROVIDER_SLUGS } from "../lib/provider-metadata";
+import type { ComposioToolMeta } from "./connections-catalog";
 import { getProjectDeps } from "./deps";
 import { buildConnectionView } from "./models";
 import { jsonSafe } from "./serializable";
@@ -21,29 +20,10 @@ interface ToolkitMetadataItem {
   };
 }
 
-interface ComposioCatalogTool {
-  slug: string;
-  name: string;
-  description?: string;
-  human_description?: string;
-  toolkit?: {
-    name?: string;
-    logo?: string | null;
-  };
-  tags?: string[];
-}
-
-interface ComposioCatalogClient {
-  client: {
-    tools: {
-      list(input: { toolkit_slug: string; limit: number }): Promise<{ items?: ComposioCatalogTool[] }>;
-    };
-  };
-}
-
 export const initiateConnection = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; callbackUrl: string }) => input)
   .handler(async ({ data }) => {
+    const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections");
     const composio = await createComposioClient();
     const session = await composio.create(getComposioUserId(data.projectId), {
       manageConnections: false,
@@ -107,6 +87,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
     }
 
     try {
+      const { createComposioClient } = await import("../../../../packages/harness/src/connections");
       const composio = await createComposioClient();
       const account = await composio.connectedAccounts.get(pending.composioEntityId);
       if (account.status === "ACTIVE") {
@@ -135,6 +116,7 @@ export const activateConnection = createServerFn({ method: "POST" })
 
     if (pending.composioEntityId) {
       try {
+        const { createComposioClient } = await import("../../../../packages/harness/src/connections");
         const composio = await createComposioClient();
         const account = await composio.connectedAccounts.get(pending.composioEntityId);
         if (account.status !== "ACTIVE") {
@@ -154,6 +136,7 @@ export const getToolkitMetadata = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string; toolkits: string[] }) => input)
   .handler(async ({ data }) => {
     try {
+      const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections");
       const composio = await createComposioClient();
       const session = await composio.create(getComposioUserId(data.projectId), {
         toolkits: data.toolkits,
@@ -180,6 +163,7 @@ export const disconnectProvider = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; connectedAccountId: string }) => input)
   .handler(async ({ data }) => {
     try {
+      const { createComposioClient } = await import("../../../../packages/harness/src/connections");
       const composio = await createComposioClient();
       await composio.connectedAccounts.delete(data.connectedAccountId);
 
@@ -192,41 +176,12 @@ export const disconnectProvider = createServerFn({ method: "POST" })
     }
   });
 
-export interface ComposioToolMeta {
-  slug: string;
-  name: string;
-  description: string;
-  provider: string;
-  providerName: string;
-  providerLogo: string | null;
-  tags: string[];
-}
-
-export async function listComposioToolCatalogForProject(_projectId: string): Promise<ComposioToolMeta[]> {
-  try {
-    const composio = await createComposioClient();
-    const catalogClient = getCatalogClient(composio);
-
-    const results = await Promise.all(
-      TOOLKIT_CATALOG_PROVIDER_SLUGS.map((provider) =>
-        catalogClient.tools
-          .list({ toolkit_slug: provider, limit: 50 })
-          .then((res) => (res.items ?? []).map((tool) => toToolMeta(provider, tool)))
-          .catch(() => [] as ComposioToolMeta[]),
-      ),
-    );
-
-    return results.flat();
-  } catch {
-    return [];
-  }
-}
-
 export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
-  .handler(
-    async ({ data: { projectId } }): Promise<ComposioToolMeta[]> => listComposioToolCatalogForProject(projectId),
-  );
+  .handler(async ({ data: { projectId } }): Promise<ComposioToolMeta[]> => {
+    const { listComposioToolCatalogForProject } = await import("./connections-catalog");
+    return listComposioToolCatalogForProject(projectId);
+  });
 
 export const fetchToolkitSummaries = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
@@ -241,6 +196,8 @@ export const fetchToolkitSummaries = createServerFn({ method: "GET" })
       }>
     > => {
       try {
+        const { createComposioClient } = await import("../../../../packages/harness/src/connections");
+        const { TOOLKIT_CATALOG_PROVIDER_SLUGS } = await import("../lib/provider-metadata");
         const composio = await createComposioClient();
 
         const results = await Promise.allSettled(
@@ -367,20 +324,4 @@ function setProviderConnectionStatus(
       ),
     )
     .run();
-}
-
-function getCatalogClient(composio: Awaited<ReturnType<typeof createComposioClient>>) {
-  return (composio as unknown as ComposioCatalogClient).client;
-}
-
-function toToolMeta(provider: string, tool: ComposioCatalogTool): ComposioToolMeta {
-  return {
-    slug: tool.slug,
-    name: tool.name,
-    description: tool.description ?? tool.human_description ?? "",
-    provider,
-    providerName: tool.toolkit?.name ?? provider,
-    providerLogo: tool.toolkit?.logo ?? null,
-    tags: tool.tags ?? [],
-  };
 }

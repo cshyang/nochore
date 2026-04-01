@@ -73,6 +73,28 @@ describe("simplified repositories", () => {
     expect(run?.completedAt?.toISOString()).toBe(completedAt.toISOString());
   });
 
+  it("marks cancelled runs as terminal without a summary", async () => {
+    const db = createTestDb();
+    const repo = new RunRepository(db);
+    const startedAt = new Date("2026-03-24T10:00:00Z");
+    const cancelledAt = new Date("2026-03-24T10:01:00Z");
+
+    const id = await repo.create({
+      agentId: "agent_001",
+      triggerType: "manual",
+      startedAt,
+    });
+
+    await repo.markRunning(id);
+    await repo.cancel(id, cancelledAt, "Cancelled in Trigger.dev");
+
+    const run = await repo.getById(id);
+    expect(run?.status).toBe("cancelled");
+    expect(run?.error).toBe("Cancelled in Trigger.dev");
+    expect(run?.summary).toBeUndefined();
+    expect(run?.completedAt?.toISOString()).toBe(cancelledAt.toISOString());
+  });
+
   it("appends timeline events in order for a run", async () => {
     const db = createTestDb();
     const repo = new RunEventRepository(db);

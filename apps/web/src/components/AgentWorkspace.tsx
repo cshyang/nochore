@@ -53,12 +53,15 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const previousAgentIdRef = useRef(agent.id);
 
   // B+ auto-follow-up: when a chat-triggered run completes, notify the chat
-  const handleLiveRunCompleteWithChat = useCallback(() => {
-    onLiveRunComplete?.();
-    if (tab === "chat" && chatRunCompleteRef.current) {
-      chatRunCompleteRef.current();
-    }
-  }, [onLiveRunComplete, tab]);
+  const handleLiveRunCompleteWithChat = useCallback(
+    (status: "completed" | "failed" | "cancelled") => {
+      void onLiveRunComplete?.(status);
+      if (tab === "chat" && chatRunCompleteRef.current) {
+        chatRunCompleteRef.current();
+      }
+    },
+    [onLiveRunComplete, tab],
+  );
   const [moreOpen, setMoreOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(props.initialRunId ?? null);
   const [goingLive, setGoingLive] = useState(false);
@@ -178,14 +181,17 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
   const isFirstRun = runs.length === 0;
 
-  const handleRunNowWithConfirm = () => {
+  const handleRunNowWithConfirm = async () => {
     if (isFirstRun && !showFirstRunPrompt) {
       setShowFirstRunPrompt(true);
       return;
     }
 
     setShowFirstRunPrompt(false);
-    void onRunNow?.();
+    const result = await onRunNow?.();
+    if (result?.runId) {
+      setSelectedRunId(result.runId);
+    }
   };
 
   const wrappedOnRunNow = onRunNow ? handleRunNowWithConfirm : undefined;
@@ -256,7 +262,12 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             onCancel={() => setShowFirstRunPrompt(false)}
             onStartRun={() => {
               setShowFirstRunPrompt(false);
-              void onRunNow?.();
+              void (async () => {
+                const result = await onRunNow?.();
+                if (result?.runId) {
+                  setSelectedRunId(result.runId);
+                }
+              })();
             }}
           />
         ) : null}
@@ -310,7 +321,10 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               agent={agent}
               projectId={project.id}
               runs={runs}
-              onRunTriggered={onRunTriggered}
+              onRunTriggered={(runId, triggerRunId) => {
+                setSelectedRunId(runId);
+                onRunTriggered?.(runId, triggerRunId);
+              }}
               registerRunCompleteHandler={(handler) => {
                 chatRunCompleteRef.current = handler;
               }}

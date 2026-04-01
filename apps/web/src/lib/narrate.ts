@@ -25,6 +25,7 @@ export type RunEventType =
   | "sub_run_started"
   | "sub_run_completed"
   | "run_completed"
+  | "run_cancelled"
   | "run_failed";
 
 /**
@@ -148,6 +149,11 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
       const summary = payload.summary as { headline?: string; status?: string } | undefined;
       const headline = summary?.headline;
       return headline ? `Completed -- ${truncate(headline, 170)}` : "Run completed";
+    }
+
+    case "run_cancelled": {
+      const reason = (payload.reason as string | undefined) ?? (payload.error as string | undefined);
+      return reason ? `Run cancelled -- ${truncate(reason, 150)}` : "Run cancelled";
     }
 
     case "run_failed": {

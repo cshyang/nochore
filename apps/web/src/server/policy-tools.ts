@@ -4,7 +4,7 @@ import { getGoogleAdsToolsForPi } from "../../../../packages/harness/src/connect
 import { connections } from "../../../../packages/harness/src/db/schema";
 import { buildToolConfigEntry } from "../../../../packages/harness/src/policy";
 import type { ToolConfigEntry } from "../../../../packages/harness/src/types";
-import { listComposioToolCatalogForProject } from "./connections";
+import { listComposioToolCatalogForProject } from "./connections-catalog";
 import { getProjectDeps } from "./deps";
 import { jsonSafe } from "./serializable";
 

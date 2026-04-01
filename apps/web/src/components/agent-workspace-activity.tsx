@@ -1,11 +1,11 @@
 import { WarningCircle } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import type { ActiveRunState } from "~/components/agent-workspace.types";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
 import { Button } from "~/components/Button";
-import { LiveRunView } from "~/components/LiveRunView";
 import { RunDetail } from "~/components/RunDetail";
 import { RunList } from "~/components/RunList";
+import { shouldRenderLiveRun } from "~/components/run-lifecycle";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import type { LearnedRuleView, PendingActionView, RunView } from "~/lib/types";
 
@@ -14,9 +14,9 @@ interface AgentWorkspaceActivityPaneProps {
   selectedRunId: string | null;
   onSelectRun: (runId: string) => void;
   activeRun?: ActiveRunState | null;
-  onLiveRunComplete?: () => void;
+  onLiveRunComplete?: (status: "completed" | "failed" | "cancelled") => void | Promise<void>;
   runError?: string | null;
-  onRunNow?: () => void;
+  onRunNow?: () => void | Promise<void>;
   checklistItems?: ChecklistItem[];
   onGoLive?: () => void;
   goingLive?: boolean;
@@ -28,6 +28,11 @@ interface AgentWorkspaceActivityPaneProps {
   onDismissLearnedRule?: (ruleId: string) => void | Promise<void>;
   onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
 }
+
+const LazyLiveRunView = lazy(async () => {
+  const module = await import("~/components/LiveRunView");
+  return { default: module.LiveRunView };
+});
 
 export function AgentWorkspaceActivityPane({
   runs,
@@ -66,6 +71,7 @@ export function AgentWorkspaceActivityPane({
   }, [activeRun, runs]);
 
   const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
+  const showLiveRun = shouldRenderLiveRun(activeRun?.runId, selectedRun?.id ?? null);
 
   return (
     <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
@@ -140,16 +146,19 @@ export function AgentWorkspaceActivityPane({
           activeRunId={activeRun?.runId}
         />
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-          {activeRun ? (
-            <LiveRunView
-              triggerRunId={activeRun.triggerRunId}
-              accessToken={activeRun.accessToken}
-              runId={activeRun.runId}
-              onComplete={onLiveRunComplete}
-              onApprove={onApprove}
-              onReject={onReject}
-              onAskChat={onAskChat}
-            />
+          {showLiveRun && activeRun ? (
+            <Suspense fallback={<div style={{ padding: 24, color: COLORS.textSecondary }}>Loading live run…</div>}>
+              <LazyLiveRunView
+                triggerRunId={activeRun.triggerRunId}
+                accessToken={activeRun.accessToken}
+                runId={activeRun.runId}
+                persistedApprovals={selectedRun?.approvals ?? []}
+                onComplete={onLiveRunComplete}
+                onApprove={onApprove}
+                onReject={onReject}
+                onAskChat={onAskChat}
+              />
+            </Suspense>
           ) : (
             <RunDetail
               run={selectedRun}

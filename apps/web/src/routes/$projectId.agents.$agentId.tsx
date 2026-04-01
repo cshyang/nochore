@@ -28,7 +28,7 @@ import {
 import { getPolicyToolCatalog } from "~/server/policy-tools";
 import { getProject } from "~/server/projects";
 import { getRealtimeToken } from "~/server/realtime";
-import { getRunHistory } from "~/server/runs";
+import { getRunHistory, syncRunTerminalState } from "~/server/runs";
 import { listAvailableSkills } from "~/server/skills";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
@@ -133,13 +133,33 @@ function AgentDetailPage() {
     }
   }, []);
 
-  const handleLiveRunComplete = useCallback(() => {
-    if (activeRun) {
-      exhaustedRunIds.current.add(activeRun.runId);
-    }
-    setActiveRun(null);
-    void router.invalidate();
-  }, [activeRun, router]);
+  const handleLiveRunComplete = useCallback(
+    async (status: "completed" | "failed" | "cancelled") => {
+      const completedRun = activeRun;
+      if (completedRun) {
+        exhaustedRunIds.current.add(completedRun.runId);
+      }
+
+      setActiveRun(null);
+
+      if (completedRun && (status === "failed" || status === "cancelled")) {
+        try {
+          await syncRunTerminalState({
+            data: {
+              runId: completedRun.runId,
+              projectId,
+              status,
+            },
+          });
+        } catch {
+          // Realtime run reached a terminal state but local reconciliation failed.
+        }
+      }
+
+      void router.invalidate();
+    },
+    [activeRun, projectId, router],
+  );
 
   const handleConnect = useCallback(
     async (provider: string) => {

@@ -11,6 +11,7 @@ dist/
 .vinxi/
 .tanstack/
 bun.lock
+docs/.vitepress/cache/
 
 # Data and credentials
 data/
