@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActivityVersion, derivePrimaryStatus } from "./activity";
+import { deriveActivityVersion, derivePrimaryStatus } from "./activity-core";
 
 describe("activity projection helpers", () => {
   it("prioritizes attention over running and error", () => {

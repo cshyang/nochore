@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { loadAgentActivityState, loadProjectActivityState } from "~/server/activity";
 
 const HEARTBEAT_MS = 15_000;
 const POLL_MS = 1_000;
@@ -20,6 +19,8 @@ export const Route = createFileRoute("/api/activity-stream")({
         if (scope === "agent" && !agentId) {
           return new Response("Missing agentId", { status: 400 });
         }
+
+        const { loadAgentActivityState, loadProjectActivityState } = await import("~/server/activity-core");
 
         const encoder = new TextEncoder();
         let cleanup: (() => void) | null = null;

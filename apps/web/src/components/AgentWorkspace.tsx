@@ -213,6 +213,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   };
 
   const wrappedOnRunNow = onRunNow ? handleRunNowWithConfirm : undefined;
+  const viewportHeight = "calc(100dvh - 64px)";
 
   const handleAskChat = useCallback((approval: PendingActionView) => {
     setSelectedRunId(approval.runId);
@@ -221,7 +222,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   }, []);
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh" }}>
+    <div style={{ position: "relative", height: viewportHeight, minHeight: 0 }}>
       <style>{`
         .aw-shell { color: ${COLORS.text}; font-family: ${TYPE.body}; }
         @keyframes awFadeIn {
@@ -236,6 +237,12 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         style={{
           background: `radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 32%), linear-gradient(180deg, ${COLORS.bg} 0%, ${COLORS.bg} 100%)`,
           padding: "28px clamp(20px, 3vw, 40px) 40px",
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          minHeight: 0,
+          overflow: "hidden",
         }}
       >
         <AgentWorkspaceHeader
@@ -291,28 +298,30 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         ) : null}
 
         {tab === "activity" ? (
-          <AgentWorkspaceActivityPane
-            runs={runs}
-            selectedRunId={selectedRunId}
-            onSelectRun={setSelectedRunId}
-            activeRunId={activeRunId}
-            runError={runError}
-            onRunNow={wrappedOnRunNow}
-            checklistItems={checklistItems}
-            onGoLive={() => void handleGoLive()}
-            goingLive={goingLive}
-            onApprove={onApprove}
-            onReject={onReject}
-            onAskChat={handleAskChat}
-            learnedRuleSuggestions={agent.learnedRuleSuggestions}
-            onAcceptLearnedRule={onAcceptLearnedRule}
-            onDismissLearnedRule={onDismissLearnedRule}
-            onSuppressLearnedRule={onSuppressLearnedRule}
-          />
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <AgentWorkspaceActivityPane
+              runs={runs}
+              selectedRunId={selectedRunId}
+              onSelectRun={setSelectedRunId}
+              activeRunId={activeRunId}
+              runError={runError}
+              onRunNow={wrappedOnRunNow}
+              checklistItems={checklistItems}
+              onGoLive={() => void handleGoLive()}
+              goingLive={goingLive}
+              onApprove={onApprove}
+              onReject={onReject}
+              onAskChat={handleAskChat}
+              learnedRuleSuggestions={agent.learnedRuleSuggestions}
+              onAcceptLearnedRule={onAcceptLearnedRule}
+              onDismissLearnedRule={onDismissLearnedRule}
+              onSuppressLearnedRule={onSuppressLearnedRule}
+            />
+          </div>
         ) : null}
 
         {tab === "settings" ? (
-          <div className="aw-panel-enter">
+          <div className="aw-panel-enter" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             <AgentWorkspaceSettingsPanel
               agent={agent}
               skills={availableSkills}
@@ -333,7 +342,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         ) : null}
 
         {tab === "chat" ? (
-          <div className="aw-panel-enter" style={{ height: "100%", minHeight: 0 }}>
+          <div className="aw-panel-enter" style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
             <AgentChatPane
               key={conversation?.threadId ?? agent.id}
               agent={agent}
@@ -358,7 +367,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         ) : null}
 
         {tab === "memory" ? (
-          <div className="aw-panel-enter" style={memoryPanelStyle}>
+          <div className="aw-panel-enter" style={{ ...memoryPanelStyle, flex: 1, minHeight: 0, overflowY: "auto" }}>
             <div style={memoryHeaderStyle}>
               <div style={placeholderIconStyle}>
                 <BookOpen size={20} weight="bold" color={COLORS.accent} />
