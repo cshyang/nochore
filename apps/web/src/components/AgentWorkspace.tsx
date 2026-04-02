@@ -28,8 +28,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onConnect,
     onDisconnect,
     requiredProviders = [],
-    activeRun,
-    onLiveRunComplete,
+    activeRunId,
     onCancelRun,
     cancelling,
     runError,
@@ -52,32 +51,19 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "activity");
   const chatRunCompleteRef = useRef<(() => void) | null>(null);
   const previousAgentIdRef = useRef(agent.id);
-
-  // B+ auto-follow-up: when a chat-triggered run completes, notify the chat
-  const handleLiveRunCompleteWithChat = useCallback(
-    (status: "completed" | "failed" | "cancelled") => {
-      void onLiveRunComplete?.(status);
-      if (tab === "chat" && chatRunCompleteRef.current) {
-        chatRunCompleteRef.current();
-      }
-    },
-    [onLiveRunComplete, tab],
-  );
+  const notifiedChatRunRef = useRef<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(props.initialRunId ?? null);
   const [goingLive, setGoingLive] = useState(false);
   const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(false);
   const [chatApprovalContext, setChatApprovalContext] = useState<PendingActionView | null>(null);
+  const [chatTriggeredRunId, setChatTriggeredRunId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (props.initialRunId) {
-      setSelectedRunId(props.initialRunId);
-      return;
-    }
-    if (runs.length > 0 && !selectedRunId) {
+    if (!selectedRunId && runs.length > 0) {
       setSelectedRunId(runs[0].id);
     }
-  }, [props.initialRunId, runs, selectedRunId]);
+  }, [runs, selectedRunId]);
 
   useEffect(() => {
     if (previousAgentIdRef.current !== agent.id) {
@@ -85,8 +71,17 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
       setTab(props.initialTab ?? "activity");
       setSelectedRunId(props.initialRunId ?? null);
       setChatApprovalContext(resolvePendingApproval(runs, props.initialPendingActionId));
+      setChatTriggeredRunId(null);
+      notifiedChatRunRef.current = null;
     }
   }, [agent.id, props.initialPendingActionId, props.initialRunId, props.initialTab, runs]);
+
+  useEffect(() => {
+    if (!props.initialRunId) {
+      return;
+    }
+    setSelectedRunId(props.initialRunId);
+  }, [props.initialRunId]);
 
   useEffect(() => {
     if (!props.initialPendingActionId) return;
@@ -110,6 +105,28 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     }
     setChatApprovalContext(latest);
   }, [runs, chatApprovalContext]);
+
+  useEffect(() => {
+    if (tab !== "chat" || !chatTriggeredRunId || !chatRunCompleteRef.current) {
+      return;
+    }
+
+    const run = runs.find((item) => item.id === chatTriggeredRunId);
+    if (!run) {
+      return;
+    }
+
+    const isTerminal =
+      run.status === "completed" || run.status === "failed" || run.status === "cancelled";
+
+    if (!isTerminal || notifiedChatRunRef.current === run.id) {
+      return;
+    }
+
+    notifiedChatRunRef.current = run.id;
+    chatRunCompleteRef.current();
+    setChatTriggeredRunId(null);
+  }, [chatTriggeredRunId, runs, tab]);
 
   const mergedRequiredProviders = useMemo(() => {
     const providers = new Map<string, { provider: string; reason: string; logo?: string }>();
@@ -226,7 +243,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           agent={agent}
           isDraft={isDraft}
           runAction={
-            activeRun && onCancelRun ? (
+            activeRunId && onCancelRun ? (
               <Button
                 variant="secondary"
                 onClick={onCancelRun}
@@ -242,7 +259,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 Run now
               </Button>
             ) : undefined
-          }
+            }
           moreOpen={moreOpen}
           onToggleMore={() => setMoreOpen((value) => !value)}
           onCloseMore={() => setMoreOpen(false)}
@@ -278,8 +295,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             runs={runs}
             selectedRunId={selectedRunId}
             onSelectRun={setSelectedRunId}
-            activeRun={activeRun}
-            onLiveRunComplete={handleLiveRunCompleteWithChat}
+            activeRunId={activeRunId}
             runError={runError}
             onRunNow={wrappedOnRunNow}
             checklistItems={checklistItems}
@@ -326,6 +342,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               conversation={conversation}
               onRunTriggered={(runId, triggerRunId) => {
                 setSelectedRunId(runId);
+                setChatTriggeredRunId(runId);
+                notifiedChatRunRef.current = null;
                 onRunTriggered?.(runId, triggerRunId);
               }}
               registerRunCompleteHandler={(handler) => {

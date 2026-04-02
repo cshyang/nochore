@@ -1,9 +1,12 @@
 import { z } from "zod";
 import type {
+  AgentActivityStateView,
   AgentView,
+  ProjectActivityStateView,
   ConnectionView,
   ConversationStateView,
   ProjectView,
+  RunActivityStateView,
   RunView,
   SkillView,
   ToolConfigEntryView,
@@ -106,6 +109,10 @@ const PendingActionViewSchema = z.object({
   resolvedReason: z.string().optional(),
 });
 
+const ActionableApprovalStateViewSchema = PendingActionViewSchema.extend({
+  status: z.enum(["pending", "expired"]),
+});
+
 const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
@@ -118,6 +125,10 @@ const RunViewSchema = z.object({
   events: z.array(RunEventViewSchema).default([]),
   approvals: z.array(PendingActionViewSchema).default([]),
   result: RunResultViewSchema.optional(),
+});
+
+const RunActivityStateViewSchema = RunViewSchema.extend({
+  approvals: z.array(ActionableApprovalStateViewSchema).default([]),
 });
 
 const SkillViewSchema = z.object({
@@ -171,6 +182,7 @@ const AgentViewSchema = z.object({
   lastRunRelative: z.string().nullable(),
   nextRunAt: z.number().nullable(),
   pendingCount: z.number(),
+  activeRunCount: z.number().default(0),
   lessonCount: z.number(),
   runCount: z.number(),
   connections: z.array(ProviderRequirementViewSchema),
@@ -187,12 +199,38 @@ const AgentViewSchema = z.object({
   scopeStrategy: z.enum(["static", "llm"]).optional(),
 });
 
+const ProjectAgentActivityViewSchema = z.object({
+  id: z.string(),
+  primaryStatus: z.enum(["running", "attention", "idle", "error"]),
+  activeRunCount: z.number(),
+  pendingApprovalCount: z.number(),
+  lastRunAt: z.number().nullable(),
+  lastRunRelative: z.string().nullable(),
+});
+
+const AgentActivityStateViewSchema = z.object({
+  agentId: z.string(),
+  version: z.number(),
+  primaryStatus: z.enum(["running", "attention", "idle", "error"]),
+  activeRunCount: z.number(),
+  pendingApprovalCount: z.number(),
+  activeRunId: z.string().nullable(),
+  runs: z.array(RunActivityStateViewSchema).default([]),
+});
+
 const ProjectNeedsInputViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   agentName: z.string(),
   runId: z.string(),
   approval: PendingActionViewSchema,
+});
+
+const ProjectActivityStateViewSchema = z.object({
+  projectId: z.string(),
+  version: z.number(),
+  agents: z.array(ProjectAgentActivityViewSchema).default([]),
+  needsInput: z.array(ProjectNeedsInputViewSchema).default([]),
 });
 
 const ProjectViewSchema = z.object({
@@ -243,4 +281,16 @@ export function parseRunViews(value: unknown): RunView[] {
 
 export function parseToolConfigEntryViews(value: unknown): ToolConfigEntryView[] {
   return parseArraySchema(ToolConfigEntryViewSchema, value);
+}
+
+export function parseAgentActivityStateView(value: unknown): AgentActivityStateView | null {
+  return parseNullableSchema(AgentActivityStateViewSchema, value);
+}
+
+export function parseProjectActivityStateView(value: unknown): ProjectActivityStateView | null {
+  return parseNullableSchema(ProjectActivityStateViewSchema, value);
+}
+
+export function parseRunActivityStateViews(value: unknown): RunActivityStateView[] {
+  return parseArraySchema(RunActivityStateViewSchema, value);
 }

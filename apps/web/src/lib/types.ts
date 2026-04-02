@@ -116,6 +116,10 @@ export interface PendingActionView {
   resolvedReason?: string;
 }
 
+export interface ActionableApprovalStateView extends PendingActionView {
+  status: "pending" | "expired";
+}
+
 export interface ProjectNeedsInputView {
   id: string;
   agentId: string;
@@ -143,6 +147,10 @@ export interface RunView {
   events: RunEventView[];
   approvals: PendingActionView[];
   result?: RunResultView;
+}
+
+export interface RunActivityStateView extends Omit<RunView, "approvals"> {
+  approvals: ActionableApprovalStateView[];
 }
 
 export interface ApprovalView {
@@ -213,6 +221,7 @@ export interface AgentView {
   lastRunRelative: string | null;
   nextRunAt: number | null;
   pendingCount: number;
+  activeRunCount: number;
   lessonCount: number;
   runCount: number;
   connections: ProviderRequirementView[];
@@ -229,6 +238,32 @@ export interface AgentView {
   policyRules?: string[];
   globalApprovalRequired?: boolean;
   scopeStrategy?: "static" | "llm";
+}
+
+export interface ProjectAgentActivityView {
+  id: string;
+  primaryStatus: AgentOperationalStatus;
+  activeRunCount: number;
+  pendingApprovalCount: number;
+  lastRunAt: number | null;
+  lastRunRelative: string | null;
+}
+
+export interface AgentActivityStateView {
+  agentId: string;
+  version: number;
+  primaryStatus: AgentOperationalStatus;
+  activeRunCount: number;
+  pendingApprovalCount: number;
+  activeRunId: string | null;
+  runs: RunActivityStateView[];
+}
+
+export interface ProjectActivityStateView {
+  projectId: string;
+  version: number;
+  agents: ProjectAgentActivityView[];
+  needsInput: ProjectNeedsInputView[];
 }
 
 export interface ProjectView {

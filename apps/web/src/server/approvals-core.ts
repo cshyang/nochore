@@ -36,7 +36,7 @@ export async function approveActionWithResolution(params: {
     timestamp: new Date(),
     type: "tool_approval_resolved",
     payload: {
-      approvalId: approval.approvalId,
+      approvalId: approval.id,
       decision: params.decision,
       reason: params.reason,
       toolName: approval.toolName,

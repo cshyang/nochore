@@ -13,12 +13,6 @@ import type {
 
 export type WorkspaceTab = "activity" | "chat" | "memory" | "settings";
 
-export interface ActiveRunState {
-  runId: string;
-  triggerRunId: string;
-  accessToken: string;
-}
-
 export interface AgentWorkspaceUpdate {
   name: string;
   description: string;
@@ -51,8 +45,7 @@ export interface AgentWorkspaceProps {
   initialPendingActionId?: string | null;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
-  activeRun?: ActiveRunState | null;
-  onLiveRunComplete?: (status: "completed" | "failed" | "cancelled") => void | Promise<void>;
+  activeRunId?: string | null;
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;

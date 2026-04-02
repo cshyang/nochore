@@ -1,17 +1,18 @@
 import { ArrowLeft, Plus } from "@phosphor-icons/react";
 import { Button } from "~/components/Button";
+import { useProjectLiveContext } from "~/components/project-live-context";
 import { COLORS, getAgentColor, MOTION, RADIUS, TYPE } from "~/lib/colors";
-import type { AgentView, ProjectView } from "~/lib/types";
+import type { AgentView } from "~/lib/types";
 
 interface ProjectSidebarProps {
-  project: ProjectView;
   activeAgentId: string | null;
   onSelectAgent: (id: string) => void;
   onGoHome: () => void;
   onNewAgent: () => void;
 }
 
-export function ProjectSidebar({ project, activeAgentId, onSelectAgent, onGoHome, onNewAgent }: ProjectSidebarProps) {
+export function ProjectSidebar({ activeAgentId, onSelectAgent, onGoHome, onNewAgent }: ProjectSidebarProps) {
+  const { project } = useProjectLiveContext();
   const draftAgents = project.agents.filter((a) => a.lifecycleStatus === "draft");
   const attentionAgents = project.agents.filter((a) => a.lifecycleStatus !== "draft" && a.status === "attention");
   const activeAgents = project.agents.filter(

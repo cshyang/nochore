@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
 import { ProjectConnections } from "~/components/ProjectConnections";
+import { formatAgentActivitySummary } from "~/lib/activity";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { humanizeToolName } from "~/lib/narrate";
 import type { ConnectionView, ProjectView } from "~/lib/types";
@@ -409,6 +410,10 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                         : COLORS.textDim;
                 const isRunning = agent.status === "running";
                 const isDraft = agent.lifecycleStatus === "draft";
+                const activitySummary = formatAgentActivitySummary({
+                  pendingApprovalCount: agent.pendingCount,
+                  activeRunCount: agent.activeRunCount,
+                });
                 return (
                   <Card
                     key={agent.id}
@@ -449,6 +454,11 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                       <span style={{ fontSize: 12, color: COLORS.textSecondary }}>
                         Last run: {agent.lastRunRelative ?? "Never"}
                       </span>
+                      {activitySummary ? (
+                        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 4 }}>
+                          {activitySummary}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <Badge color="gray">{agent.skills.length} skills</Badge>

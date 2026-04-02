@@ -1,17 +1,20 @@
 import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
+import { useProjectLiveContext } from "~/components/project-live-context";
+import { useAgentActivityState } from "~/components/use-activity-state";
+import { mergeAgentViewWithActivity } from "~/lib/activity";
 import { isDirectProvider } from "~/lib/provider-metadata";
 import {
   parseAgentView,
+  parseAgentActivityStateView,
   parseConnectionViews,
   parseConversationStateView,
-  parseProjectView,
-  parseRunViews,
   parseSkillViews,
   parseToolConfigEntryViews,
 } from "~/lib/view-models";
 import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
+import { getAgentActivityState } from "~/server/activity";
 import { approveAction, rejectAction } from "~/server/approvals";
 import { getPrimaryConversationState } from "~/server/chat";
 import {
@@ -28,9 +31,6 @@ import {
   suppressLearnedRuleSuggestion,
 } from "~/server/learned-rules";
 import { getPolicyToolCatalog } from "~/server/policy-tools";
-import { getProject } from "~/server/projects";
-import { getRealtimeToken } from "~/server/realtime";
-import { getRunHistory, syncRunTerminalState } from "~/server/runs";
 import { listAvailableSkills } from "~/server/skills";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
@@ -51,11 +51,10 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   loader: async ({ params }) => {
     const { projectId, agentId } = params;
     try {
-      const [project, agent, runs, conversation, skills, projectConnections, toolkitSummaries, policyToolCatalog] =
+      const [agent, activity, conversation, skills, projectConnections, toolkitSummaries, policyToolCatalog] =
         await Promise.all([
-          getProject({ data: { projectId } }),
           getAgent({ data: { agentId, projectId } }),
-          getRunHistory({ data: { agentId, projectId, limit: 20 } }),
+          getAgentActivityState({ data: { agentId, projectId } }),
           getPrimaryConversationState({ data: { agentId, projectId, limit: 12 } }),
           listAvailableSkills(),
           listConnections({ data: { projectId } }),
@@ -63,9 +62,8 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
           getPolicyToolCatalog({ data: { projectId } }).catch(() => []),
         ]);
       return {
-        project,
         agent,
-        runs: runs ?? [],
+        activity,
         conversation,
         skills: skills ?? [],
         projectConnections: projectConnections ?? [],
@@ -74,9 +72,8 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
       };
     } catch {
       return {
-        project: null,
         agent: null,
-        runs: [],
+        activity: null,
         conversation: null,
         skills: [],
         projectConnections: [],
@@ -96,14 +93,29 @@ function AgentDetailPage() {
   const router = useRouter();
   const loaderData = Route.useLoaderData();
   const search = Route.useSearch();
+  const { project } = useProjectLiveContext();
 
-  const project = parseProjectView(loaderData.project);
-  const agent = parseAgentView(loaderData.agent);
+  const staticAgent = parseAgentView(loaderData.agent);
+  const initialActivity = parseAgentActivityStateView(loaderData.activity);
   const skills = parseSkillViews(loaderData.skills);
   const projectConnections = parseConnectionViews(loaderData.projectConnections);
-  const runs = parseRunViews(loaderData.runs);
   const conversation = parseConversationStateView(loaderData.conversation);
   const policyToolCatalog = parseToolConfigEntryViews(loaderData.policyToolCatalog);
+  const { snapshot: activity } = useAgentActivityState({
+    projectId,
+    agentId,
+    initialSnapshot: initialActivity ?? {
+      agentId,
+      version: 0,
+      primaryStatus: staticAgent?.status ?? "idle",
+      activeRunCount: staticAgent?.activeRunCount ?? 0,
+      pendingApprovalCount: staticAgent?.pendingCount ?? 0,
+      activeRunId: null,
+      runs: [],
+    },
+  });
+  const agent = useMemo(() => (staticAgent ? mergeAgentViewWithActivity(staticAgent, activity) : null), [activity, staticAgent]);
+  const runs = activity.runs;
 
   // Build provider logo map from Composio toolkit summaries
   const toolkitSummaries = (loaderData.toolkitSummaries ?? []) as Array<{
@@ -113,57 +125,6 @@ function AgentDetailPage() {
   }>;
   const providerLogos = Object.fromEntries(
     toolkitSummaries.filter((tk) => tk.logo).map((tk) => [tk.slug, tk.logo as string]),
-  );
-  const [activeRun, setActiveRun] = useState<{
-    runId: string;
-    triggerRunId: string;
-    accessToken: string;
-  } | null>(null);
-
-  // Track runs that completed/failed via LiveRunView so the auto-activate
-  // effect doesn't re-connect to a run whose DB status is stale (e.g. still
-  // "queued" in SQLite but already FAILED on trigger.dev).
-  const exhaustedRunIds = useRef<Set<string>>(new Set());
-
-  const activateRun = useCallback(async (runId: string, triggerRunId: string) => {
-    try {
-      const tokenResult = await getRealtimeToken({ data: { triggerRunId } });
-      const token = (tokenResult as { token?: string })?.token;
-      if (token) {
-        setActiveRun({ runId, triggerRunId, accessToken: token });
-      }
-    } catch {
-      // Token creation failed — mark as exhausted so we don't retry
-      exhaustedRunIds.current.add(runId);
-    }
-  }, []);
-
-  const handleLiveRunComplete = useCallback(
-    async (status: "completed" | "failed" | "cancelled") => {
-      const completedRun = activeRun;
-      if (completedRun) {
-        exhaustedRunIds.current.add(completedRun.runId);
-      }
-
-      setActiveRun(null);
-
-      if (completedRun && (status === "failed" || status === "cancelled")) {
-        try {
-          await syncRunTerminalState({
-            data: {
-              runId: completedRun.runId,
-              projectId,
-              status,
-            },
-          });
-        } catch {
-          // Realtime run reached a terminal state but local reconciliation failed.
-        }
-      }
-
-      void router.invalidate();
-    },
-    [activeRun, projectId, router],
   );
 
   const handleConnect = useCallback(
@@ -208,33 +169,21 @@ function AgentDetailPage() {
     return () => window.removeEventListener("message", handler);
   }, [router]);
 
-  // Auto-activate LiveRunView if page loads with an active run
-  useEffect(() => {
-    if (activeRun) return;
-    const activeRunRecord = runs.find(
-      (r) =>
-        (r.status === "running" || r.status === "queued" || r.status === "waiting_for_approval") &&
-        !exhaustedRunIds.current.has(r.id),
-    );
-    if (!activeRunRecord) return;
-    const triggerRunId = (activeRunRecord as { triggerRunId?: string }).triggerRunId;
-    if (triggerRunId) {
-      void activateRun(activeRunRecord.id, triggerRunId);
-    }
-  }, [activeRun, activateRun, runs]);
-
   const [runError, setRunError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const activeRun = activity.activeRunId ? runs.find((run) => run.id === activity.activeRunId) ?? null : null;
 
   const handleCancelRun = useCallback(async () => {
     if (!activeRun || cancelling) return;
+    if (!activeRun.triggerRunId) {
+      setRunError("This run cannot be cancelled because its trigger id is missing.");
+      return;
+    }
     setCancelling(true);
     try {
       await cancelRun({
-        data: { runId: activeRun.runId, triggerRunId: activeRun.triggerRunId, projectId },
+        data: { runId: activeRun.id, triggerRunId: activeRun.triggerRunId, projectId },
       });
-      exhaustedRunIds.current.add(activeRun.runId);
-      setActiveRun(null);
       void router.invalidate();
     } catch {
       // Cancel failed — run may have already completed
@@ -252,9 +201,6 @@ function AgentDetailPage() {
     try {
       const result = await triggerManualRun({ data: { agentId, projectId } });
       const data = result as { runId?: string; triggerRunId?: string };
-      if (data.runId && data.triggerRunId) {
-        void activateRun(data.runId, data.triggerRunId);
-      }
       void router.invalidate();
       return data;
     } catch (err) {
@@ -284,8 +230,7 @@ function AgentDetailPage() {
       initialTab={search.tab}
       initialRunId={search.runId ?? null}
       initialPendingActionId={search.pendingActionId ?? null}
-      activeRun={activeRun}
-      onLiveRunComplete={handleLiveRunComplete}
+      activeRunId={activity.activeRunId}
       onCancelRun={handleCancelRun}
       cancelling={cancelling}
       runError={runError}
@@ -318,8 +263,7 @@ function AgentDetailPage() {
       }}
       runs={runs}
       conversation={conversation ?? undefined}
-      onRunTriggered={async (runId, triggerRunId) => {
-        void activateRun(runId, triggerRunId);
+      onRunTriggered={async (_runId, _triggerRunId) => {
         void router.invalidate();
       }}
       onApprove={async (actionId, reason) => {

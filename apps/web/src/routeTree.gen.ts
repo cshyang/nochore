@@ -15,6 +15,7 @@ import { Route as ProjectIdIndexRouteImport } from './routes/$projectId.index'
 import { Route as ApiOnboardRouteImport } from './routes/api.onboard'
 import { Route as ApiBlueprintRouteImport } from './routes/api.blueprint'
 import { Route as ApiAgentChatRouteImport } from './routes/api.agent-chat'
+import { Route as ApiActivityStreamRouteImport } from './routes/api.activity-stream'
 import { Route as ProjectIdCallbackComposioRouteImport } from './routes/$projectId.callback.composio'
 import { Route as ProjectIdAgentsNewRouteImport } from './routes/$projectId.agents.new'
 import { Route as ProjectIdAgentsAgentIdRouteImport } from './routes/$projectId.agents.$agentId'
@@ -49,6 +50,11 @@ const ApiAgentChatRoute = ApiAgentChatRouteImport.update({
   path: '/api/agent-chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiActivityStreamRoute = ApiActivityStreamRouteImport.update({
+  id: '/api/activity-stream',
+  path: '/api/activity-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectIdCallbackComposioRoute =
   ProjectIdCallbackComposioRouteImport.update({
     id: '/callback/composio',
@@ -69,6 +75,7 @@ const ProjectIdAgentsAgentIdRoute = ProjectIdAgentsAgentIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/activity-stream': typeof ApiActivityStreamRoute
   '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/activity-stream': typeof ApiActivityStreamRoute
   '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$projectId': typeof ProjectIdRouteWithChildren
+  '/api/activity-stream': typeof ApiActivityStreamRoute
   '/api/agent-chat': typeof ApiAgentChatRoute
   '/api/blueprint': typeof ApiBlueprintRoute
   '/api/onboard': typeof ApiOnboardRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$projectId'
+    | '/api/activity-stream'
     | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/activity-stream'
     | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$projectId'
+    | '/api/activity-stream'
     | '/api/agent-chat'
     | '/api/blueprint'
     | '/api/onboard'
@@ -137,6 +149,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProjectIdRoute: typeof ProjectIdRouteWithChildren
+  ApiActivityStreamRoute: typeof ApiActivityStreamRoute
   ApiAgentChatRoute: typeof ApiAgentChatRoute
   ApiBlueprintRoute: typeof ApiBlueprintRoute
   ApiOnboardRoute: typeof ApiOnboardRoute
@@ -186,6 +199,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/activity-stream': {
+      id: '/api/activity-stream'
+      path: '/api/activity-stream'
+      fullPath: '/api/activity-stream'
+      preLoaderRoute: typeof ApiActivityStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$projectId/callback/composio': {
       id: '/$projectId/callback/composio'
       path: '/callback/composio'
@@ -231,6 +251,7 @@ const ProjectIdRouteWithChildren = ProjectIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProjectIdRoute: ProjectIdRouteWithChildren,
+  ApiActivityStreamRoute: ApiActivityStreamRoute,
   ApiAgentChatRoute: ApiAgentChatRoute,
   ApiBlueprintRoute: ApiBlueprintRoute,
   ApiOnboardRoute: ApiOnboardRoute,

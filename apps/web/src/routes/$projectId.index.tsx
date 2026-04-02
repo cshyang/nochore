@@ -1,16 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ProjectHome } from "~/components/ProjectHome";
-import { parseConnectionViews, parseProjectView } from "~/lib/view-models";
+import { useProjectLiveContext } from "~/components/project-live-context";
+import { parseConnectionViews } from "~/lib/view-models";
 import { listConnections } from "~/server/connections";
-import { deleteProject, getProject } from "~/server/projects";
+import { deleteProject } from "~/server/projects";
 
 export const Route = createFileRoute("/$projectId/")({
   loader: async ({ params }) => {
-    const [project, connections] = await Promise.all([
-      getProject({ data: { projectId: params.projectId } }),
-      listConnections({ data: { projectId: params.projectId } }),
-    ]);
-    return { project, connections };
+    const connections = await listConnections({ data: { projectId: params.projectId } });
+    return { connections };
   },
   component: ProjectIndexPage,
 });
@@ -18,12 +16,8 @@ export const Route = createFileRoute("/$projectId/")({
 function ProjectIndexPage() {
   const navigate = useNavigate();
   const loaderData = Route.useLoaderData();
-  const project = parseProjectView(loaderData.project);
+  const { project } = useProjectLiveContext();
   const connections = parseConnectionViews(loaderData.connections);
-
-  if (!project) {
-    return <div>Project not found.</div>;
-  }
 
   const handleDeleteProject = async () => {
     await deleteProject({ data: { projectId: project.id } });

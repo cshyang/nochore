@@ -305,13 +305,6 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
-        <ApprovalArtifacts
-          run={run}
-          onRunNow={onRunNow}
-          onApprove={onApprove}
-          onReject={onReject}
-          onAskChat={onAskChat}
-        />
         <div
           style={{
             display: "flex",
@@ -364,13 +357,6 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
-        <ApprovalArtifacts
-          run={run}
-          onRunNow={onRunNow}
-          onApprove={onApprove}
-          onReject={onReject}
-          onAskChat={onAskChat}
-        />
         <div
           style={{
             display: "flex",
@@ -423,13 +409,6 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
-        <ApprovalArtifacts
-          run={run}
-          onRunNow={onRunNow}
-          onApprove={onApprove}
-          onReject={onReject}
-          onAskChat={onAskChat}
-        />
         <div
           style={{
             display: "flex",
@@ -481,13 +460,6 @@ export function RunDetail({
   return (
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
-      <ApprovalArtifacts
-        run={run}
-        onRunNow={onRunNow}
-        onApprove={onApprove}
-        onReject={onReject}
-        onAskChat={onAskChat}
-      />
 
       <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
 
@@ -518,13 +490,17 @@ function ApprovalArtifacts({
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
 }) {
-  if (run.approvals.length === 0) {
+  const actionableApprovals = run.approvals.filter(
+    (approval) => approval.status === "pending" || approval.status === "expired",
+  );
+
+  if (actionableApprovals.length === 0) {
     return null;
   }
 
   return (
     <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-      {run.approvals.map((approval) => (
+      {actionableApprovals.map((approval) => (
         <ApprovalCard
           key={approval.id}
           approval={approval}

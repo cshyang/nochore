@@ -4,6 +4,7 @@ import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import type { WorkspaceTab } from "~/components/agent-workspace.types";
 import { Card } from "~/components/Card";
+import { formatAgentActivitySummary } from "~/lib/activity";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { getProviderMetadata } from "~/lib/provider-metadata";
 import type { AgentView, ProjectView, ProviderRequirementView } from "~/lib/types";
@@ -172,6 +173,20 @@ export function AgentWorkspaceHeader({
   onBack: () => void;
   onDeleteAgent?: () => void;
 }) {
+  const statusBadgeColor = isDraft
+    ? "orange"
+    : agent.status === "attention"
+      ? "orange"
+      : agent.status === "running"
+        ? "green"
+        : agent.status === "error"
+          ? "red"
+          : "gray";
+  const activitySummary = formatAgentActivitySummary({
+    pendingApprovalCount: agent.pendingCount,
+    activeRunCount: agent.activeRunCount,
+  });
+
   return (
     <div
       style={{
@@ -208,7 +223,7 @@ export function AgentWorkspaceHeader({
             <Badge color="accent">
               {project.icon} {project.name}
             </Badge>
-            <Badge color={isDraft ? "orange" : agent.status === "running" ? "green" : "gray"}>
+            <Badge color={statusBadgeColor}>
               {humanize(agent.status ?? (isDraft ? "draft" : "idle"))}
             </Badge>
           </div>
@@ -237,6 +252,18 @@ export function AgentWorkspaceHeader({
           >
             {agent.description || agent.instructions || "No description yet."}
           </p>
+          {activitySummary ? (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: TYPE.scale.sm,
+                color: COLORS.textDim,
+                fontFamily: TYPE.body,
+              }}
+            >
+              {activitySummary}
+            </div>
+          ) : null}
         </div>
       </div>
 

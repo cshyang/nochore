@@ -516,6 +516,20 @@ async function handleApprovalRequest(params: {
     }
   } else {
     reason = approvalRow?.decisionReason ?? reason;
+    const liveStatus = approvalRow?.status;
+    if (liveStatus && liveStatus !== "pending") {
+      emitLiveEvent(
+        `approval-${approvalRecordId}-${liveStatus}`,
+        liveStatus === "expired" ? "tool_approval_expired" : "tool_approval_resolved",
+        {
+          approvalId: approvalRecordId,
+          toolName,
+          status: liveStatus,
+          reason,
+          ...(liveStatus === "expired" ? { expiresAt: expiresAt.toISOString() } : {}),
+        },
+      );
+    }
   }
 
   if ((approvalRow?.status ?? status) === "approved") {

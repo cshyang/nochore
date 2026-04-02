@@ -79,6 +79,9 @@ export function buildAgentView(params: {
   learnedRules?: LearnedPolicyRule[];
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
+  const activeRunCount = params.runs.filter(
+    (run) => run.status === "queued" || run.status === "running" || run.status === "waiting_for_approval",
+  ).length;
   const pendingCount = params.approvals.filter(
     (approval) => approval.status === "pending" || approval.status === "expired",
   ).length;
@@ -86,10 +89,7 @@ export function buildAgentView(params: {
   let status: AgentView["status"] = "idle";
   if (pendingCount > 0) {
     status = "attention";
-  } else if (
-    latestRun &&
-    (latestRun.status === "queued" || latestRun.status === "running" || latestRun.status === "waiting_for_approval")
-  ) {
+  } else if (activeRunCount > 0) {
     status = "running";
   } else if (latestRun?.status === "failed") {
     status = "error";
@@ -113,6 +113,7 @@ export function buildAgentView(params: {
     lastRunRelative: latestRun ? relativeTime(latestRun.startedAt.getTime()) : null,
     nextRunAt: null,
     pendingCount,
+    activeRunCount,
     lessonCount: params.lessonsCount,
     runCount: params.runs.length,
     connections: params.activeConnections.map((connection) => ({

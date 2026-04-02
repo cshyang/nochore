@@ -1,11 +1,9 @@
 import { WarningCircle } from "@phosphor-icons/react";
-import { lazy, Suspense, useMemo } from "react";
-import type { ActiveRunState } from "~/components/agent-workspace.types";
+import { useMemo } from "react";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
 import { Button } from "~/components/Button";
 import { RunDetail } from "~/components/RunDetail";
 import { RunList } from "~/components/RunList";
-import { shouldRenderLiveRun } from "~/components/run-lifecycle";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import type { LearnedRuleView, PendingActionView, RunView } from "~/lib/types";
 
@@ -13,8 +11,7 @@ interface AgentWorkspaceActivityPaneProps {
   runs: RunView[];
   selectedRunId: string | null;
   onSelectRun: (runId: string) => void;
-  activeRun?: ActiveRunState | null;
-  onLiveRunComplete?: (status: "completed" | "failed" | "cancelled") => void | Promise<void>;
+  activeRunId?: string | null;
   runError?: string | null;
   onRunNow?: () => void | Promise<void>;
   checklistItems?: ChecklistItem[];
@@ -29,17 +26,11 @@ interface AgentWorkspaceActivityPaneProps {
   onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
 }
 
-const LazyLiveRunView = lazy(async () => {
-  const module = await import("~/components/LiveRunView");
-  return { default: module.LiveRunView };
-});
-
 export function AgentWorkspaceActivityPane({
   runs,
   selectedRunId,
   onSelectRun,
-  activeRun,
-  onLiveRunComplete,
+  activeRunId,
   runError,
   onRunNow,
   checklistItems,
@@ -53,25 +44,26 @@ export function AgentWorkspaceActivityPane({
   onDismissLearnedRule,
   onSuppressLearnedRule,
 }: AgentWorkspaceActivityPaneProps) {
-  // Synthesize a placeholder for the live run if it hasn't appeared in the
-  // fetched runs list yet (loader data is stale until router.invalidate).
   const displayRuns = useMemo(() => {
-    if (!activeRun) return runs;
-    if (runs.some((r) => r.id === activeRun.runId)) return runs;
+    if (!selectedRunId || runs.some((run) => run.id === selectedRunId)) {
+      return runs;
+    }
+
     const placeholder: RunView = {
-      id: activeRun.runId,
+      id: selectedRunId,
       agentId: runs[0]?.agentId ?? "",
       triggerType: "manual",
-      status: "running",
+      status: activeRunId === selectedRunId ? "running" : "queued",
       startedAt: new Date().toISOString(),
       events: [],
       approvals: [],
     };
+
     return [placeholder, ...runs];
-  }, [activeRun, runs]);
+  }, [activeRunId, runs, selectedRunId]);
 
   const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
-  const showLiveRun = shouldRenderLiveRun(activeRun?.runId, selectedRun?.id ?? null);
+  const hasJumpToLive = Boolean(activeRunId) && selectedRun?.id !== activeRunId && displayRuns.some((run) => run.id === activeRunId);
 
   return (
     <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
@@ -143,35 +135,42 @@ export function AgentWorkspaceActivityPane({
           runs={displayRuns}
           selectedRunId={selectedRun?.id ?? null}
           onSelect={onSelectRun}
-          activeRunId={activeRun?.runId}
+          activeRunId={activeRunId}
         />
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-          {showLiveRun && activeRun ? (
-            <Suspense fallback={<div style={{ padding: 24, color: COLORS.textSecondary }}>Loading live run…</div>}>
-              <LazyLiveRunView
-                triggerRunId={activeRun.triggerRunId}
-                accessToken={activeRun.accessToken}
-                runId={activeRun.runId}
-                persistedApprovals={selectedRun?.approvals ?? []}
-                onComplete={onLiveRunComplete}
-                onApprove={onApprove}
-                onReject={onReject}
-                onAskChat={onAskChat}
-              />
-            </Suspense>
-          ) : (
-            <RunDetail
-              run={selectedRun}
-              hasRuns={displayRuns.length > 0}
-              onRunNow={onRunNow}
-              checklistItems={checklistItems}
-              onGoLive={onGoLive}
-              goingLive={goingLive}
-              onApprove={onApprove}
-              onReject={onReject}
-              onAskChat={onAskChat}
-            />
-          )}
+          {hasJumpToLive ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "12px 16px",
+                margin: "0 0 12px",
+                background: COLORS.accentSubtle,
+                border: `1px solid ${COLORS.accentBorder}`,
+                borderRadius: RADIUS.sm,
+              }}
+            >
+              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
+                A newer live run is in progress. Stay here or jump to the current run.
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => activeRunId && onSelectRun(activeRunId)}>
+                Jump to live run
+              </Button>
+            </div>
+          ) : null}
+          <RunDetail
+            run={selectedRun}
+            hasRuns={displayRuns.length > 0}
+            onRunNow={onRunNow}
+            checklistItems={checklistItems}
+            onGoLive={onGoLive}
+            goingLive={goingLive}
+            onApprove={onApprove}
+            onReject={onReject}
+            onAskChat={onAskChat}
+          />
         </div>
       </div>
     </div>
