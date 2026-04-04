@@ -1,13 +1,13 @@
-import type { createDb } from "../../../../packages/harness/src/db/client";
-import type { connections } from "../../../../packages/harness/src/db/schema";
-import type { AgentRecord } from "../../../../packages/harness/src/repositories/agent";
 import type {
+  AgentRecord,
   ApprovalRecord,
   ApprovalStatus,
+  connections,
+  createDb,
   LearnedPolicyRule,
   RunEvent,
   RunRecord,
-} from "../../../../packages/harness/src/types";
+} from "@nochore/harness";
 import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;

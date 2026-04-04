@@ -3,6 +3,7 @@ import { createTestDb } from "../../db/client";
 import { projects } from "../../db/schema";
 import { AgentRepository } from "../agent";
 import { ApprovalRepository } from "../approval";
+import { createProjectRepositories } from "../bundle";
 import { ConversationCheckpointRepository } from "../conversation-checkpoint";
 import { ConversationEventRepository } from "../conversation-event";
 import { ConversationThreadRepository } from "../conversation-thread";
@@ -11,6 +12,16 @@ import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
 
 describe("simplified repositories", () => {
+  it("creates a concrete repository bundle for one project database", () => {
+    const db = createTestDb();
+    const repositories = createProjectRepositories(db);
+
+    expect(repositories.agentRepository).toBeInstanceOf(AgentRepository);
+    expect(repositories.approvalRepository).toBeInstanceOf(ApprovalRepository);
+    expect(repositories.conversationCheckpointRepository).toBeInstanceOf(ConversationCheckpointRepository);
+    expect(repositories.runRepository).toBeInstanceOf(RunRepository);
+  });
+
   it("creates, loads, and updates agents", async () => {
     const db = createTestDb();
     const now = Date.now();

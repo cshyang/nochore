@@ -1,4 +1,4 @@
-import { createComposioClient } from "../../../../packages/harness/src/connections";
+import { createComposioClient } from "@nochore/harness";
 import { TOOLKIT_CATALOG_PROVIDER_SLUGS } from "../lib/provider-metadata";
 
 interface ComposioCatalogTool {

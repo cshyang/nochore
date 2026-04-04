@@ -5,18 +5,18 @@
  * The agent can answer questions and trigger background runs.
  */
 
+import { createAiSdkModel } from "@nochore/harness";
 import { createFileRoute } from "@tanstack/react-router";
 import type { LanguageModelUsage, UIMessage } from "ai";
 import { stepCountIs, streamText } from "ai";
 import { z } from "zod";
-import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
+import { buildAgentChatSystemPrompt } from "~/server/agent-chat-prompt";
 import {
   assembleConversation,
   persistConversationAfterResponse,
   persistConversationMessages,
   resolveConversationThread,
 } from "~/server/chat-memory";
-import { buildAgentChatSystemPrompt } from "~/server/agent-chat-prompt";
 import { getAgentRow, getProjectDeps } from "~/server/deps";
 import { startAgentRun } from "~/server/orchestration";
 
@@ -154,11 +154,7 @@ export const Route = createFileRoute("/api/agent-chat")({
                 includeFindings: z.boolean().default(true).describe("Include finding_recorded events"),
                 includeLessons: z.boolean().default(true).describe("Include distilled lessons"),
               }),
-              execute: async (input: {
-                runLimit: number;
-                includeFindings: boolean;
-                includeLessons: boolean;
-              }) => {
+              execute: async (input: { runLimit: number; includeFindings: boolean; includeLessons: boolean }) => {
                 const recentRuns = await deps.runRepository.getByAgent(agentId, input.runLimit);
 
                 let findings: Array<{ runId: string; text: string; timestamp: string }> = [];
@@ -213,9 +209,7 @@ export const Route = createFileRoute("/api/agent-chat")({
               }),
               execute: async (input: { query?: string; toolkits?: string[] }) => {
                 try {
-                  const { createComposioClient } = await import(
-                    "../../../../packages/harness/src/connections/composio"
-                  );
+                  const { createComposioClient } = await import("@nochore/harness");
                   const composio = await createComposioClient();
                   const tools = await composio.tools.getRawComposioTools({
                     ...(input.toolkits?.length ? { toolkits: input.toolkits } : {}),

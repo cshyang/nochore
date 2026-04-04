@@ -1,5 +1,5 @@
+import { listSkillDefinitions } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
-import { listSkillDefinitions } from "../../../../packages/harness/src/catalog";
 import { jsonSafe } from "./serializable";
 
 export const listAvailableSkills = createServerFn({ method: "GET" }).handler(async () => {

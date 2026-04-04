@@ -6,7 +6,7 @@
  * authored prompt body lives in the capabilities catalog.
  */
 
-import { getPromptDefinitionById } from "../../../../packages/harness/src/catalog";
+import { getPromptDefinitionById } from "@nochore/harness";
 
 export function buildAgentChatSystemPrompt(agent: {
   name: string;

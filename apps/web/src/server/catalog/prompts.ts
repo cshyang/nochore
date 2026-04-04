@@ -1,5 +1,5 @@
+import { getPromptDefinitionById, listPromptDefinitions } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
-import { getPromptDefinitionById, listPromptDefinitions } from "../../../../../packages/harness/src/catalog";
 import { jsonSafe } from "../serializable";
 
 export const listPrompts = createServerFn({ method: "GET" }).handler(async () => {

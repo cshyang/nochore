@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
+import type { RunTrigger } from "@nochore/harness";
 import { runs, tasks, wait } from "@trigger.dev/sdk/v3";
-import type { RunTrigger } from "../../../../packages/harness/src/types";
 import { approveActionWithResolution } from "./approvals-core";
 import { getProjectDeps } from "./deps";
 

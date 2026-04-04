@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
+import { connections } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
 import { and, eq } from "drizzle-orm";
-import { connections } from "../../../../packages/harness/src/db/schema";
 import type { ComposioToolMeta } from "./connections-catalog";
 import { getProjectDeps } from "./deps";
 import { buildConnectionView } from "./models";
@@ -23,7 +23,7 @@ interface ToolkitMetadataItem {
 export const initiateConnection = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; callbackUrl: string }) => input)
   .handler(async ({ data }) => {
-    const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections");
+    const { createComposioClient, getComposioUserId } = await import("@nochore/harness");
     const composio = await createComposioClient();
     const session = await composio.create(getComposioUserId(data.projectId), {
       manageConnections: false,
@@ -87,7 +87,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
     }
 
     try {
-      const { createComposioClient } = await import("../../../../packages/harness/src/connections");
+      const { createComposioClient } = await import("@nochore/harness");
       const composio = await createComposioClient();
       const account = await composio.connectedAccounts.get(pending.composioEntityId);
       if (account.status === "ACTIVE") {
@@ -116,7 +116,7 @@ export const activateConnection = createServerFn({ method: "POST" })
 
     if (pending.composioEntityId) {
       try {
-        const { createComposioClient } = await import("../../../../packages/harness/src/connections");
+        const { createComposioClient } = await import("@nochore/harness");
         const composio = await createComposioClient();
         const account = await composio.connectedAccounts.get(pending.composioEntityId);
         if (account.status !== "ACTIVE") {
@@ -136,7 +136,7 @@ export const getToolkitMetadata = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string; toolkits: string[] }) => input)
   .handler(async ({ data }) => {
     try {
-      const { createComposioClient, getComposioUserId } = await import("../../../../packages/harness/src/connections");
+      const { createComposioClient, getComposioUserId } = await import("@nochore/harness");
       const composio = await createComposioClient();
       const session = await composio.create(getComposioUserId(data.projectId), {
         toolkits: data.toolkits,
@@ -163,7 +163,7 @@ export const disconnectProvider = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; connectedAccountId: string }) => input)
   .handler(async ({ data }) => {
     try {
-      const { createComposioClient } = await import("../../../../packages/harness/src/connections");
+      const { createComposioClient } = await import("@nochore/harness");
       const composio = await createComposioClient();
       await composio.connectedAccounts.delete(data.connectedAccountId);
 
@@ -196,7 +196,7 @@ export const fetchToolkitSummaries = createServerFn({ method: "GET" })
       }>
     > => {
       try {
-        const { createComposioClient } = await import("../../../../packages/harness/src/connections");
+        const { createComposioClient } = await import("@nochore/harness");
         const { TOOLKIT_CATALOG_PROVIDER_SLUGS } = await import("../lib/provider-metadata");
         const composio = await createComposioClient();
 
