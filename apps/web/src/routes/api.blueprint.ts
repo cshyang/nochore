@@ -6,17 +6,12 @@
  * notification config, and schedule.
  */
 
+import type { AgentSchedule, NotificationConfig, ProviderRequirement, ToolConfig } from "@nochore/harness";
+import { createAiSdkModel, resolveAiSdkProvider } from "@nochore/harness";
 import { createFileRoute } from "@tanstack/react-router";
 import { stepCountIs, ToolLoopAgent, tool } from "ai";
 import { z } from "zod";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderDefaultReason, getProviderName } from "~/lib/provider-metadata";
-import { createAiSdkModel, resolveAiSdkProvider } from "../../../../packages/harness/src/llm/model";
-import type {
-  AgentSchedule,
-  NotificationConfig,
-  ProviderRequirement,
-  ToolConfig,
-} from "../../../../packages/harness/src/types";
 
 const DraftScheduleSchema = z.enum(["hourly", "6hours", "daily", "weekly", "manual"]);
 

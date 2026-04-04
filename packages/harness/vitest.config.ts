@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     include: [
       "src/db/__tests__/schema-v2.test.ts",
+      "src/persistence/__tests__/project.test.ts",
       "src/repositories/__tests__/repositories-v2.test.ts",
       "src/workspace/__tests__/store-v2.test.ts",
       "src/skills/__tests__/prompt-skills.test.ts",

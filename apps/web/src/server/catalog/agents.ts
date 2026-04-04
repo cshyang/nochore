@@ -1,5 +1,5 @@
+import { getAgentDefinitionById, listAgentDefinitions } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
-import { getAgentDefinitionById, listAgentDefinitions } from "../../../../../packages/harness/src/catalog";
 import { jsonSafe } from "../serializable";
 
 export const listAgents = createServerFn({ method: "GET" }).handler(async () => {

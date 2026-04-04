@@ -5,13 +5,13 @@
  * The LLM clarifies intent, searches for tools, then calls create_agent.
  */
 
+import { createAiSdkModel } from "@nochore/harness";
 import { createFileRoute } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from "ai";
 import { z } from "zod";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
 import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
-import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
 
 type AvailableSkill = {
   id: string;
@@ -186,9 +186,7 @@ export const Route = createFileRoute("/api/onboard")({
               }),
               execute: async (input: { query?: string; toolkits?: string[] }) => {
                 try {
-                  const { createComposioClient } = await import(
-                    "../../../../packages/harness/src/connections/composio"
-                  );
+                  const { createComposioClient } = await import("@nochore/harness");
                   const composio = await createComposioClient();
 
                   // The SDK typing is narrower than the runtime search parameters supported here.

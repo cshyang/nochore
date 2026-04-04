@@ -1,12 +1,9 @@
 import crypto from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { connections, getProjectDirectory, getProjectPersistence, getWebDataRoot, projects } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { createDb } from "../../../../packages/harness/src/db/client";
-import { connections, projects } from "../../../../packages/harness/src/db/schema";
-import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
-import { getProjectDirectory, getWebDataRoot } from "../../../../packages/harness/src/workspace";
 import { clearProjectDeps, getProjectDeps } from "./deps";
 import { buildAgentView, buildProjectView } from "./models";
 import { jsonSafe } from "./serializable";
@@ -52,8 +49,6 @@ export const createProject = createServerFn({ method: "POST" })
     }
 
     mkdirSync(projectDir, { recursive: true });
-    createDb(getProjectPersistence(projectId).dbPath);
-
     const { db } = getProjectDeps(projectId);
     const now = Date.now();
     db.insert(projects)

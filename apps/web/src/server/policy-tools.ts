@@ -1,9 +1,7 @@
+import type { ToolConfigEntry } from "@nochore/harness";
+import { buildToolConfigEntry, connections, getGoogleAdsToolsForPi } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
-import { getGoogleAdsToolsForPi } from "../../../../packages/harness/src/connections/google-ads/tools";
-import { connections } from "../../../../packages/harness/src/db/schema";
-import { buildToolConfigEntry } from "../../../../packages/harness/src/policy";
-import type { ToolConfigEntry } from "../../../../packages/harness/src/types";
 import { listComposioToolCatalogForProject } from "./connections-catalog";
 import { getProjectDeps } from "./deps";
 import { jsonSafe } from "./serializable";

@@ -1,4 +1,4 @@
-import type { ApprovalRecord, RunRecord, RunStatus } from "../../../../packages/harness/src/types";
+import type { ApprovalRecord, RunRecord, RunStatus } from "@nochore/harness";
 import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction, buildSerializedRun } from "./models";
 

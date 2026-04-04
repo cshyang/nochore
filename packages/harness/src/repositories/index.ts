@@ -1,15 +1,4 @@
 export {
-  ConversationCheckpointRepository,
-} from "./conversation-checkpoint";
-export {
-  ConversationEventRepository,
-  type UpsertConversationMessageInput,
-} from "./conversation-event";
-export {
-  ConversationThreadRepository,
-  type CreateConversationThreadInput,
-} from "./conversation-thread";
-export {
   type AgentRecord,
   AgentRepository,
   type CreateAgentInput,
@@ -18,6 +7,16 @@ export {
   ApprovalRepository,
   type CreateApprovalInput,
 } from "./approval";
+export { createProjectRepositories } from "./bundle";
+export { ConversationCheckpointRepository } from "./conversation-checkpoint";
+export {
+  ConversationEventRepository,
+  type UpsertConversationMessageInput,
+} from "./conversation-event";
+export {
+  ConversationThreadRepository,
+  type CreateConversationThreadInput,
+} from "./conversation-thread";
 export {
   type CreateRunEventInput,
   RunEventRepository,

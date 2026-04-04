@@ -1,4 +1,4 @@
-import { detectAndSuggestLearnedRules } from "../../../../packages/harness/src/policy";
+import { detectAndSuggestLearnedRules } from "@nochore/harness";
 import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction } from "./models";
 

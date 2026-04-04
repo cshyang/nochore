@@ -1,4 +1,4 @@
-import { getPromptDefinitionById } from "../../../../packages/harness/src/catalog";
+import { getPromptDefinitionById } from "@nochore/harness";
 import { getProviderName } from "../lib/provider-metadata";
 
 /**

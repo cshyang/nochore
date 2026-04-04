@@ -1,37 +1,37 @@
 import { readFile } from "node:fs/promises";
-import type { LanguageModel } from "ai";
-import { eq } from "drizzle-orm";
-import { getAgentDefinitionById } from "../../../../packages/harness/src/catalog";
-import { createComposioClient, getComposioUserId } from "../../../../packages/harness/src/connections";
-import { createDb, type HarnessDb } from "../../../../packages/harness/src/db/client";
-import { connections } from "../../../../packages/harness/src/db/schema";
-import { createAiSdkModel } from "../../../../packages/harness/src/llm/model";
-import { getProjectPersistence } from "../../../../packages/harness/src/persistence";
 import {
   type AgentRecord,
-  AgentRepository,
-  ApprovalRepository,
-  ConversationEventRepository,
-  ConversationThreadRepository,
-  LearnedRuleRepository,
-  LessonRepository,
-  RunEventRepository,
-  RunRepository,
-} from "../../../../packages/harness/src/repositories";
-import { listPromptSkills, type PromptSkill } from "../../../../packages/harness/src/skills";
-import type { RunTrigger } from "../../../../packages/harness/src/types";
-import { getAgentWorkspacePath, WorkspaceStore } from "../../../../packages/harness/src/workspace";
+  connections,
+  createAiSdkModel,
+  createComposioClient,
+  createProjectRepositories,
+  getAgentDefinitionById,
+  getAgentWorkspacePath,
+  getComposioUserId,
+  type HarnessDb,
+  listPromptSkills,
+  openProjectDb,
+  type PromptSkill,
+  type RunTrigger,
+  WorkspaceStore,
+} from "@nochore/harness";
+import type { LanguageModel } from "ai";
+import { eq } from "drizzle-orm";
 
-export interface WorkerRuntime {
+type WorkerRepositories = Pick<
+  ReturnType<typeof createProjectRepositories>,
+  | "agentRepository"
+  | "approvalRepository"
+  | "conversationEventRepository"
+  | "conversationThreadRepository"
+  | "learnedRuleRepository"
+  | "lessonRepository"
+  | "runEventRepository"
+  | "runRepository"
+>;
+
+export interface WorkerRuntime extends WorkerRepositories {
   db: HarnessDb;
-  agentRepository: AgentRepository;
-  approvalRepository: ApprovalRepository;
-  conversationEventRepository: ConversationEventRepository;
-  conversationThreadRepository: ConversationThreadRepository;
-  lessonRepository: LessonRepository;
-  learnedRuleRepository: LearnedRuleRepository;
-  runEventRepository: RunEventRepository;
-  runRepository: RunRepository;
   composio: Awaited<ReturnType<typeof createComposioClient>>;
   userId: string;
   activeProviders: string[];
@@ -50,21 +50,22 @@ export async function createModel(modelOverride?: string): Promise<LanguageModel
 }
 
 export async function createWorkerRuntime(projectId: string): Promise<WorkerRuntime> {
-  const db = createDb(getProjectPersistence(projectId).dbPath);
+  const db = openProjectDb(projectId);
   const composio = await createComposioClient();
+  const repositories = createProjectRepositories(db);
 
   const { providers, configs } = await listActiveProvidersWithConfig(db, projectId);
 
   return {
     db,
-    agentRepository: new AgentRepository(db),
-    approvalRepository: new ApprovalRepository(db),
-    conversationEventRepository: new ConversationEventRepository(db),
-    conversationThreadRepository: new ConversationThreadRepository(db),
-    lessonRepository: new LessonRepository(db),
-    learnedRuleRepository: new LearnedRuleRepository(db),
-    runEventRepository: new RunEventRepository(db),
-    runRepository: new RunRepository(db),
+    agentRepository: repositories.agentRepository,
+    approvalRepository: repositories.approvalRepository,
+    conversationEventRepository: repositories.conversationEventRepository,
+    conversationThreadRepository: repositories.conversationThreadRepository,
+    learnedRuleRepository: repositories.learnedRuleRepository,
+    lessonRepository: repositories.lessonRepository,
+    runEventRepository: repositories.runEventRepository,
+    runRepository: repositories.runRepository,
     composio,
     userId: getComposioUserId(projectId),
     activeProviders: providers,

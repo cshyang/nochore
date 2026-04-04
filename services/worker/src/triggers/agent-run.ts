@@ -1,23 +1,15 @@
-import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
-import { classifyRunLessonWrites } from "../../../../packages/harness/src/conversation/runtime";
+import type { LearnedPolicyRule, RunSummary, RunTrigger, ToolConfigEntry, ToolMode } from "@nochore/harness";
 import {
-  getGoogleAdsToolsForPi,
-  type PiToolDefinition,
-} from "../../../../packages/harness/src/connections/google-ads/tools";
-import {
+  type AgentRecord,
   buildToolConfigEntry,
+  classifyRunLessonWrites,
   detectAndSuggestLearnedRules,
   evaluatePolicy,
-} from "../../../../packages/harness/src/policy";
-import type { AgentRecord } from "../../../../packages/harness/src/repositories";
-import type {
-  LearnedPolicyRule,
-  RunSummary,
-  RunTrigger,
-  ToolConfigEntry,
-  ToolMode,
-} from "../../../../packages/harness/src/types";
-import { getAgentWorkspacePath } from "../../../../packages/harness/src/workspace";
+  getAgentWorkspacePath,
+  getGoogleAdsToolsForPi,
+  type PiToolDefinition,
+} from "@nochore/harness";
+import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
 import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
 import { getComposioToolsForPi } from "../lib/composio-pi-bridge";
 import { narrateEvent } from "../lib/narrate";

@@ -1,19 +1,19 @@
 import crypto from "node:crypto";
 import { rmSync } from "node:fs";
-import { createServerFn } from "@tanstack/react-start";
-import { eq } from "drizzle-orm";
+import type { AgentConfig, AgentRecord, NotificationConfig, ToolConfig } from "@nochore/harness";
 import {
   agents,
   approvals,
+  getAgentWorkspacePath,
+  initializeWorkspace,
   learnedPolicyRules,
   lessons,
   runEvents,
   runs,
   suggestionSuppressions,
-} from "../../../../packages/harness/src/db/schema";
-import type { AgentRecord } from "../../../../packages/harness/src/repositories";
-import type { AgentConfig, NotificationConfig, ToolConfig } from "../../../../packages/harness/src/types";
-import { getAgentWorkspacePath, initializeWorkspace } from "../../../../packages/harness/src/workspace";
+} from "@nochore/harness";
+import { createServerFn } from "@tanstack/react-start";
+import { eq } from "drizzle-orm";
 import { getProjectDeps } from "./deps";
 import { buildAgentView } from "./models";
 import { cancelAgentRun, startAgentRun } from "./orchestration";

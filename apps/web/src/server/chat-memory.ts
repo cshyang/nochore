@@ -1,8 +1,9 @@
-import { convertToModelMessages, generateObject, generateText, type LanguageModel, type UIMessage } from "ai";
-import { z } from "zod";
+import type { ConversationCheckpoint, ConversationEvent, ConversationThread, LessonRecord } from "@nochore/harness";
 import {
   buildConversationTranscript,
   CHECKPOINT_KEEP_RECENT_TOKENS,
+  estimateConversationStateTokens,
+  estimateTextTokens,
   extractStructuredConversationEvents,
   findCompactionBoundary,
   INLINE_COMPACTION_KEEP_RECENT_TOKENS,
@@ -13,12 +14,10 @@ import {
   shouldAttemptChatMemoryDistillation,
   shouldInlineCompact,
   shouldRefreshCheckpoint,
-  estimateConversationStateTokens,
-  estimateTextTokens,
-} from "../../../../packages/harness/src/conversation/runtime";
-import type { ConversationCheckpoint, ConversationEvent, ConversationThread } from "../../../../packages/harness/src/types";
-import type { CreateLessonInput, LessonRecord } from "../../../../packages/harness/src/repositories";
-import type { ProjectDeps, AgentRow } from "./deps";
+} from "@nochore/harness";
+import { convertToModelMessages, generateObject, generateText, type LanguageModel, type UIMessage } from "ai";
+import { z } from "zod";
+import type { AgentRow, ProjectDeps } from "./deps";
 
 const CHECKPOINT_SYSTEM_PROMPT = `You are maintaining a compact relationship checkpoint for an agent conversation.
 
@@ -159,7 +158,9 @@ export async function persistConversationMessages(params: {
     })),
   );
 
-  const latestEvent = [...messageEvents].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime()).at(-1);
+  const latestEvent = [...messageEvents]
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+    .at(-1);
   if (latestEvent) {
     await params.deps.conversationThreadRepository.touch(params.threadId, latestEvent.createdAt);
   }
@@ -204,7 +205,7 @@ export async function assembleConversation(params: {
       thread: params.thread,
       model: params.model,
       keepRecentTokens: INLINE_COMPACTION_KEEP_RECENT_TOKENS,
-    }).catch(async (error) => {
+    }).catch(async (_error) => {
       await params.deps.conversationThreadRepository.incrementCompactionFailures(params.thread.id);
       return checkpoint;
     });
@@ -265,10 +266,7 @@ export async function persistConversationAfterResponse(params: {
     messages: allMessages,
   });
 
-  if (
-    shouldRefreshCheckpoint(allMessages.length, estimatedTokens) &&
-    params.thread.consecutiveCompactionFailures < 3
-  ) {
+  if (shouldRefreshCheckpoint(allMessages.length, estimatedTokens) && params.thread.consecutiveCompactionFailures < 3) {
     await refreshConversationCheckpoint({
       deps: params.deps,
       agentId: params.agent.id,
@@ -469,10 +467,7 @@ async function generateCheckpointSummary(params: {
   return result.text.trim();
 }
 
-async function generateSplitTurnSummary(params: {
-  model: LanguageModel;
-  messages: UIMessage[];
-}): Promise<string> {
+async function generateSplitTurnSummary(params: { model: LanguageModel; messages: UIMessage[] }): Promise<string> {
   const transcript = buildConversationTranscript(params.messages);
   const result = await generateText({
     model: params.model,
@@ -493,8 +488,8 @@ async function distillChatMemory(params: {
   responseMessage: UIMessage;
   sourceEventIds: string[];
 }): Promise<void> {
-  const toolNames = extractStructuredConversationEvents(params.responseMessage).map(
-    (event) => String(event.payload.toolName ?? ""),
+  const toolNames = extractStructuredConversationEvents(params.responseMessage).map((event) =>
+    String(event.payload.toolName ?? ""),
   );
   if (!shouldAttemptChatMemoryDistillation({ latestUserText: params.latestUserText, toolNames })) {
     return;
