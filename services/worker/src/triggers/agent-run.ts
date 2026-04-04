@@ -6,14 +6,13 @@ import {
   detectAndSuggestLearnedRules,
   evaluatePolicy,
   getAgentWorkspacePath,
-  getGoogleAdsToolsForPi,
   type PiToolDefinition,
 } from "@nochore/harness";
 import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
 import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
-import { getComposioToolsForPi } from "../lib/composio-pi-bridge";
 import { narrateEvent } from "../lib/narrate";
 import { executePiAgent } from "../lib/pi-runtime";
+import { listProviderTools } from "../lib/tool-provider";
 
 export const agentRunTask = task({
   id: "agent-run",
@@ -68,28 +67,11 @@ export const agentRunTask = task({
       eventIds.push(promptId);
       emitLiveEvent(promptId, "prompt_built", promptPayload);
 
-      // Build tool list — route googleads to direct connector, rest to Composio.
-      // When Composio's Google Ads integration is fixed (ComposioHQ/composio#3066),
-      // delete the googleads branch and restore the single getComposioToolsForPi() call.
-      const allTools: PiToolDefinition[] = [];
-      const composioProviders = runtime.activeProviders.filter((p) => p !== "googleads");
-
-      if (runtime.activeProviders.includes("googleads")) {
-        const customerId = runtime.providerConfigs.googleads?.customerId as string | undefined;
-        if (customerId) {
-          allTools.push(...getGoogleAdsToolsForPi({ customerId }));
-        } else {
-          logger.warn("Google Ads connection active but no customerId in config — skipping tools");
-        }
-      }
-
-      if (composioProviders.length > 0) {
-        const composioTools = await getComposioToolsForPi({
-          userId: runtime.userId,
-          toolkits: composioProviders,
-        });
-        allTools.push(...composioTools);
-      }
+      const allTools: PiToolDefinition[] = await listProviderTools({
+        userId: runtime.userId,
+        activeProviders: runtime.activeProviders,
+        providerConfigs: runtime.providerConfigs,
+      });
 
       const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
 
