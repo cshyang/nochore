@@ -7,18 +7,8 @@
  */
 
 import { Composio } from "@composio/core";
+import type { PiToolDefinition } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
-
-interface PiToolDefinition {
-  name: string;
-  label: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  execute: (
-    toolCallId: string,
-    params: Record<string, unknown>,
-  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }>;
-}
 
 let _composio: Composio | null = null;
 

@@ -46,6 +46,33 @@
       "semicolons": "always"
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/**", "services/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/packages/harness/src",
+                      "**/packages/harness/src/**",
+                      "@nochore/harness/src",
+                      "@nochore/harness/src/**"
+                    ],
+                    "message": "Import from @nochore/harness instead of packages/harness/src internals."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {
