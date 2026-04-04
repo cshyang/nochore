@@ -1,7 +1,9 @@
 # Agent Evolution Design
 
 **Date:** 2026-03-31
-**Status:** Draft
+**Status:** Partially superseded  
+**Superseded sections:** Runtime coordination model, capability ladder state model, policy inheritance → see `2026-04-04-coordinated-agent-runtime-architecture.md`  
+**Still authoritative for:** Trust model (progressive autonomy, QA fixes, capability-level trust rationale, outcome-based trust direction), topology promotion patterns (L1→L2→L3), anti-patterns, open product questions
 **Supersedes:** `2026-03-29-agent-chat-lifecycle-design.md` (V0.2/V0.3 sections)
 **Builds on:** `2026-03-30-progressive-autonomy-design.md` (archived, core shipped), current sub-run runtime
 

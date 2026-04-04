@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nochore Coordinator Layers</title>
+    <style>
+      :root {
+        --bg: #0f1117;
+        --surface: #171a22;
+        --surface-2: #1f2330;
+        --text: #f4f6fb;
+        --muted: #9aa4b2;
+        --line: #2e3445;
+        --accent: #6c5ce7;
+        --green: #2fbf8f;
+        --orange: #ef8a62;
+        --blue: #69a3ff;
+        --yellow: #d8b14b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 40px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(108, 92, 231, 0.16), transparent 32%),
+          radial-gradient(circle at top right, rgba(47, 191, 143, 0.1), transparent 28%),
+          var(--bg);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        margin-bottom: 12px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(108, 92, 231, 0.15);
+        color: #c7beff;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 52px;
+        line-height: 1;
+      }
+
+      .lede {
+        max-width: 900px;
+        margin: 0 0 32px;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.5;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .layer {
+        position: relative;
+        padding: 24px 26px;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+        border: 1px solid var(--line);
+      }
+
+      .layer.identity {
+        box-shadow: inset 0 0 0 1px rgba(239, 138, 98, 0.25);
+      }
+
+      .layer.orchestration {
+        box-shadow: inset 0 0 0 1px rgba(216, 177, 75, 0.22);
+      }
+
+      .layer.execution {
+        box-shadow: inset 0 0 0 1px rgba(108, 92, 231, 0.22);
+      }
+
+      .layer.delivery {
+        box-shadow: inset 0 0 0 1px rgba(47, 191, 143, 0.22);
+      }
+
+      .layer-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .layer-title {
+        display: flex;
+        gap: 14px;
+        align-items: baseline;
+      }
+
+      .layer-number {
+        min-width: 34px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .layer-title h2 {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .layer-subtitle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .pill {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--surface-2);
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .cols {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 18px;
+      }
+
+      .card {
+        padding: 18px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        color: #dde3ef;
+        line-height: 1.55;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .step {
+        padding: 16px;
+        border-radius: 16px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+
+      .step b {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .step p {
+        margin: 0;
+        line-height: 1.45;
+        color: #dce2ee;
+      }
+
+      .policy-band {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .policy {
+        padding: 18px;
+        border-radius: 16px;
+        background: rgba(216, 177, 75, 0.06);
+        border: 1px solid rgba(216, 177, 75, 0.22);
+      }
+
+      .policy h3 {
+        margin: 0 0 10px;
+        color: #ffd97d;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .policy p {
+        margin: 0;
+        color: #f7ecc6;
+        line-height: 1.45;
+      }
+
+      .footer-note {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      @media (max-width: 1100px) {
+        .cols,
+        .flow,
+        .policy-band {
+          grid-template-columns: 1fr;
+        }
+
+        body {
+          padding: 24px;
+        }
+
+        h1 {
+          font-size: 38px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="eyebrow">Nochore Layer Model</div>
+      <h1>Identity on top, durable work underneath</h1>
+      <p class="lede">
+        One lead agent stays accountable at the surface. Peer agents are visible teammates.
+        Internal workers stay hidden. The runtime is durable and async at the substrate, but
+        the lead agent can still complete bounded work in one turn.
+      </p>
+
+      <div class="stack">
+        <section class="layer identity">
+          <div class="layer-header">
+            <div class="layer-title">
+              <div class="layer-number">Layer 1</div>
+              <div>
+                <h2>Identity Layer</h2>
+                <div class="layer-subtitle">Owns who the agent is between runs</div>
+              </div>
+            </div>
+            <div class="pill">User-facing</div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h3>Durable records</h3>
+              <ul>
+                <li>Agent record, instructions, workspace, memory, learned lessons</li>
+                <li>Primary chat thread and project-level thread references</li>
+                <li>Peer agent roster and role metadata</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Contract</h3>
+              <ul>
+                <li>Never executes tools directly</li>
+                <li>Accepts requests, owns voice, owns accountability</li>
+                <li>Hands intent to orchestration and receives synthesized results back</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="layer orchestration">
+          <div class="layer-header">
+            <div class="layer-title">
+              <div class="layer-number">Layer 2</div>
+              <div>
+                <h2>Orchestration Layer</h2>
+                <div class="layer-subtitle">Decides direct vs coordinate-now vs coordinate-later</div>
+              </div>
+            </div>
+            <div class="pill">Lead-agent runtime</div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h3>Core records</h3>
+              <ul>
+                <li>Coordinator run</li>
+                <li>Plan artifact and delegation specs</li>
+                <li>Parent/child linkage and synthesis checkpoints</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Contract</h3>
+              <ul>
+                <li>Must understand before delegating</li>
+                <li>Can wait for bounded child work or detach for long work</li>
+                <li>Owns final synthesis, approval asks, and final answer</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="layer execution">
+          <div class="layer-header">
+            <div class="layer-title">
+              <div class="layer-number">Layer 3</div>
+              <div>
+                <h2>Execution Layer</h2>
+                <div class="layer-subtitle">Ephemeral workers and durable peer-agent runs</div>
+              </div>
+            </div>
+            <div class="pill">Mostly internal</div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h3>Unit types</h3>
+              <ul>
+                <li>Worker runs: scoped role, narrow tools, structured result</li>
+                <li>Peer-agent runs: sibling agent triggered with its own identity and policy</li>
+                <li>No user-facing worker objects in the product model</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Contract</h3>
+              <ul>
+                <li>Do bounded work only</li>
+                <li>Return artifacts, not final user answers</li>
+                <li>Never exceed granted policy or tool scope</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="layer delivery">
+          <div class="layer-header">
+            <div class="layer-title">
+              <div class="layer-number">Layer 4</div>
+              <div>
+                <h2>Delivery Layer</h2>
+                <div class="layer-subtitle">Turns work results into product surfaces</div>
+              </div>
+            </div>
+            <div class="pill">Artifacts first, chat second</div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h3>Outputs</h3>
+              <ul>
+                <li>Run summaries, findings, publishable artifacts, approval requests</li>
+                <li>Activity feed entries and Needs Input inbox items</li>
+                <li>Chat messages that mirror or summarize durable results</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Contract</h3>
+              <ul>
+                <li>Chat is a surface, not the source of truth</li>
+                <li>Every important outcome exists as a durable record</li>
+                <li>Users can reopen context from a feed item or inbox item</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="flow">
+        <div class="step">
+          <b>1. Request</b>
+          <p>User talks to lead agent in chat or a schedule triggers work.</p>
+        </div>
+        <div class="step">
+          <b>2. Choose mode</b>
+          <p>Coordinator decides direct, coordinate-now, or coordinate-later.</p>
+        </div>
+        <div class="step">
+          <b>3. Dispatch</b>
+          <p>Worker runs or peer-agent runs execute with scoped policy and tools.</p>
+        </div>
+        <div class="step">
+          <b>4. Synthesize</b>
+          <p>Lead agent re-enters, judges results, and prepares the real answer.</p>
+        </div>
+        <div class="step">
+          <b>5. Deliver</b>
+          <p>Artifacts, approvals, activity, and chat all reflect the same durable outcome.</p>
+        </div>
+      </div>
+
+      <div class="policy-band">
+        <div class="policy">
+          <h3>Policy Flow</h3>
+          <p>Policy flows down from the lead or sibling agent. Workers can only narrow, never widen.</p>
+        </div>
+        <div class="policy">
+          <h3>Approval Boundary</h3>
+          <p>Approvals attach to work items and durable records, not to ephemeral prompt state.</p>
+        </div>
+        <div class="policy">
+          <h3>Promotion Boundary</h3>
+          <p>Repeated worker patterns may become pinned specialists, then later peer agents, only by confirmation.</p>
+        </div>
+      </div>
+
+      <p class="footer-note">
+        The key architectural choice: async substrate, hybrid execution. Build everything on durable child work units,
+        then let the orchestrator wait inline only when the work is small and bounded.
+      </p>
+    </div>
+  </body>
+</html>

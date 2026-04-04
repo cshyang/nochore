@@ -1,7 +1,7 @@
 # Coordinated Agent Runtime Architecture
 
 **Date:** 2026-04-04  
-**Status:** Draft  
+**Status:** Accepted  
 **Builds on:** `2026-03-31-agent-evolution-design.md`  
 **Purpose:** Define the smallest durable runtime model that lets a lead agent coordinate child work without exposing containers or orchestration complexity in the product UI.
 

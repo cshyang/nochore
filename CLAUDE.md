@@ -69,6 +69,7 @@ Key directories inside `apps/web/src/`:
 - `docs/plans/2026-03-21-harness-layer-design.md` — Pipeline design, contracts, decisions
 - `docs/plans/2026-03-21-harness-components.md` — File structure, module details, code examples
 - `docs/plans/2026-03-21-harness-implementation-plan.md` — 22-task implementation plan
+- `docs/plans/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, Phase 1 spec
 
 ## Architecture Concepts
 
@@ -89,6 +90,7 @@ Key directories inside `apps/web/src/`:
 - ~~Memory schema~~ → Three-layer split (files/DB/JSONL), event log + lessons
 - ~~Policy composition~~ → Strictest rule wins, deterministic ordering. Learned rules (from approval patterns) sit alongside static rules but can never override a stricter static rule. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
 - ~~Progressive trust automation~~ → Learned policy rules derived from approval history. Pattern detection (counting, not ML), user-confirmed suggestions, full revocability. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
+- ~~Coordinated runtime model~~ → 3-layer architecture (Identity/Runtime/Delivery), work items as first-class durable objects, `direct`/`coordinated` modes, worker failure contract. See `docs/plans/2026-04-04-coordinated-agent-runtime-architecture.md`
 
 ### Still Open
 - **Data type → tool resolution** — When multiple tools provide the same data type (Tier 2)
