@@ -1,16 +1,14 @@
-import type { LearnedPolicyRule, RunSummary, RunTrigger, ToolConfigEntry, ToolMode } from "@nochore/harness";
+import type { RunSummary, RunTrigger, ToolConfigEntry, ToolMode } from "@nochore/harness";
 import {
   type AgentRecord,
   buildToolConfigEntry,
   classifyRunLessonWrites,
-  detectAndSuggestLearnedRules,
   evaluatePolicy,
   getAgentWorkspacePath,
   type PiToolDefinition,
 } from "@nochore/harness";
 import { logger, metadata, task, wait } from "@trigger.dev/sdk/v3";
 import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
-import { narrateEvent } from "../lib/narrate";
 import { executePiAgent } from "../lib/pi-runtime";
 import { listProviderTools } from "../lib/tool-provider";
 
@@ -26,25 +24,7 @@ export const agentRunTask = task({
 
     const runId = await ensureRunRecord(runtime, agent, payload.runId, payload.trigger);
     const eventIds: string[] = [];
-    const liveEvents: Array<{
-      id: string;
-      type: string;
-      summary: string;
-      timestamp: number;
-      payload: Record<string, unknown>;
-    }> = [];
     const learnedRules = await runtime.learnedRuleRepository.listActive(agent.id);
-
-    function emitLiveEvent(id: string, type: string, eventPayload: Record<string, unknown>) {
-      liveEvents.push({
-        id,
-        type,
-        summary: narrateEvent(type, eventPayload),
-        timestamp: Date.now(),
-        payload: eventPayload,
-      });
-      metadata.set("events", liveEvents);
-    }
 
     const recentToolCalls: Array<{ toolName: string; timestamp: Date }> = [];
 
@@ -55,7 +35,6 @@ export const agentRunTask = task({
       const startPayload = { trigger: payload.trigger, providers: runtime.activeProviders };
       const startId = await recordEvent(runtime, runId, agent.id, "run_started", startPayload);
       eventIds.push(startId);
-      emitLiveEvent(startId, "run_started", startPayload);
 
       const promptBundle = await buildPromptBundle({ agent, trigger: payload.trigger });
       const promptPayload = {
@@ -65,7 +44,6 @@ export const agentRunTask = task({
       };
       const promptId = await recordEvent(runtime, runId, agent.id, "prompt_built", promptPayload);
       eventIds.push(promptId);
-      emitLiveEvent(promptId, "prompt_built", promptPayload);
 
       const allTools: PiToolDefinition[] = await listProviderTools({
         userId: runtime.userId,
@@ -113,7 +91,6 @@ export const agentRunTask = task({
           const startPayload = { role, task: taskDesc, subRunIndex: subRunCount };
           const startId = await recordEvent(runtime, runId, agent.id, "sub_run_started", startPayload);
           eventIds.push(startId);
-          emitLiveEvent(startId, "sub_run_started", startPayload);
 
           const subPrompt = buildSubRunPrompt({
             role,
@@ -141,7 +118,6 @@ export const agentRunTask = task({
                   { ...event.payload, subRunRole: role },
                 );
                 eventIds.push(id);
-                emitLiveEvent(id, event.type, { ...event.payload, subRunRole: role });
                 return id;
               },
               beforeToolCall: async (toolName, args) => {
@@ -169,7 +145,6 @@ export const agentRunTask = task({
                   toolInput,
                   policyReason: policy.reason,
                   eventIds,
-                  emitLiveEvent,
                   projectId: payload.projectId,
                 });
               },
@@ -178,7 +153,6 @@ export const agentRunTask = task({
             const completePayload = { role, success: true, outputLength: subResult.output.length };
             const completeId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", completePayload);
             eventIds.push(completeId);
-            emitLiveEvent(completeId, "sub_run_completed", completePayload);
 
             return {
               content: [{ type: "text" as const, text: subResult.output || "(No output)" }],
@@ -189,7 +163,6 @@ export const agentRunTask = task({
             const failPayload = { role, success: false, error: errorMsg };
             const failId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", failPayload);
             eventIds.push(failId);
-            emitLiveEvent(failId, "sub_run_completed", failPayload);
 
             return {
               content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
@@ -230,7 +203,6 @@ export const agentRunTask = task({
             event.payload,
           );
           eventIds.push(id);
-          emitLiveEvent(id, event.type, event.payload);
           return id;
         },
         beforeToolCall: async (toolName, args) => {
@@ -262,7 +234,6 @@ export const agentRunTask = task({
             toolInput,
             policyReason: policy.reason,
             eventIds,
-            emitLiveEvent,
             projectId: payload.projectId,
           });
         },
@@ -272,7 +243,6 @@ export const agentRunTask = task({
         const findingPayload = { text: piResult.output };
         const findingId = await recordEvent(runtime, runId, agent.id, "finding_recorded", findingPayload);
         eventIds.push(findingId);
-        emitLiveEvent(findingId, "finding_recorded", findingPayload);
       }
 
       const summary = buildSummary({
@@ -288,7 +258,6 @@ export const agentRunTask = task({
       const completePayload = { summary };
       const completeId = await recordEvent(runtime, runId, agent.id, "run_completed", completePayload);
       eventIds.push(completeId);
-      emitLiveEvent(completeId, "run_completed", completePayload);
       metadata.set("status", "completed");
 
       await recordRunResultInConversation(runtime, agent.id, summary);
@@ -313,7 +282,6 @@ export const agentRunTask = task({
         const lessonPayload = { lessonId, scope: lessonWrite.scope };
         const lessonEventId = await recordEvent(runtime, runId, agent.id, "lesson_distilled", lessonPayload);
         eventIds.push(lessonEventId);
-        emitLiveEvent(lessonEventId, "lesson_distilled", lessonPayload);
       }
 
       logger.info("Agent run completed", {
@@ -340,7 +308,6 @@ export const agentRunTask = task({
       const failPayload = { reason: message, summary };
       const failId = await recordEvent(runtime, runId, agent.id, "run_failed", failPayload);
       eventIds.push(failId);
-      emitLiveEvent(failId, "run_failed", failPayload);
       metadata.set("status", "failed");
       await runtime.runRepository.fail(runId, new Date(), message, summary);
       await recordRunResultInConversation(runtime, agent.id, summary);
@@ -388,10 +355,9 @@ async function handleApprovalRequest(params: {
   toolInput: Record<string, unknown>;
   policyReason: string;
   eventIds: string[];
-  emitLiveEvent: (id: string, type: string, payload: Record<string, unknown>) => void;
   projectId: string;
 }): Promise<{ block: boolean; reason?: string } | undefined> {
-  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, emitLiveEvent, projectId } = params;
+  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, projectId } = params;
   const approvalId = crypto.randomUUID();
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
@@ -425,7 +391,6 @@ async function handleApprovalRequest(params: {
   };
   const reqId = await recordEvent(runtime, runId, agent.id, "tool_approval_requested", reqPayload);
   eventIds.push(reqId);
-  emitLiveEvent(reqId, "tool_approval_requested", reqPayload);
   await runtime.approvalRepository.setRequestEventId(approvalRecordId, reqId);
 
   await runtime.runRepository.markWaitingForApproval(runId);
@@ -465,45 +430,15 @@ async function handleApprovalRequest(params: {
       };
       const expiryId = await recordEvent(runtime, runId, agent.id, "tool_approval_expired", expiryPayload);
       eventIds.push(expiryId);
-      emitLiveEvent(expiryId, "tool_approval_expired", expiryPayload);
     } else {
       await runtime.approvalRepository.markResolved(approvalRecordId, status, reason, new Date());
 
       const resPayload = { approvalId: approvalRecordId, toolName, status, reason };
       const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
       eventIds.push(resId);
-      emitLiveEvent(resId, "tool_approval_resolved", resPayload);
-
-      const suggestions = await detectAndSuggestLearnedRules({
-        agentId: agent.id,
-        approvalRepository: runtime.approvalRepository,
-        learnedRuleRepository: runtime.learnedRuleRepository,
-      });
-      await appendPolicySuggestionEvents({
-        runtime,
-        runId,
-        agentId: agent.id,
-        suggestions,
-        eventIds,
-        emitLiveEvent,
-      });
     }
   } else {
     reason = approvalRow?.decisionReason ?? reason;
-    const liveStatus = approvalRow?.status;
-    if (liveStatus && liveStatus !== "pending") {
-      emitLiveEvent(
-        `approval-${approvalRecordId}-${liveStatus}`,
-        liveStatus === "expired" ? "tool_approval_expired" : "tool_approval_resolved",
-        {
-          approvalId: approvalRecordId,
-          toolName,
-          status: liveStatus,
-          reason,
-          ...(liveStatus === "expired" ? { expiresAt: expiresAt.toISOString() } : {}),
-        },
-      );
-    }
   }
 
   if ((approvalRow?.status ?? status) === "approved") {
@@ -654,29 +589,6 @@ function inferToolProvider(toolName: string): string {
 function isApprovalTimeoutError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /\b(timeout|timed out|expired)\b/i.test(message);
-}
-
-async function appendPolicySuggestionEvents(params: {
-  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
-  runId: string;
-  agentId: string;
-  suggestions: LearnedPolicyRule[];
-  eventIds: string[];
-  emitLiveEvent: (id: string, type: string, payload: Record<string, unknown>) => void;
-}) {
-  for (const suggestion of params.suggestions) {
-    const payload = {
-      ruleId: suggestion.id,
-      toolName: suggestion.toolName,
-      learnedDecision: suggestion.learnedDecision,
-      evidenceCount: suggestion.evidenceCount,
-      consistencyRate: suggestion.consistencyRate,
-      conditions: suggestion.conditions,
-    };
-    const eventId = await recordEvent(params.runtime, params.runId, params.agentId, "policy_rule_suggested", payload);
-    params.eventIds.push(eventId);
-    params.emitLiveEvent(eventId, "policy_rule_suggested", payload);
-  }
 }
 
 function buildSummary(params: {
