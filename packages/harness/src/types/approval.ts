@@ -15,6 +15,7 @@ export const ApprovalRecordSchema = z.object({
   requestReason: z.string().optional(),
   requestEventId: z.string().optional(),
   decisionReason: z.string().optional(),
+  workItemId: z.string().optional(),
   createdAt: z.date(),
   expiresAt: z.date().optional(),
   resolvedAt: z.date().optional(),

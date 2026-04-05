@@ -77,6 +77,7 @@ export async function handleApprovalRequest(params: {
     requestReason: policyReason,
     createdAt,
     expiresAt,
+    workItemId,
   });
 
   const reqPayload = {

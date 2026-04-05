@@ -136,6 +136,7 @@ export const approvals = sqliteTable(
     requestReason: text("request_reason"),
     requestEventId: text("request_event_id"),
     decisionReason: text("decision_reason"),
+    workItemId: text("work_item_id"),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at"),
     resolvedAt: integer("resolved_at"),

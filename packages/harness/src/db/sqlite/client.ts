@@ -136,6 +136,7 @@ const CREATE_DDL = `
     request_reason TEXT,
     request_event_id TEXT,
     decision_reason TEXT,
+    work_item_id TEXT,
     created_at INTEGER NOT NULL,
     expires_at INTEGER,
     resolved_at INTEGER
@@ -311,6 +312,9 @@ function migrateAddColumns(sqlite: Database.Database) {
   }
   if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "expires_at")) {
     sqlite.exec("ALTER TABLE approvals ADD COLUMN expires_at INTEGER");
+  }
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "work_item_id")) {
+    sqlite.exec("ALTER TABLE approvals ADD COLUMN work_item_id TEXT");
   }
 }
 
