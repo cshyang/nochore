@@ -22,6 +22,7 @@ export type RunEventType =
   | "finding_recorded"
   | "sub_run_started"
   | "sub_run_completed"
+  | "metric_observed"
   | "lesson_distilled"
   | "run_completed"
   | "run_failed";
@@ -173,6 +174,7 @@ export const INTERNAL_TOOL_MODES: Record<string, ToolMode> = {
   read: "read",
   spawn_sub_run: "write",
   submit_report: "read",
+  record_metric: "read",
   write: "write",
 };
 

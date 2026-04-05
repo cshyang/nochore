@@ -3,6 +3,7 @@ import {
   type AgentRecord,
   classifyRunLessonWrites,
   getAgentWorkspacePath,
+  MetricObservationSchema,
   type PiToolDefinition,
 } from "@nochore/harness";
 import { logger, metadata, task } from "@trigger.dev/sdk/v3";
@@ -174,6 +175,60 @@ export const agentRunTask = task({
       };
 
       allTools.push(spawnSubRunTool);
+
+      const recordMetricTool: PiToolDefinition = {
+        name: "record_metric",
+        label: "Record Metric",
+        description:
+          "Record a numeric metric observation. Use this when you observe a quantitative metric " +
+          "relevant to your outcome. Provide a consistent comparabilityKey so the same metric " +
+          "can be tracked across runs.",
+        parameters: {
+          type: "object",
+          required: ["name", "value", "comparabilityKey"],
+          properties: {
+            name: { type: "string", description: "Human-readable metric name" },
+            value: { type: "number", description: "The numeric value observed" },
+            unit: { type: "string", description: "Unit of measurement (e.g., 'USD', '%', 'ms')" },
+            window: { type: "string", description: "Time window (e.g., '7d', '24h')" },
+            scope: { type: "string", description: "What the metric measures (e.g., 'account', 'campaign_123')" },
+            source: { type: "string", description: "Data source (e.g., 'google_ads', 'ga4')" },
+            comparabilityKey: {
+              type: "string",
+              description: "Stable key for tracking across runs (format: metric_name|scope|window)",
+            },
+          },
+        },
+        execute: async (_toolCallId, params) => {
+          const raw = {
+            name: params.name,
+            value: params.value,
+            unit: params.unit,
+            window: params.window,
+            scope: params.scope,
+            source: params.source,
+            observedAt: new Date().toISOString(),
+            comparabilityKey: params.comparabilityKey,
+          };
+          const parsed = MetricObservationSchema.safeParse(raw);
+          if (!parsed.success) {
+            const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+            return { content: [{ type: "text" as const, text: `Invalid metric: ${msg}` }], details: { error: msg } };
+          }
+          await recordEvent(runtime, runId, agent.id, "metric_observed", parsed.data as Record<string, unknown>);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Recorded metric: ${parsed.data.name} = ${parsed.data.value}${parsed.data.unit ? ` ${parsed.data.unit}` : ""}`,
+              },
+            ],
+            details: parsed.data as Record<string, unknown>,
+          };
+        },
+      };
+      allTools.push(recordMetricTool);
+
       const toolConfigLookup = createToolConfigLookup(agent, allTools);
 
       logger.info("Prompt assembled", {

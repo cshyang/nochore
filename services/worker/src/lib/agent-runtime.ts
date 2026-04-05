@@ -122,6 +122,17 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
       "- Roles: scout (research & data gathering), analyst (pattern analysis & insights), builder (executing specific actions).",
       "- Use delegation when a sub-task benefits from focused attention. You receive the specialist's output and synthesize the final result.",
       "- Do not delegate simple tool calls — only multi-step sub-tasks that require focused reasoning.",
+      "",
+      "Metric recording:",
+      "- When you observe quantitative metrics relevant to your outcome, use record_metric to capture them.",
+      "- Use a consistent comparabilityKey so the same metric can be tracked over time (format: metric_name|scope|window).",
+      "- Include the unit and source when available.",
+      "- Only record metrics you have actually observed — do not fabricate values.",
+      ...(params.agent.primaryMetric
+        ? [
+            `- PRIORITY: This agent tracks "${params.agent.primaryMetric}" as its primary metric. Always record this metric with comparabilityKey "${params.agent.primaryMetric}".`,
+          ]
+        : []),
     ].join("\n"),
   ]
     .filter((section) => section.trim().length > 0)
@@ -152,13 +163,18 @@ export function buildSubRunPrompt(params: {
   task: string;
   context?: string;
   agentInstructions: string;
+  primaryMetric?: string;
 }): string {
   const rolePrompt = loadSpecialistPrompt(params.role);
+  const metricInstruction = params.primaryMetric
+    ? `If you observe quantitative metrics relevant to the task, use record_metric to capture them. Prioritize the primary metric with comparabilityKey "${params.primaryMetric}".`
+    : "If you observe quantitative metrics relevant to the task, use record_metric to capture them.";
   const sections = [
     rolePrompt,
     params.agentInstructions ? `## Agent Context\n${params.agentInstructions}` : "",
     `## Your Task\n${params.task}`,
     params.context ? `## Context\n${params.context}` : "",
+    metricInstruction,
     "When you have completed your work, call submit_report with your findings.",
   ].filter((s) => s.length > 0);
   return sections.join("\n\n");
