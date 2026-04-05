@@ -37,7 +37,7 @@ The goal, the scope, and the success criteria. Not just *what* to do, but *why* 
 - Establishes success criteria the agent can evaluate itself against
 - Provides business context that shapes the agent's judgment
 
-Intent is what separates an agent from a dumb automation. An automation follows instructions. An agent pursues an objective.
+Intent is what separates an agent from a dumb automation. An automation follows instructions. An agent pursues an objective. Intent transforms an agent from a one-shot executor into an **outcome owner** — it pursues a measurable result across multiple runs, learning and adapting its approach over time.
 
 **Configured by:** Non-technical users (with guidance from the platform)
 
@@ -52,7 +52,7 @@ Domain knowledge and analytical capabilities. Skills are *knowledge + method* �
 
 A skill is the difference between an agent that can "look at numbers" and one that can "diagnose why your cost-per-lead spiked last Tuesday."
 
-**Skills also define what's monitorable.** Each skill can declare a set of **views** — metrics, tables, and trends it can render in the agent's Monitor tab. This is how different agents show completely different dashboards without building a generic BI tool. An Ad Spend skill surfaces keyword tables and CPL trends. A Funnel Analysis skill surfaces conversion stages and drop-off rates. The platform renders whatever the agent's skills expose. See `docs/ux-moments.md` for the full Monitor tab design.
+**Skills also define what's monitorable.** Each skill can declare a set of **views** — metrics, tables, and trends it can render in the agent's Monitor tab. This is how different agents show completely different dashboards without building a generic BI tool. An Ad Spend skill surfaces keyword tables and CPL trends. A Funnel Analysis skill surfaces conversion stages and drop-off rates. The platform renders whatever the agent's skills expose. See `docs/architecture/ux-moments.md` for the full Monitor tab design.
 
 **Built by:** Technical users (as extensions)
 **Chosen by:** Non-technical users (from marketplace)
@@ -184,7 +184,7 @@ In Nochore:
 
 Design implication: when a user configures guardrails during setup, they're not restricting their agent — they're enabling it to act more independently. Karpathy's AutoResearch demonstrates this at the extreme: by locking the evaluation harness outside the agent's reach and bounding it to a single editable file with a clear metric, the agent runs hundreds of experiments overnight without supervision.
 
-**Implementation: Learned Policy Rules.** Constraints aren't just static — they evolve as trust is earned. The policy engine detects consistent human approval patterns (e.g., "user approved budget changes under $200 eight times in 30 days") and suggests auto-approving that pattern. Users confirm or dismiss. Learned rules sit alongside static rules; the strictest always wins. This is the mechanism for progressive autonomy: constraints start tight and relax as evidence accumulates. See `docs/plans/2026-03-30-progressive-autonomy-design.md`.
+**Implementation: Learned Policy Rules.** Constraints aren't just static — they evolve as trust is earned. The policy engine detects consistent human approval patterns (e.g., "user approved budget changes under $200 eight times in 30 days") and suggests auto-approving that pattern. Users confirm or dismiss. Learned rules sit alongside static rules; the strictest always wins. This is the mechanism for progressive autonomy: constraints start tight and relax as evidence accumulates. See `docs/archive/2026-03-30-progressive-autonomy-design.md`.
 
 ---
 
@@ -214,7 +214,7 @@ Their mental model: **"I'm setting up a smart assistant for this job."**
 
 Both audiences land on a **project-level homepage** — not inside a specific project. This is deliberate. The homepage answers the single most important question: *"Do I need to do anything right now, across everything?"*
 
-Projects are the top-level organizational primitive (a client, a team, an initiative). The homepage shows each project as a card with rolled-up health signals: attention count, agent list, aggregate confidence. Clicking a project drills into its agent grid and connections. See `docs/ux-moments.md` for full wireframes and navigation model.
+Projects are the top-level organizational primitive (a client, a team, an initiative). The homepage shows each project as a card with rolled-up health signals: attention count, agent list, aggregate confidence. Clicking a project drills into its agent grid and connections. See `docs/architecture/ux-moments.md` for full wireframes and navigation model.
 
 ---
 
@@ -226,8 +226,8 @@ Projects are the top-level organizational primitive (a client, a team, an initia
 │            (How users interact with agents)               │
 │                                                          │
 │   ┌──────────┐   ┌──────────┐   ┌───────────────┐      │
-│   │  Canvas   │   │   Chat   │   │  Dashboards   │      │
-│   │ (compose) │   │  (talk)  │   │  (monitor)    │      │
+│   │  Runs    │   │   Chat   │   │   Learned     │      │
+│   │(history) │   │  (talk)  │   │  (knowledge)  │      │
 │   └──────────┘   └──────────┘   └───────────────┘      │
 ├──────────────────────────────────────────────────────────┤
 │                    HARNESS LAYER                          │
@@ -362,11 +362,11 @@ Clarity on what we're not building, to prevent scope creep:
 ## Open Questions (To Resolve Layer by Layer)
 
 ### Resolved
-- [x] Integration: How deep is the Composio integration? → **Composio handles auth + tool execution directly (no Connection Manager abstraction). Tool config lives in agent DB record.** See `docs/plans/2026-03-24-platform-simplification-design.md`
+- [x] Integration: How deep is the Composio integration? → **Composio handles auth + tool execution directly (no Connection Manager abstraction). Tool config lives in agent DB record.** See `docs/architecture/2026-04-04-product-first-architecture-plan.md`
 - [x] Extension Layer: How do skills declare dependencies on data types without coupling to specific tools? → **Skills consume data types (e.g., "orders"), not tool outputs. Harness resolves which connected tool provides each data type.**
-- [x] Consumption Layer: What's the MVP interface? → **Project home (agents + connections tabs) → Agent detail (activity + chat + memory + settings)**
-- [x] Harness Layer: What are the exact "LLM injection points"? → **Single Trigger.dev task with manual tool loop. LLM in agent session only; policy is always deterministic.** See `docs/plans/2026-03-24-platform-simplification-design.md`
-- [x] Policy Layer: How do policies compose? → **Strictest rule wins, deterministic ordering. Learned rules from approval patterns sit alongside static rules but never override a stricter static rule.** See `docs/plans/2026-03-30-progressive-autonomy-design.md`
+- [x] Consumption Layer: What's the MVP interface? → **Project home (brand systems summary + agents grid + needs attention) → Agent detail (runs + chat + learned + settings)**
+- [x] Harness Layer: What are the exact "LLM injection points"? → **Single Trigger.dev task with manual tool loop. LLM in agent session only; policy is always deterministic.** See `docs/architecture/2026-04-04-product-first-architecture-plan.md`
+- [x] Policy Layer: How do policies compose? → **Strictest rule wins, deterministic ordering. Learned rules from approval patterns sit alongside static rules but never override a stricter static rule.** See `docs/archive/2026-03-30-progressive-autonomy-design.md`
 - [x] Memory Layer: What's the memory schema? → **Three-layer split (workspace files / SQLite / JSONL debug mirror). Event log (append-only) + lessons (distilled from runs, scoped, with confidence and expiration).** See `packages/harness/src/db/sqlite/schema.ts`
 
 ### Open

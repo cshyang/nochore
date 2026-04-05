@@ -35,7 +35,7 @@ cd apps/web && npm run dev  # → http://localhost:3000
 Route structure:
 - `/` → Homepage (full-screen lobby, no sidebar)
 - `/$projectId` → Project workspace (sidebar appears)
-- `/$projectId/agents/$agentId` → Agent detail (5 tabs: Monitor/Feed/Chat/Memory/Settings)
+- `/$projectId/agents/$agentId` → Agent detail (4 tabs: Runs/Chat/Learned/Settings)
 - `/$projectId/agents/new` → Setup flow
 
 Key directories inside `apps/web/src/`:
@@ -69,7 +69,7 @@ Key directories inside `apps/web/src/`:
 ## Key Documents
 
 - `docs/architecture/philosophy.md` — Core thesis, four pillars, design axioms, competitive analysis
-- `docs/architecture/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter)
+- `docs/architecture/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter, Agent Card, Run Narrative)
 - `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, implementation status + backlog
 - `docs/architecture/2026-03-31-agent-evolution-design.md` — Trust model, topology promotion, progressive autonomy
 
@@ -131,7 +131,7 @@ Python 3.9+, Click (CLI), Polars (dataframes), Rich (output), PyYAML (config), P
 - Emotional goals: Trust, relief, quiet confidence. The user should feel "this is handled."
 
 ### Aesthetic: Raycast/Arc energy, dark-first
-- Dark theme primary (`#0F1117` bg, `#6C5CE7` purple accent)
+- Dark theme primary (`#0E0D12` bg, `#5A7ACD` periwinkle accent)
 - Polish via micro-interactions, not decoration. Every animation communicates state.
 - WCAG AA minimum (4.5:1 text contrast, 3:1 UI)
 - 8px spacing grid, layered surfaces (depth via color, not shadows)

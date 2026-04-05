@@ -7,6 +7,7 @@
 3. **The agent's reasoning is always visible.** Users should never wonder "why did it do that?"
 4. **Defaults are opinionated.** The platform should suggest good configurations, not present blank canvases.
 5. **Trust is earned incrementally.** Start with low-autonomy (agent suggests, human approves). Earn your way to high-autonomy (agent acts, human is notified).
+6. **Outcome-first, not tool-first.** Users see what the agent is achieving, not what it's running.
 
 ---
 
@@ -19,7 +20,7 @@ Most platforms dump you into a blank canvas or a form with 30 fields. The user h
 
 Setup is a full-screen overlay with two panels — conversation on the left, emerging configuration on the right. The user describes their intent in natural language; the AI scaffolds a complete agent blueprint that the user reviews and adjusts.
 
-This mirrors the AutoResearch pattern: the human writes the strategy (`program.md`), the system handles execution. In Nochore, the user defines intent and constraints; the AI picks skills, connections, guardrails, and schedule.
+This mirrors the AutoResearch pattern: the human writes the strategy (`program.md`), the system handles execution. In Nochore, the user defines the arena — outcome, metric, systems, safety — and the agent operates within it.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -30,36 +31,51 @@ This mirrors the AutoResearch pattern: the human writes the strategy (`program.m
 │  Conversational      │  Agent Configuration                 │
 │  Chat                │  (Linear-style scrollable form)      │
 │                      │                                      │
-│  ✦ What should this  │  ┌─ IDENTITY ──────────────────────┐│
-│    agent keep an     │  │ Google Ads Optimizer             ││
-│    eye on?           │  │ "Analyzes search terms to..."   ││
-│                      │  │                                  ││
-│  ┌────────────────┐  │  │ Focus areas: ROAS, waste        ││
-│  │ Optimize my    │  │  │ Constraints: Stay within budget ││
-│  │ google ads     │  │  └──────────────────────────────────┘│
-│  └────────────────┘  │                                      │
-│                      │  ┌─ SKILLS ──────────── 1 selected ─┐│
-│  ✦ Here's your      │  │ ☑ Search Term Analysis           ││
-│    blueprint for     │  │   └ Requires: Google Ads, GA4   ││
-│    Google Ads        │  │ ☐ Budget Monitor                 ││
-│    Optimizer.        │  └──────────────────────────────────┘│
+│  ✦ What outcome      │  ┌─ OUTCOME ───────────────────────┐│
+│    should this agent │  │ Grow Qualified Demand             ││
+│    own?              │  │ "Reduce qualified CPA while      ││
+│                      │  │  maintaining volume"              ││
+│  ┌────────────────┐  │  │                                  ││
+│  │ Reduce our     │  │  │ Strategy: Focus on search term   ││
+│  │ qualified CPA  │  │  │ hygiene and budget allocation    ││
+│  │ on google ads  │  │  │ across high-intent campaigns.    ││
+│  └────────────────┘  │  │                                  ││
+│                      │  │ Cadence: [6h][▣Daily][Week][Man] ││
+│  ✦ Here's your      │  └──────────────────────────────────┘│
+│    blueprint for     │                                      │
+│    Grow Qualified    │  ┌─ SUCCESS METRIC ─────────────────┐│
+│    Demand.           │  │ Primary: Qualified CPA            ││
+│                      │  │ Guardrail: Lead volume must not   ││
+│                      │  │ drop more than 10%                ││
+│                      │  └──────────────────────────────────┘│
 │                      │                                      │
-│                      │  ┌─ GUARDRAILS ─────────────────────┐│
+│                      │  ┌─ SYSTEMS ──────── 2 connected ──┐│
+│                      │  │ ☑ Google Ads          ✓ connected││
+│                      │  │ ☑ GA4                 ✓ connected││
+│                      │  │ ☑ Shopify            [Connect →] ││
+│                      │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌─ TOOLS & PERMISSIONS ────────────┐│
+│                      │  │ ☑ Search Term Analysis  [read]   ││
+│                      │  │ ☑ Budget Reallocation   [act]    ││
+│                      │  │ ☐ Audience Builder      [read]   ││
+│                      │  └──────────────────────────────────┘│
+│                      │                                      │
+│                      │  ┌─ POLICY ─────────────────────────┐│
 │                      │  │ "Add negative keywords"          ││
 │                      │  │  [Auto] [Approve] [Block]        ││
-│                      │  │ + Add custom guardrail...        ││
+│                      │  │ "Budget changes under $50"       ││
+│                      │  │  [▣Auto] [Approve] [Block]       ││
+│                      │  │ "Budget changes over $50"        ││
+│                      │  │  [Auto] [▣Approve] [Block]       ││
+│                      │  │ + Add custom rule...             ││
 │                      │  │ ☐ Require approval for ALL       ││
 │                      │  └──────────────────────────────────┘│
 │                      │                                      │
 │                      │  ┌─ NOTIFICATIONS ──────────────────┐│
-│                      │  │ ● In-app  ○ Email  ○ Slack      ││
-│                      │  └──────────────────────────────────┘│
-│                      │                                      │
-│                      │  ┌─ TRIGGER ────────────────────────┐│
-│  ┌────────────────┐  │  │ [Hourly][6h][▣Daily][Week][Man] ││
-│  │Refine...       │  │  │ ○ Webhook (coming soon)         ││
-│  └────────────────┘  │  └──────────────────────────────────┘│
-│                      │                                      │
+│  ┌────────────────┐  │  │ ● In-app  ○ Email  ○ Slack      ││
+│  │Refine...       │  │  └──────────────────────────────────┘│
+│  └────────────────┘  │                                      │
 │                      │  ┌──────────────────────────────────┐│
 │                      │  │       [ Launch agent → ]         ││
 │                      │  └──────────────────────────────────┘│
@@ -71,38 +87,38 @@ This mirrors the AutoResearch pattern: the human writes the strategy (`program.m
 The chat starts with a single open-ended prompt and optional template chips:
 
 - User types intent → AI streams reasoning (visible as thinking labels) → generates full blueprint
-- After blueprint lands, the chat becomes a refinement channel ("make it hourly", "remove the budget skill")
+- After blueprint lands, the chat becomes a refinement channel ("make it hourly", "remove the budget tool")
 - The AI can ask ONE clarifying question at most before generating
 
 Key principle: **the platform demonstrates understanding before asking for more.**
 
-### The Right Panel: Five Configuration Sections
+### The Right Panel: Six Configuration Sections
 
 The right panel uses a Linear-style scrollable form — all sections visible, no accordion collapse. Each section has a title, summary, and inline controls.
 
-**1. Identity** — Name (editable), summary (editable), and structured instructions:
-- Focus areas (what to watch for)
-- Constraints (what to avoid or respect)
+**1. Outcome** — Name (editable), responsibility/purpose sentence, strategy note (plain-English instructions — the user's `program.md`), and cadence (manual / daily / weekly / custom).
 
-Instructions are the user's `program.md` — the strategy file that guides the agent's behavior. They're structured but not restrictive: guided fields, not a blank textarea or a rigid form.
+The strategy note is where the user's intent lives. It's structured but not restrictive: guided fields, not a blank textarea or a rigid form. This is the human's interface to the agent's behavior — what they want achieved and how they want the agent to think about it.
 
-**2. Skills** — Toggleable rows with descriptions. Each skill shows its required data connections inline ("Requires: Google Ads, GA4"). Skills drive the connection requirements — there's no separate connections section for data sources.
+**2. Success Metric** — The primary metric the agent optimizes toward (e.g., "Qualified CPA"). Optional guardrail metric(s) that define constraints (e.g., "lead volume must not drop more than 10%"). The metric is what makes the agent an outcome owner, not a task runner.
 
-**3. Guardrails** — AI-suggested rules with three levels per rule (Auto / Approve first / Block). Users can add custom guardrails in natural language ("Never exceed daily budget by more than 10%"). Global "Require approval for ALL actions" toggle at the bottom.
+**3. Systems** — Which services this agent needs. The AI selects these during blueprint creation based on the agent's purpose. Already-connected services show a checkmark; services not yet in the project pool show a `[Connect]` button inline. Clicking Connect triggers the OAuth flow right there — the service lands in the project pool AND gets assigned to this agent in one step. Future agents that need the same service just select it from the pool.
 
-Guardrails are instruction-based, not rigid rules. The AI generates defaults during blueprint creation based on selected skills and connections. Users refine via the form or the chat.
+**4. Tools & Permissions** — What specific tools are enabled within those connections, and at what access level (read data vs. take action). Defaults are set during setup — most users never change these. Skills and capabilities live here. Each tool shows its permission level inline so the user sees at a glance what the agent can observe vs. what it can change.
 
-**4. Notifications** — How the agent reaches the human for approval or updates. In-app (always on, default). Email and Slack shown as future options. This is separated from Guardrails because policies define WHAT needs human input, notifications define HOW the human is reached.
+**5. Policy** — Per-tool approval rules with three levels (Auto / Approve / Block) and inline conditions (e.g., "budget changes under $50 auto-approve, over $50 ask me"). Users can add custom rules in natural language. Blocked action patterns and a global "Require approval for ALL actions" toggle at the bottom. The AI generates sensible defaults during blueprint creation based on selected tools and systems.
 
-**5. Trigger** — When the agent runs. Scheduled presets (hourly / 6h / daily / weekly). Manual option. Webhook/event-driven shown as "coming soon."
+**6. Notifications** — How the agent reaches the human for approvals or updates. In-app (always on, default). Email and Slack as additional channels.
 
 ### Key Design Choices
 
 - **All sections visible** — scrollable form, not wizard steps or accordion. Users see the full agent config at a glance and can edit any section in any order.
-- **AI scaffolds everything** — the user doesn't build from scratch. The AI picks skills, derives connections, generates guardrails, and suggests a schedule. The user reviews and adjusts.
-- **Connections are contextualized** — no standalone connections section. Data connections appear under the skills that need them. Action connections (Slack, email) appear under Notifications.
-- **Chat and config coexist** — the user can adjust via direct manipulation (clicking toggles, editing fields) OR via chat ("remove the budget skill", "make it weekly"). Both work.
-- **Instructions = program.md** — the user defines strategy and constraints in structured natural language. The agent follows these during execution. This is the human's interface to the agent's behavior.
+- **AI scaffolds everything** — the user doesn't build from scratch. The AI picks tools, derives system connections, generates policy rules, and suggests a cadence. The user reviews and adjusts.
+- **Connections flow upward from agent needs** — the agent's blueprint drives which services get connected, not the other way around. If the agent needs Shopify and it's not connected yet, the user connects it inline during setup. The project pool is a *result* of agents being created, not a prerequisite.
+- **Instructions = program.md** — the user's strategy note lives inside Outcome. It defines strategy and constraints in structured natural language. The agent follows these during execution.
+- **Skills live inside Tools & Permissions** — capabilities and domain knowledge are part of the tooling section, not a separate concept.
+- **Per-tool approval model** — Policy defines Auto / Approve / Block with conditions per tool. This replaces the simpler "guardrails" framing with a more precise permission model.
+- **Chat and config coexist** — the user can adjust via direct manipulation (clicking toggles, editing fields) OR via chat ("remove the budget tool", "make it weekly"). Both work.
 - **Defaults are opinionated** — the AI picks good defaults. The primary action is "Launch agent", not "configure more." Trust the defaults, adjust later.
 
 ---
@@ -114,9 +130,9 @@ Most platforms: notification → click → wall of data → figure it out yourse
 
 ### The Experience
 
-**The Feed: Insight Cards**
+**Insight Cards**
 
-The primary surface is a feed of "insight cards" — things the agent noticed, ordered by importance:
+The insight cards surface things the agent noticed, ordered by importance. They appear inline within the Runs tab alongside run narratives:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -201,7 +217,7 @@ When the user clicks "Tell me more" or "Talk to agent", they enter a conversatio
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  💬 Ad Spend Guardian                           │
+│  💬 Grow Qualified Demand                       │
 │                                                  │
 │  You: Why do you think Generic will convert     │
 │  better with more budget?                       │
@@ -232,7 +248,31 @@ When the user clicks "Tell me more" or "Talk to agent", they enter a conversatio
 └─────────────────────────────────────────────────┘
 ```
 
-The agent has full context: current data, historical data, memory of past experiments, the user's policies. It can propose experiments, explain reasoning, and negotiate.
+The agent has full context: current data, historical data, learned lessons, the user's policies. It can propose experiments, explain reasoning, and negotiate.
+
+### Run History: Before and After
+
+The Runs tab is the default view on an agent detail page. Each run is presented as a before/after narrative — what the agent observed, what it did, and what resulted. This is the improvement loop made visible.
+
+```
+┌──────────────────────────────────────────────────┐
+│  Run #47 · Daily · 2h ago                        │
+│                                                   │
+│  Before: Qualified CPA = $142                    │
+│  Action: Reduced spend on two broad-match groups │
+│  Reason: High spend, low qualified conversion    │
+│  After:  Qualified CPA = $128 over 5 days        │
+│  Result: ✅ Improved                              │
+│  Lesson: Broad match underperforms for            │
+│          renovation-intent traffic                │
+│                                                   │
+│  [View details ▾]  ← expands to event timeline   │
+└──────────────────────────────────────────────────┘
+```
+
+The event timeline (run_started, tool_called, policy_checked, etc.) is preserved as an expandable detail view under each run. The before/after narrative is the default; the event timeline is the audit trail. Users who want to understand *what happened* read the narrative. Users who want to verify *how it happened* expand the details.
+
+This format reinforces the agent-as-outcome-owner framing: you see what changed and whether it worked, not a log of API calls.
 
 ---
 
@@ -243,13 +283,13 @@ Most AI products are black boxes. Users don't know if the agent is getting bette
 
 ### The Experience
 
-**Memory Timeline**
+**Learned Timeline**
 
-Accessible from the agent card, the memory view shows the agent's learning journey:
+Accessible from the agent's Learned tab, this view shows the agent's learning journey — what it discovered, what worked, what didn't:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  📚 Ad Spend Guardian — Memory                  │
+│  📚 Grow Qualified Demand — Learned              │
 │                                                  │
 │  Agent has learned 14 lessons over 6 weeks      │
 │  Confidence: ████████░░ 78% (growing)           │
@@ -298,7 +338,7 @@ As the agent accumulates positive outcomes, the platform subtly suggests increas
 ┌─────────────────────────────────────────────────┐
 │  🔔 Your agent has earned more trust            │
 │                                                  │
-│  Ad Spend Guardian has made 23 budget           │
+│  Grow Qualified Demand has made 23 budget       │
 │  recommendations. You approved 21 of them       │
 │  (91%), and 18 had positive outcomes.           │
 │                                                  │
@@ -311,19 +351,19 @@ As the agent accumulates positive outcomes, the platform subtly suggests increas
 ```
 
 Key design choices:
-- **Memory is narrated, not raw data** — "Lesson learned" not "JSONL record"
+- **Learned is narrated, not raw data** — "Lesson learned" not "JSONL record." The emphasis is on what the agent discovered and how it changed its behavior.
 - **Experiments have clear verdicts** — the agent evaluates its own experiments
 - **Trust is quantified** — approval rate, outcome success rate
 - **Autonomy increases are suggested, never forced** — the user always controls the dial
 - **Evidence is always linked** — every lesson traces back to a specific experiment or observation
 
-**How trust suggestions are generated:** The system detects consistent approval patterns — counting resolved approvals by tool name within a time window (not ML, not embeddings). When consistency exceeds a threshold (default: 5+ decisions, 90%+ same outcome, 30-day window), the system suggests a learned policy rule. The user confirms, modifies, or dismisses. This is a system-level notification, not an agent suggestion — the agent never proposes increasing its own autonomy. Full mechanism: `docs/plans/2026-03-30-progressive-autonomy-design.md`.
+**How trust suggestions are generated:** The system detects consistent approval patterns — counting resolved approvals by tool name within a time window (not ML, not embeddings). When consistency exceeds a threshold (default: 5+ decisions, 90%+ same outcome, 30-day window), the system suggests a learned policy rule. The user confirms, modifies, or dismisses. This is a system-level notification, not an agent suggestion — the agent never proposes increasing its own autonomy. Full mechanism: `docs/archive/2026-03-30-progressive-autonomy-design.md`.
 
 ---
 
 ## The Home Screen: Cross-Project Overview
 
-The home screen is the **first thing users see** when they open the app. It operates at the *project* level, not the agent level — because the user's first question isn't "how is my Ad Spend Guardian doing?" but rather "do I need to do anything right now, across everything?"
+The home screen is the **first thing users see** when they open the app. It operates at the *project* level, not the agent level — because the user's first question isn't "how is my agent doing?" but rather "do I need to do anything right now, across everything?"
 
 This is the NotebookLM / Relay.app pattern: a browse-and-triage surface for all your projects, with drill-down into each one.
 
@@ -392,7 +432,71 @@ The original design jumped straight into a flat agent list. That works for 3 age
 - **Global stats strip** — total projects, agents, lessons, avg confidence — gives the "portfolio health" at a glance
 - **Agent mini-list inside each card** — you can see which agents are healthy vs. need attention without drilling in
 - **"+ New project" is a dashed card** — always visible, always inviting, matches the grid layout
-- **Clicking a project card** navigates to the Project Home (agents + connections view)
+- **Clicking a project card** navigates to the Project Home
+
+---
+
+## Project Home
+
+The project home page is the workspace landing. It answers three questions: what systems does this brand have, what outcomes are being owned, and what needs me right now.
+
+### Structure
+
+**Brand Systems Summary** — A compact row of connected service badges (Google Ads, Meta, GA4, Slack, etc.) at the top, each with a status indicator. This is a summary of everything that's been connected across your agents — the project's integration footprint built up over time. Most connections originate during agent setup (the agent needs a service, the user connects it inline, it enters the pool). Users can also proactively connect services from here, but the primary path is agent-driven. A `[+ Connect service]` action sits at the end of the row for the proactive case.
+
+**Agents Grid** — The main content. Each agent is represented by an agent card (see below). This is where the user sees the improvement loops running across their brand.
+
+**Needs Attention** — A rolled-up section at the bottom showing pending approvals, failed runs, and disconnected systems. Items link directly to the relevant agent or setting. This collapses to nothing when everything is healthy.
+
+---
+
+## The Agent Card
+
+The agent card on the project page is a dense summary of the improvement loop. Each card shows the agent as an outcome owner — not a bag of tools, but a continuously-improving system responsible for a specific result.
+
+The card IS the "Now" view. There is no separate "Now" tab on the agent detail page. When you glance at the project page, you see the current state of every outcome the project cares about.
+
+### Active Agent Card
+
+```
+┌──────────────────────────────────────────────────┐
+│  🟢 Grow Qualified Demand                        │
+│  Reduce qualified CPA while maintaining volume   │
+│                                                   │
+│  Qualified CPA   $128  ▁▂▃▂▁▂▃▄▃▂  (30d)       │
+│                                                   │
+│  ↓ 8.2% over 7 days · Paused 2 low-intent       │
+│  ad sets · 2h ago                                │
+│                                                   │
+│  🟡 Budget change awaiting approval              │
+│                                                   │
+│                                    [Open →]       │
+└──────────────────────────────────────────────────┘
+```
+
+Card anatomy:
+- **Status dot + agent name** — green (running), yellow (needs input), red (error), gray (paused)
+- **Outcome sentence** — what it's responsible for
+- **Primary metric sparkline** — 30-day trend + current value
+- **Last result** — one-line summary + relative time
+- **Pending action** — if any approval or attention is needed
+- **Single CTA: "Open"** — navigates to the agent detail page
+
+### New Agent Card (Empty State)
+
+```
+┌──────────────────────────────────────────────────┐
+│  ⚪ New Campaign Monitor                          │
+│  Watch for CPA anomalies across search campaigns │
+│                                                   │
+│  Ready to run · Connected to Google Ads, GA4     │
+│  First run will establish baseline metrics       │
+│                                                   │
+│                                    [Open →]       │
+└──────────────────────────────────────────────────┘
+```
+
+No sparkline, no last result — the card communicates readiness and what the first run will accomplish. The empty state is a promise, not a blank space.
 
 ---
 
@@ -414,7 +518,7 @@ Sidebar appears on the left, scoped to the active project. It shows:
 - **Agent list** with status dots and attention text
 - **+ New agent** button at bottom
 
-Main content area shows Project Home → Agent Detail → Monitor/Feed/Chat/Memory/Settings.
+Main content area shows Project Home → Agent Detail → Runs/Chat/Learned/Settings.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -438,7 +542,7 @@ Main content area shows Project Home → Agent Detail → Monitor/Feed/Chat/Memo
 │   ┌──────────┬──────────────────────────────────────┐      │
 │   │ ← All    │                                       │      │
 │   │  projects│   Project Home / Agent Detail /        │      │
-│   │──────────│   Monitor / Feed / Chat / Memory       │      │
+│   │──────────│   Runs / Chat / Learned / Settings     │      │
 │   │ 🏢 Acme  │                                       │      │
 │   │──────────│                                       │      │
 │   │ 🟡 Ad    │                                       │      │
@@ -458,58 +562,21 @@ Homepage (full-screen lobby — the landing page)
  │
  └──→ Project Workspace (sidebar + content)
        │
-       ├── Project Home (agents grid + connections tab)
-       │    └── Connections Manager
+       ├── Project Home (brand systems summary + agents grid + needs attention)
        │
        ├── Agent Detail
-       │    ├── Monitor (skill-driven performance dashboard — the default tab)
-       │    ├── Feed (insight cards — event-driven alerts)
+       │    ├── Runs (before/after narrative — the default tab, with expandable event timeline)
        │    ├── Chat (talk to this agent)
-       │    ├── Memory (lessons, experiments, outcomes)
-       │    └── Settings (intent, skills, tools, policy)
+       │    ├── Learned (lessons, experiments, outcomes — was "Memory")
+       │    └── Settings (outcome, metric, systems, tools, policy, notifications)
        │
-       ├── + New Agent (setup flow)
-       │
-       └── Marketplace (browse/install skills & policies)
+       └── + New Agent (setup flow)
 ```
 
-Two modes, seven screens. The transition between lobby and workspace is the key UX moment — it mirrors the mental shift from "what needs my attention?" to "let me work on this specific thing."
+Two modes, six screens. The transition between lobby and workspace is the key UX moment — it mirrors the mental shift from "what needs my attention?" to "let me work on this specific thing."
 
 ---
 
-## The Monitor Tab: "What My Agent Sees"
+## Deferred: Skill-Driven Dashboards
 
-### The Gap It Fills
-
-The Feed answers "what did the agent *find*?" — reactive, event-driven. But users also need to answer "how is the thing I'm monitoring actually *performing*?" That's a different question. It's not an alert; it's ongoing visibility into the data the agent watches.
-
-Example: You have an Ad Spend Guardian running on Google Ads. The Feed tells you "CPL spiked 40% yesterday." But you also want to open the agent and *see*: keyword performance table, spend trend for the last 30 days, quality score distribution, wasted spend breakdown. Not as a one-time insight — as a persistent, always-up-to-date view.
-
-### Why Not Just Build a Dashboard Tool?
-
-The tension: if we go too deep into dashboards, we're building a BI tool. That's not what Nochore is. The agent should be the one *interpreting* the data — the user shouldn't need to stare at charts to find problems.
-
-The answer: **the Monitor tab shows what the agent's skills expose as monitorable**, not arbitrary user-configured charts. The agent decides what's worth showing based on its skills and domain knowledge. Think of it like checking in on an employee's desk — you see the key numbers they're tracking, contextualized by their expertise.
-
-### How Skills Drive the Monitor
-
-Each skill can declare a set of **views** — metrics, tables, and trends it can render. The Monitor tab composes these views together:
-
-```
-Skill: "Ad Spend Analysis"
-  └── Views:
-       ├── KPI cards: total spend, CPL, conversions, wasted spend
-       ├── Trend: daily spend over time
-       ├── Table: top keywords by spend (with quality scores, waste flags)
-       └── Insight callout: agent's current assessment of the data
-```
-
-This means different agents show completely different Monitor tabs depending on their skills. An Ad Spend Guardian shows keywords and CPL. A Funnel Monitor shows conversion stages and drop-off rates. An Invoice Tracker shows outstanding amounts and aging buckets. The UI structure is consistent (KPIs → trends → tables → agent insight), but the content is skill-driven.
-
-### Design Principles
-
-- **Monitor is the default tab** — when you click into an agent, this is what you see first. It's the "home base" for that agent.
-- **Agent insight at the bottom** — the Monitor always ends with the agent's own interpretation of what the data means. This bridges the gap between raw metrics and the Feed's event-driven insights.
-- **Time range picker** — 24h / 7d / 30d / 90d. Users need to zoom in and out to understand trends.
-- **Waste/anomaly highlighting** — rows or metrics that the agent has flagged get visual treatment (red badges, tinted backgrounds). The agent's judgment is visible in the data, not just in the Feed.
-- **"Powered by skills" label** — makes it clear this isn't a generic dashboard. The views come from the agent's domain expertise.
+The concept of skill-driven monitoring views — where each skill declares metrics, tables, and trends it can render — remains valid but is deferred. For now, metric visibility lives on the agent card (sparkline + current value) and deeper analysis is available through Chat. The agent is the analyst: ask it questions, it pulls data and explains. When skills declare views in a future phase, a Monitor tab can be revived as a dedicated surface for persistent data visibility.
