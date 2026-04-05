@@ -75,6 +75,8 @@ export {
   type RunRecord,
   type RunStatus,
   RunStatusSchema,
+  type MetricObservation,
+  MetricObservationSchema,
   type RunSummary,
   RunSummarySchema,
   type RunTrigger,

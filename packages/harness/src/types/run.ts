@@ -73,6 +73,7 @@ export const RunEventTypeSchema = z.enum([
   "lesson_distilled",
   "sub_run_started",
   "sub_run_completed",
+  "metric_observed",
   "run_completed",
   "run_cancelled",
   "run_failed",
@@ -88,3 +89,19 @@ export const RunEventSchema = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 export type RunEvent = z.infer<typeof RunEventSchema>;
+
+// ---------------------------------------------------------------------------
+// Metric observations (emitted by agents during runs)
+// ---------------------------------------------------------------------------
+
+export const MetricObservationSchema = z.object({
+  name: z.string(),
+  value: z.number(),
+  unit: z.string().optional(),
+  window: z.string().optional(),
+  scope: z.string().optional(),
+  source: z.string().optional(),
+  observedAt: z.string(),
+  comparabilityKey: z.string(),
+});
+export type MetricObservation = z.infer<typeof MetricObservationSchema>;

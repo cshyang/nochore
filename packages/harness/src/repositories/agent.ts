@@ -51,6 +51,7 @@ export class AgentRepository {
         toolConfig: JSON.stringify(config.toolConfig),
         notificationConfig: JSON.stringify(config.notificationConfig),
         schedule: config.schedule,
+        primaryMetric: config.primaryMetric ?? null,
         status: input.status ?? "draft",
         createdAt: now,
         updatedAt: now,
@@ -78,6 +79,7 @@ export class AgentRepository {
       toolConfig: AgentConfig["toolConfig"];
       notificationConfig: AgentConfig["notificationConfig"];
       schedule: AgentSchedule;
+      primaryMetric: string;
       status: AgentStatus;
     }>,
   ): Promise<void> {
@@ -97,6 +99,9 @@ export class AgentRepository {
     }
     if (patch.schedule !== undefined) {
       updateData.schedule = AgentScheduleSchema.parse(patch.schedule);
+    }
+    if (patch.primaryMetric !== undefined) {
+      updateData.primaryMetric = patch.primaryMetric || null;
     }
     if (patch.status !== undefined) {
       updateData.status = AgentStatusSchema.parse(patch.status);
@@ -125,6 +130,7 @@ function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
     toolConfig,
     notificationConfig,
     schedule: AgentScheduleSchema.parse(row.schedule),
+    primaryMetric: row.primaryMetric ?? undefined,
     status: AgentStatusSchema.parse(row.status),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),

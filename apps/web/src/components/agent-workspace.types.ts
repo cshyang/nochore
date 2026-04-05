@@ -22,6 +22,7 @@ export interface AgentWorkspaceUpdate {
   toolConfig: ToolConfigView;
   notificationConfig: NotificationConfigView;
   status: string;
+  primaryMetric?: string;
 }
 
 export interface AgentWorkspaceProps {

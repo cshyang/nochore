@@ -69,5 +69,6 @@ export const AgentConfigSchema = z.object({
   toolConfig: ToolConfigSchema,
   notificationConfig: NotificationConfigSchema,
   schedule: AgentScheduleSchema,
+  primaryMetric: z.string().optional(),
 });
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

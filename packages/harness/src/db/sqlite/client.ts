@@ -44,6 +44,7 @@ const CREATE_DDL = `
     tool_config TEXT NOT NULL DEFAULT '{}',
     notification_config TEXT NOT NULL DEFAULT '{}',
     schedule TEXT NOT NULL DEFAULT 'manual',
+    primary_metric TEXT,
     status TEXT NOT NULL DEFAULT 'draft',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -315,6 +316,11 @@ function migrateAddColumns(sqlite: Database.Database) {
   }
   if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "work_item_id")) {
     sqlite.exec("ALTER TABLE approvals ADD COLUMN work_item_id TEXT");
+  }
+
+  const agentCols = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+  if (agentCols.length > 0 && !agentCols.some((c) => c.name === "primary_metric")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN primary_metric TEXT");
   }
 }
 

@@ -75,6 +75,7 @@ export function AgentWorkspaceSettingsPanel({
   const [schedule, setSchedule] = useState(agent.schedule ?? "manual");
   const [selectedSkills, setSelectedSkills] = useState<string[]>(agent.skills ?? []);
   const [notificationConfig, setNotificationConfig] = useState(getNotificationConfig(agent.notificationConfig));
+  const [primaryMetric, setPrimaryMetric] = useState(agent.primaryMetric ?? "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -84,6 +85,7 @@ export function AgentWorkspaceSettingsPanel({
     setSchedule(agent.schedule ?? "manual");
     setSelectedSkills(agent.skills ?? []);
     setNotificationConfig(getNotificationConfig(agent.notificationConfig));
+    setPrimaryMetric(agent.primaryMetric ?? "");
   }, [agent]);
 
   const persist = async (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
@@ -193,9 +195,21 @@ export function AgentWorkspaceSettingsPanel({
 
       <SectionHeading>Success Metric</SectionHeading>
       <SettingsCard>
-        <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm, fontStyle: "italic" }}>
-          Define what success looks like for this agent. Metric tracking coming soon.
-        </div>
+        <SettingsRow
+          icon="◎"
+          title="Primary metric"
+          description="The comparability key that identifies which observed metric to track. Your agent will emit metric observations during runs."
+          defaultExpanded
+        >
+          <input
+            className="input"
+            value={primaryMetric}
+            onChange={(event) => setPrimaryMetric(event.target.value)}
+            onBlur={() => void persist({ primaryMetric })}
+            placeholder="e.g., qualified_cpa|last_7_days|account"
+            style={{ ...fieldStyle, fontFamily: TYPE.mono, fontSize: TYPE.scale.sm }}
+          />
+        </SettingsRow>
       </SettingsCard>
 
       <SectionHeading>Systems</SectionHeading>

@@ -20,6 +20,7 @@ export const agents = sqliteTable(
     toolConfig: text("tool_config").notNull().default("{}"),
     notificationConfig: text("notification_config").notNull().default("{}"),
     schedule: text("schedule").notNull().default("manual"),
+    primaryMetric: text("primary_metric"),
     status: text("status").notNull().default("draft"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

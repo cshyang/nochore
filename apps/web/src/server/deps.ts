@@ -1,9 +1,11 @@
+import { existsSync, readdirSync } from "node:fs";
 import type { AgentConfig } from "@nochore/harness";
 import {
   agents,
   connections,
   createProjectRepositories,
   getAgentWorkspacePath,
+  getProjectDirectory,
   type HarnessDb,
   listPromptSkills,
   openProjectDb,
@@ -21,6 +23,7 @@ export type ProjectDeps = { db: HarnessDb } & ProjectRepositories;
 
 export function getProjectDeps(projectId: string): ProjectDeps {
   const db = getDb(projectId);
+  recoverMissingAgentRows(projectId, db);
   return {
     db,
     ...createProjectRepositories(db),
@@ -77,13 +80,19 @@ export async function getProjectView(projectId: string) {
     return null;
   }
 
-  const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository } =
+  const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository, runEventRepository } =
     getProjectDeps(projectId);
   const agentRows = await agentRepository.listByProject(projectId);
   const agentNameById = new Map(agentRows.map((agent) => [agent.id, agent.name]));
   const agents = await Promise.all(
-    agentRows.map(async (agent) =>
-      buildAgentView({
+    agentRows.map(async (agent) => {
+      const metricEvents = agent.primaryMetric
+        ? (await runEventRepository.listByAgent(agent.id, 500)).filter(
+            (e) => e.type === "metric_observed",
+          )
+        : [];
+
+      return buildAgentView({
         agent,
         db,
         runs: await runRepository.getByAgent(agent.id),
@@ -92,8 +101,9 @@ export async function getProjectView(projectId: string) {
         activeConnections: agent.toolConfig.requiredProviders,
         learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
         learnedRules: await learnedRuleRepository.listAccepted(agent.id),
-      }),
-    ),
+        metricEvents,
+      });
+    }),
   );
 
   const activeConnectionCount = db
@@ -122,6 +132,74 @@ function getDb(projectId: string) {
     dbCache.set(projectId, openProjectDb(projectId));
   }
   return dbCache.get(projectId)!;
+}
+
+function recoverMissingAgentRows(projectId: string, db: HarnessDb) {
+  const agentsDir = `${getProjectDirectory(projectId)}/agents`;
+  if (!existsSync(agentsDir)) {
+    return;
+  }
+
+  const workspaceIds = readdirSync(agentsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  if (workspaceIds.length === 0) {
+    return;
+  }
+
+  const existingIds = new Set(
+    db
+      .select()
+      .from(agents)
+      .where(eq(agents.projectId, projectId))
+      .all()
+      .map((row) => row.id),
+  );
+
+  for (const agentId of workspaceIds) {
+    if (existingIds.has(agentId)) {
+      continue;
+    }
+
+    try {
+      const now = Date.now();
+      db.insert(agents)
+        .values({
+          id: agentId,
+          projectId,
+          name: `Recovered agent ${agentId}`,
+          description: "Recovered from an existing workspace after the database record was missing.",
+          instructions: "",
+          skills: "[]",
+          toolConfig: JSON.stringify({
+            globalApprovalRequired: false,
+            requiredProviders: [],
+            tools: {},
+          }),
+          notificationConfig: JSON.stringify({
+            inApp: true,
+            email: false,
+            slack: false,
+          }),
+          schedule: "manual",
+          status: "draft",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      existingIds.add(agentId);
+    } catch (error) {
+      if (!isDuplicateAgentInsert(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
+function isDuplicateAgentInsert(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("UNIQUE constraint failed: agents.id");
 }
 
 function toAgentRow(row: typeof agents.$inferSelect): AgentRow {

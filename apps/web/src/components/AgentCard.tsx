@@ -119,6 +119,16 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
         </div>
       )}
 
+      {/* Row 2b: Metric sparkline (when data exists) */}
+      {agent.metricSparkline && agent.metricSparkline.length > 1 && (
+        <MetricSparklineRow
+          primaryMetric={agent.primaryMetric}
+          sparkline={agent.metricSparkline}
+          currentValue={agent.metricCurrentValue}
+          unit={agent.metricUnit}
+        />
+      )}
+
       {/* Row 3: Last result or empty state */}
       {hasRuns ? (
         <>
@@ -133,6 +143,16 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
               }}
             >
               {lastResultLine}
+              {agent.metricTrendLabel && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    color: agent.metricTrendLabel.startsWith("\u2193") ? COLORS.green : COLORS.orange,
+                  }}
+                >
+                  {agent.metricTrendLabel}
+                </span>
+              )}
             </div>
           )}
         </>
@@ -163,4 +183,114 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
       </div>
     </button>
   );
+}
+
+function MetricSparklineRow({
+  primaryMetric,
+  sparkline,
+  currentValue,
+  unit,
+}: {
+  primaryMetric?: string;
+  sparkline: Array<{ timestamp: number; value: number }>;
+  currentValue?: number;
+  unit?: string;
+}) {
+  const metricLabel = primaryMetric ? primaryMetric.split("|")[0] ?? "" : "";
+  const values = sparkline.map((p) => p.value);
+  const daySpan = Math.round(
+    (sparkline[sparkline.length - 1]!.timestamp - sparkline[0]!.timestamp) / (24 * 60 * 60 * 1000),
+  );
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {metricLabel && (
+        <span
+          style={{
+            fontSize: TYPE.scale.xs,
+            color: COLORS.textSecondary,
+            flexShrink: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: 80,
+          }}
+        >
+          {metricLabel}
+        </span>
+      )}
+      {currentValue !== undefined && (
+        <span
+          style={{
+            fontSize: TYPE.scale.md,
+            fontWeight: TYPE.weight.semibold,
+            color: COLORS.text,
+            flexShrink: 0,
+          }}
+        >
+          {unit && !unit.startsWith("%") ? `${unit}` : ""}
+          {formatMetricValue(currentValue)}
+          {unit === "%" ? "%" : ""}
+        </span>
+      )}
+      <Sparkline values={values} width={120} height={24} />
+      {daySpan > 0 && (
+        <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, flexShrink: 0 }}>
+          ({daySpan}d)
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Sparkline({
+  values,
+  width,
+  height,
+}: {
+  values: number[];
+  width: number;
+  height: number;
+}) {
+  if (values.length < 2) return null;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const padding = 2;
+  const plotHeight = height - padding * 2;
+  const stepX = (width - padding * 2) / (values.length - 1);
+
+  const points = values
+    .map((v, i) => {
+      const x = padding + i * stepX;
+      const y = padding + plotHeight - ((v - min) / range) * plotHeight;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ flexShrink: 0 }}
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke={COLORS.accent}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function formatMetricValue(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2);
 }

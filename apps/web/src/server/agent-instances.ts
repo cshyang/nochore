@@ -33,6 +33,7 @@ type AgentMutationFields = {
   notificationConfig?: NotificationConfig;
   schedule?: AgentConfig["schedule"];
   status?: AgentStatus;
+  primaryMetric?: string;
 };
 
 type CreateAgentInput = AgentMutationFields & {
@@ -108,6 +109,7 @@ export const updateAgentInstanceConfig = createServerFn({ method: "POST" })
       notificationConfig: data.notificationConfig,
       schedule: data.schedule,
       status: data.status,
+      primaryMetric: data.primaryMetric,
     });
     return jsonSafe({ updated: true });
   });
@@ -229,6 +231,13 @@ async function loadAgentView(projectId: string, agentId: string) {
 }
 
 async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
+  // Only fetch metric events if the agent has a primaryMetric configured.
+  const metricEvents = agent.primaryMetric
+    ? (await deps.runEventRepository.listByAgent(agent.id, 500)).filter(
+        (e) => e.type === "metric_observed",
+      )
+    : [];
+
   return buildAgentView({
     agent,
     db: deps.db,
@@ -238,6 +247,7 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
     activeConnections: agent.toolConfig.requiredProviders,
     learnedRuleSuggestions: await deps.learnedRuleRepository.listSuggested(agent.id),
     learnedRules: await deps.learnedRuleRepository.listAccepted(agent.id),
+    metricEvents,
   });
 }
 

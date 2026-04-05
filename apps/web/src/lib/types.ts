@@ -16,6 +16,7 @@ export type RunEventType =
   | "notification_sent"
   | "lesson_distilled"
   | "run_completed"
+  | "metric_observed"
   | "run_cancelled"
   | "run_failed";
 
@@ -250,6 +251,13 @@ export interface AgentView {
   requiredProviders?: ProviderRequirementView[];
   learnedRuleSuggestions?: LearnedRuleView[];
   learnedRules?: LearnedRuleView[];
+
+  // Metric sparkline (populated when agent has a primaryMetric configured)
+  primaryMetric?: string;
+  metricSparkline?: { timestamp: number; value: number }[];
+  metricCurrentValue?: number;
+  metricUnit?: string;
+  metricTrendLabel?: string; // e.g., "↓ 8.2% over 7 days"
 
   // Transitional optional fields retained while route/component migration lands.
   intent?: string;

@@ -5,11 +5,13 @@ import type {
   connections,
   createDb,
   LearnedPolicyRule,
+  MetricObservation,
   RunEvent,
   RunRecord,
   RunSummary,
   WorkItemRecord,
 } from "@nochore/harness";
+import { MetricObservationSchema } from "@nochore/harness";
 import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
 
 type Db = ReturnType<typeof createDb>;
@@ -96,6 +98,7 @@ export function buildAgentView(params: {
   activeConnections: Array<{ provider: string; reason?: string | null }>;
   learnedRuleSuggestions?: LearnedPolicyRule[];
   learnedRules?: LearnedPolicyRule[];
+  metricEvents?: RunEvent[];
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
   const activeRunCount = params.runs.filter(
@@ -113,6 +116,8 @@ export function buildAgentView(params: {
   } else if (latestRun?.status === "failed") {
     status = "error";
   }
+
+  const metricFields = computeMetricFields(params.agent.primaryMetric, params.metricEvents ?? []);
 
   return {
     id: params.agent.id,
@@ -153,6 +158,8 @@ export function buildAgentView(params: {
       provider: connection.provider,
       reason: connection.reason ?? "",
     })),
+    primaryMetric: params.agent.primaryMetric,
+    ...metricFields,
     learnedRuleSuggestions: (params.learnedRuleSuggestions ?? []).map(buildLearnedRuleView),
     learnedRules: (params.learnedRules ?? []).map(buildLearnedRuleView),
     createdAt: params.agent.createdAt.getTime(),
@@ -318,6 +325,95 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
     case "waiting_for_children":
       return "waiting_for_children";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Metric sparkline computation
+// ---------------------------------------------------------------------------
+
+const SPARKLINE_MAX_POINTS = 30;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function computeMetricFields(
+  primaryMetric: string | undefined,
+  metricEvents: RunEvent[],
+): Pick<AgentView, "metricSparkline" | "metricCurrentValue" | "metricUnit" | "metricTrendLabel"> {
+  if (!primaryMetric || metricEvents.length === 0) {
+    return {};
+  }
+
+  // Parse payloads and filter to those matching the primaryMetric comparabilityKey.
+  const observations: Array<{ timestamp: number; metric: MetricObservation }> = [];
+  for (const event of metricEvents) {
+    const parsed = MetricObservationSchema.safeParse(event.payload);
+    if (parsed.success && parsed.data.comparabilityKey === primaryMetric) {
+      observations.push({ timestamp: event.timestamp.getTime(), metric: parsed.data });
+    }
+  }
+
+  if (observations.length === 0) {
+    return {};
+  }
+
+  // Sort ascending by timestamp, take last N for sparkline.
+  observations.sort((a, b) => a.timestamp - b.timestamp);
+  const recent = observations.slice(-SPARKLINE_MAX_POINTS);
+  const sparkline = recent.map((obs) => ({ timestamp: obs.timestamp, value: obs.metric.value }));
+
+  const latest = observations[observations.length - 1]!;
+  const currentValue = latest.metric.value;
+  const unit = latest.metric.unit;
+
+  // Trend: compare latest value to the value closest to 7 days ago.
+  const trendLabel = computeTrendLabel(observations, currentValue);
+
+  return {
+    metricSparkline: sparkline,
+    metricCurrentValue: currentValue,
+    metricUnit: unit,
+    metricTrendLabel: trendLabel,
+  };
+}
+
+function computeTrendLabel(
+  observations: Array<{ timestamp: number; metric: MetricObservation }>,
+  currentValue: number,
+): string | undefined {
+  if (observations.length < 2) {
+    return undefined;
+  }
+
+  const now = observations[observations.length - 1]!.timestamp;
+  const targetTs = now - SEVEN_DAYS_MS;
+
+  // Find the observation closest to 7 days ago.
+  let closest = observations[0]!;
+  let closestDiff = Math.abs(closest.timestamp - targetTs);
+  for (const obs of observations) {
+    const diff = Math.abs(obs.timestamp - targetTs);
+    if (diff < closestDiff) {
+      closest = obs;
+      closestDiff = diff;
+    }
+  }
+
+  // Don't compute trend if the "baseline" is the same as the latest observation.
+  if (closest.timestamp === now) {
+    return undefined;
+  }
+
+  const baselineValue = closest.metric.value;
+  if (baselineValue === 0) {
+    return undefined;
+  }
+
+  const changePercent = ((currentValue - baselineValue) / Math.abs(baselineValue)) * 100;
+  const absPercent = Math.abs(changePercent).toFixed(1);
+  const arrow = changePercent > 0 ? "\u2191" : changePercent < 0 ? "\u2193" : "";
+  const daysDiff = Math.round((now - closest.timestamp) / (24 * 60 * 60 * 1000));
+  const period = daysDiff === 1 ? "1 day" : `${daysDiff} days`;
+
+  return `${arrow} ${absPercent}% over ${period}`;
 }
 
 function buildLearnedRuleView(rule: LearnedPolicyRule): LearnedRuleView {

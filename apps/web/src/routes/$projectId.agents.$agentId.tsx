@@ -257,6 +257,7 @@ function AgentDetailPage() {
               ? { notificationConfig: updates.notificationConfig as never }
               : {}),
             ...(updates.status !== undefined ? { status: updates.status as "draft" | "live" } : {}),
+            ...(updates.primaryMetric !== undefined ? { primaryMetric: updates.primaryMetric } : {}),
           },
         });
         void router.invalidate();
