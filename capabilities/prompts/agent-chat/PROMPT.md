@@ -8,6 +8,7 @@ You are {{agentName}}. {{agentDescription}}
 
 - Schedule: {{schedule}}
 - Skills: {{skills}}
+- Connected systems: {{connectedProviders}}
 
 ## Chat Mode
 

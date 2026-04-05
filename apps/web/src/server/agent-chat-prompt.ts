@@ -14,6 +14,7 @@ export function buildAgentChatSystemPrompt(agent: {
   instructions: string;
   schedule: string;
   skills: string[];
+  connectedProviders?: string[];
 }): string {
   const prompt = getPromptDefinitionById("agent-chat");
   if (!prompt) {
@@ -26,6 +27,10 @@ export function buildAgentChatSystemPrompt(agent: {
     agentInstructions: agent.instructions,
     schedule: agent.schedule,
     skills: agent.skills.length > 0 ? agent.skills.join(", ") : "None configured",
+    connectedProviders:
+      agent.connectedProviders && agent.connectedProviders.length > 0
+        ? agent.connectedProviders.join(", ")
+        : "None connected",
   });
 }
 

@@ -17,7 +17,7 @@ import {
   persistConversationMessages,
   resolveConversationThread,
 } from "~/server/chat-memory";
-import { getAgentRow, getProjectDeps } from "~/server/deps";
+import { getAgentRow, getProjectDeps, listProjectConnections } from "~/server/deps";
 import { startAgentRun } from "~/server/orchestration";
 
 type IncomingMessage = {
@@ -70,6 +70,11 @@ export const Route = createFileRoute("/api/agent-chat")({
           model,
         });
 
+        const projectConnections = listProjectConnections(projectId);
+        const connectedProviders = projectConnections
+          .filter((c) => c.status === "active")
+          .map((c) => c.provider);
+
         const system = [
           buildAgentChatSystemPrompt({
             name: agent.name,
@@ -77,6 +82,7 @@ export const Route = createFileRoute("/api/agent-chat")({
             instructions: agent.config.instructions,
             schedule: agent.config.schedule,
             skills: agent.config.skills,
+            connectedProviders,
           }),
           assembled.memoryContext,
         ]
