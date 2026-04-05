@@ -111,7 +111,7 @@ export function AgentWorkspaceSettingsPanel({
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      <SectionHeading>Identity</SectionHeading>
+      <SectionHeading>Outcome</SectionHeading>
       <SettingsCard>
         <SettingsRow icon="✦" title="Name" description="How the workspace refers to this agent." defaultExpanded>
           <input
@@ -161,11 +161,7 @@ export function AgentWorkspaceSettingsPanel({
             ))}
           </div>
         </SettingsRow>
-      </SettingsCard>
-
-      <SectionHeading>Instructions</SectionHeading>
-      <SettingsCard>
-        <div style={{ padding: 16 }}>
+        <SettingsRow icon="⟡" title="Strategy note" description="Tell the agent what to optimize for, what to avoid, and how to think." defaultExpanded>
           <textarea
             className="textarea"
             value={instructions}
@@ -192,45 +188,17 @@ export function AgentWorkspaceSettingsPanel({
               Save instructions
             </Button>
           </div>
+        </SettingsRow>
+      </SettingsCard>
+
+      <SectionHeading>Success Metric</SectionHeading>
+      <SettingsCard>
+        <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm, fontStyle: "italic" }}>
+          Define what success looks like for this agent. Metric tracking coming soon.
         </div>
       </SettingsCard>
 
-      <SectionHeading>Skills</SectionHeading>
-      <SettingsCard>
-        {skills.length === 0 ? (
-          <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
-            No skills selected yet.
-          </div>
-        ) : (
-          skills.map((skill, index) => {
-            const isEnabled = selectedSkills.includes(skill.id);
-
-            return (
-              <SettingsRow
-                key={skill.id}
-                icon="◈"
-                title={skill.name}
-                description={skill.description}
-                isLast={index === skills.length - 1}
-                trailing={
-                  <Toggle
-                    checked={isEnabled}
-                    onChange={() => {
-                      const next = isEnabled
-                        ? selectedSkills.filter((id) => id !== skill.id)
-                        : [...selectedSkills, skill.id];
-                      setSelectedSkills(next);
-                      void persist({ skills: next });
-                    }}
-                  />
-                }
-              />
-            );
-          })
-        )}
-      </SettingsCard>
-
-      <SectionHeading>Connections</SectionHeading>
+      <SectionHeading>Systems</SectionHeading>
       <div style={{ display: "grid", gap: 6 }}>
         {connections
           .filter((c) => c.status === "active")
@@ -336,6 +304,45 @@ export function AgentWorkspaceSettingsPanel({
         )}
       </div>
 
+      <SectionHeading>Tools & Permissions</SectionHeading>
+      <SettingsCard>
+        {skills.length === 0 && policyTools.length === 0 ? (
+          <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+            No skills or tools available yet.
+          </div>
+        ) : (
+          <>
+            {skills.map((skill) => {
+              const isEnabled = selectedSkills.includes(skill.id);
+
+              return (
+                <SettingsRow
+                  key={skill.id}
+                  icon="◈"
+                  title={skill.name}
+                  description={skill.description}
+                  trailing={
+                    <Toggle
+                      checked={isEnabled}
+                      onChange={() => {
+                        const next = isEnabled
+                          ? selectedSkills.filter((id) => id !== skill.id)
+                          : [...selectedSkills, skill.id];
+                        setSelectedSkills(next);
+                        void persist({ skills: next });
+                      }}
+                    />
+                  }
+                />
+              );
+            })}
+            {policyTools.map((tool, index) => (
+              <ToolIdentityRow key={tool.toolName} tool={tool} isLast={index === policyTools.length - 1} />
+            ))}
+          </>
+        )}
+      </SettingsCard>
+
       <SectionHeading>Policy</SectionHeading>
       <SettingsCard>
         <PolicyHeaderRow
@@ -351,7 +358,7 @@ export function AgentWorkspaceSettingsPanel({
         {policyTools.length > 0 ? (
           <div style={{ padding: "0 16px 16px", display: "grid", gap: 10 }}>
             {policyTools.map((tool) => (
-              <PolicyToolRow
+              <PolicyApprovalRow
                 key={tool.toolName}
                 tool={tool}
                 onChange={(approvalMode) =>
@@ -371,7 +378,7 @@ export function AgentWorkspaceSettingsPanel({
           </div>
         ) : (
           <div style={{ padding: SPACE[4], color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
-            Connect a provider to configure manual approval policy for its tools.
+            Connect a provider to configure approval policy for its tools.
           </div>
         )}
 
@@ -497,7 +504,51 @@ function PolicyHeaderRow({ checked, onChange }: { checked: boolean; onChange: (c
   );
 }
 
-function PolicyToolRow({
+function ToolIdentityRow({ tool, isLast }: { tool: ToolConfigEntryView; isLast?: boolean }) {
+  return (
+    <div
+      style={{
+        padding: "14px 16px",
+        borderBottom: isLast ? "none" : `1px solid ${COLORS.border}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+          {tool.title}
+        </div>
+        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 2 }}>
+          {humanize(tool.provider || "tool")}
+          {tool.description ? ` — ${tool.description}` : ""}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span
+          style={{
+            fontSize: TYPE.scale.xs,
+            fontWeight: TYPE.weight.medium,
+            padding: "2px 8px",
+            borderRadius: RADIUS.pill,
+            border: `1px solid ${COLORS.border}`,
+            color: tool.mode === "write" ? COLORS.orange : COLORS.textSecondary,
+          }}
+        >
+          {tool.mode === "write" ? "Write" : "Read"}
+        </span>
+        {tool.enabled ? (
+          <span style={{ fontSize: TYPE.scale.xs, color: COLORS.green }}>Enabled</span>
+        ) : (
+          <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>Disabled</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PolicyApprovalRow({
   tool,
   onChange,
 }: {
@@ -511,24 +562,15 @@ function PolicyToolRow({
         borderRadius: RADIUS.lg,
         border: `1px solid ${COLORS.border}`,
         background: COLORS.bg,
-        display: "grid",
-        gap: 10,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
       }}
     >
-      <div style={{ display: "grid", gap: 4 }}>
-        <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-          {tool.title}
-        </div>
-        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
-          {humanize(tool.provider || "tool")} · {tool.mode === "write" ? "Write" : "Read"}
-        </div>
-        {tool.description ? (
-          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
-            {tool.description}
-          </div>
-        ) : null}
+      <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium, color: COLORS.text }}>
+        {tool.title}
       </div>
-
       <ModeSegmentedControl value={tool.approvalMode} onChange={onChange} />
     </div>
   );

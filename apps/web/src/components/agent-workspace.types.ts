@@ -11,7 +11,7 @@ import type {
   ToolConfigView,
 } from "~/lib/types";
 
-export type WorkspaceTab = "activity" | "chat" | "memory" | "settings";
+export type WorkspaceTab = "runs" | "chat" | "learned" | "settings";
 
 export interface AgentWorkspaceUpdate {
   name: string;

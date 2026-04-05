@@ -1,8 +1,7 @@
 import { useState } from "react";
+import { AgentCard } from "~/components/AgentCard";
 import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
-import { ProjectConnections } from "~/components/ProjectConnections";
-import { formatAgentActivitySummary } from "~/lib/activity";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { humanizeToolName } from "~/lib/narrate";
 import type { ConnectionView, ProjectView } from "~/lib/types";
@@ -14,7 +13,7 @@ interface ProjectHomeProps {
   connections: ConnectionView[];
   onSelectAgent: (
     id: string,
-    options?: { runId?: string; pendingActionId?: string; tab?: "activity" | "chat" },
+    options?: { runId?: string; pendingActionId?: string; tab?: "runs" | "chat" },
   ) => void;
   onNewAgent?: () => void;
   onDeleteProject?: () => void;
@@ -54,10 +53,11 @@ function groupNeedsInput(project: ProjectView) {
 }
 
 export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, onDeleteProject }: ProjectHomeProps) {
-  const [projectTab, setProjectTab] = useState("agents");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const needsAttention = project.agents.filter((a) => a.status === "attention");
   const groupedNeedsInput = groupNeedsInput(project);
+  const hasNeedsAttention = groupedNeedsInput.length > 0 || needsAttention.length > 0;
+  const activeConnections = connections.filter((c) => c.status === "active");
   const incompleteDrafts = project.agents.filter(isIncompleteDraft);
   const regularAgents = project.agents.filter((a) => !isIncompleteDraft(a));
 
@@ -143,39 +143,48 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
               </button>
             ))}
         </div>
-        {/* Project tabs */}
-        <nav style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}` }}>
-          {[
-            { key: "agents", label: "Agents" },
-            { key: "connections", label: "Connections" },
-          ].map((t) => (
-            <button
-              type="button"
-              key={t.key}
-              onClick={() => setProjectTab(t.key)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: TYPE.body,
-                fontSize: TYPE.scale.sm,
-                fontWeight: TYPE.weight.medium,
-                color: projectTab === t.key ? COLORS.text : COLORS.textDim,
-                padding: "12px 0",
-                marginBottom: -1,
-                borderBottom: `2px solid ${projectTab === t.key ? COLORS.accent : "transparent"}`,
-                transition: `color ${transition}`,
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        {/* Connected services */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+          {activeConnections.length > 0 ? (
+            activeConnections.map((c) => (
+              <span
+                key={c.id}
+                style={{
+                  background: COLORS.surfaceHover,
+                  borderRadius: RADIUS.pill,
+                  padding: "4px 10px",
+                  fontSize: TYPE.scale.xs,
+                  color: COLORS.textSecondary,
+                }}
+              >
+                {c.provider}
+              </span>
+            ))
+          ) : (
+            <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>No systems connected</span>
+          )}
+          <button
+            type="button"
+            style={{
+              background: "none",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: RADIUS.pill,
+              padding: "4px 10px",
+              fontSize: TYPE.scale.xs,
+              color: COLORS.textSecondary,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: `border-color ${transition}`,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = COLORS.accent)}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
+          >
+            + Connect
+          </button>
+        </div>
       </div>
 
-      {projectTab === "connections" && <ProjectConnections project={project} connections={connections} />}
-      {projectTab === "agents" &&
-        (project.agents.length === 0 ? (
+      {project.agents.length === 0 ? (
           /* Empty state — no agents yet */
           <div style={{ textAlign: "center", padding: "80px 0 40px" }}>
             <div style={{ fontSize: 32, color: COLORS.accent, marginBottom: 12 }}>✦</div>
@@ -213,108 +222,127 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
               + New agent
             </button>
           </div>
-        ) : (
-          <>
-            {groupedNeedsInput.length > 0 && (
-              <Card style={{ marginBottom: 20, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <Badge color="orange">
-                    {project.needsInput.length} approval{project.needsInput.length === 1 ? "" : "s"} need input
-                  </Badge>
-                </div>
-                <div style={{ display: "grid", gap: 14 }}>
-                  {groupedNeedsInput.map((group) => (
-                    <div key={group.agentId} style={{ display: "grid", gap: 8 }}>
-                      <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-                        {group.agentName}
-                      </div>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {group.items.map((item) => (
-                          <button
-                            type="button"
-                            key={item.id}
-                            onClick={() =>
-                              onSelectAgent(item.agentId, {
-                                runId: item.runId,
-                                pendingActionId: item.approval.id,
-                                tab: "activity",
-                              })
-                            }
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 12,
-                              padding: "10px 0",
-                              width: "100%",
-                              background: "none",
-                              border: "none",
-                              borderBottom: `1px solid ${COLORS.border}`,
-                              textAlign: "left",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <div style={{ display: "grid", gap: 3 }}>
-                              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
-                                {humanizeToolName(item.approval.proposal.toolName)}
+      ) : (
+        <>
+          {/* Consolidated needs-attention section */}
+          {hasNeedsAttention && (
+            <div style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  fontSize: TYPE.scale.xs,
+                  color: COLORS.textDim,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  marginBottom: 12,
+                }}
+              >
+                Needs attention
+              </div>
+
+              {groupedNeedsInput.length > 0 && (
+                <Card style={{ marginBottom: 12, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <Badge color="orange">
+                      {project.needsInput.length} approval{project.needsInput.length === 1 ? "" : "s"} need input
+                    </Badge>
+                  </div>
+                  <div style={{ display: "grid", gap: 14 }}>
+                    {groupedNeedsInput.map((group) => (
+                      <div key={group.agentId} style={{ display: "grid", gap: 8 }}>
+                        <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+                          {group.agentName}
+                        </div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {group.items.map((item) => (
+                            <button
+                              type="button"
+                              key={item.id}
+                              onClick={() =>
+                                onSelectAgent(item.agentId, {
+                                  runId: item.runId,
+                                  pendingActionId: item.approval.id,
+                                  tab: "runs",
+                                })
+                              }
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                padding: "10px 0",
+                                width: "100%",
+                                background: "none",
+                                border: "none",
+                                borderBottom: `1px solid ${COLORS.border}`,
+                                textAlign: "left",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ display: "grid", gap: 3 }}>
+                                <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
+                                  {humanizeToolName(item.approval.proposal.toolName)}
+                                </div>
+                                <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
+                                  {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
+                                  {item.approval.proposal.reason}
+                                </div>
                               </div>
-                              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
-                                {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
-                                {item.approval.proposal.reason}
-                              </div>
-                            </div>
-                            <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
-                          </button>
-                        ))}
+                              <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {needsAttention.length > 0 && (
+                <Card style={{ borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <Badge color="orange">
+                      {needsAttention.length} need{needsAttention.length === 1 ? "s" : ""} attention
+                    </Badge>
+                  </div>
+                  {needsAttention.map((agent) => (
+                    <button
+                      type="button"
+                      key={agent.id}
+                      onClick={() => onSelectAgent(agent.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 0",
+                        cursor: "pointer",
+                        background: "none",
+                        border: "none",
+                        borderBottomColor: COLORS.border,
+                        borderBottomStyle: "solid",
+                        borderBottomWidth: "1px",
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}
+                        >
+                          {agent.name}
+                        </div>
+                        <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>
+                          Needs attention
+                        </div>
+                      </div>
+                      <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
+                    </button>
                   ))}
-                </div>
-              </Card>
-            )}
+                </Card>
+              )}
+            </div>
+          )}
 
-            {/* Attention-needed summary */}
-            {needsAttention.length > 0 && (
-              <Card style={{ marginBottom: 20, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <Badge color="orange">
-                    {needsAttention.length} need{needsAttention.length === 1 ? "s" : ""} attention
-                  </Badge>
-                </div>
-                {needsAttention.map((agent) => (
-                  <button
-                    type="button"
-                    key={agent.id}
-                    onClick={() => onSelectAgent(agent.id)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "8px 0",
-                      cursor: "pointer",
-                      borderBottom: `1px solid ${COLORS.border}`,
-                      background: "none",
-                      border: "none",
-                      borderBottomColor: COLORS.border,
-                      borderBottomStyle: "solid",
-                      borderBottomWidth: "1px",
-                      width: "100%",
-                      textAlign: "left",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-                        {agent.name}
-                      </div>
-                      <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>Needs attention</div>
-                    </div>
-                    <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
-                  </button>
-                ))}
-              </Card>
-            )}
-
-            {/* Incomplete drafts — resume setup prompt */}
+          {/* Incomplete drafts — resume setup prompt */}
             {incompleteDrafts.length > 0 && (
               <div style={{ marginBottom: 20 }}>
                 <div
@@ -399,74 +427,9 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
               {incompleteDrafts.length > 0 ? "Active agents" : "All agents"}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {regularAgents.map((agent) => {
-                const statusDotColor =
-                  agent.status === "attention"
-                    ? COLORS.orange
-                    : agent.status === "error"
-                      ? COLORS.red
-                      : agent.status === "running"
-                        ? COLORS.green
-                        : COLORS.textDim;
-                const isRunning = agent.status === "running";
-                const isDraft = agent.lifecycleStatus === "draft";
-                const activitySummary = formatAgentActivitySummary({
-                  pendingApprovalCount: agent.pendingCount,
-                  activeRunCount: agent.activeRunCount,
-                });
-                return (
-                  <Card
-                    key={agent.id}
-                    onClick={() => onSelectAgent(agent.id)}
-                    style={{ cursor: "pointer", padding: 20 }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 99,
-                          background: statusDotColor,
-                          opacity: agent.status === "idle" ? 0.5 : 1,
-                          flexShrink: 0,
-                          ...(isRunning ? { animation: "pulse 1.5s ease-in-out infinite" } : {}),
-                        }}
-                      />
-                      <span style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-                        {agent.name}
-                      </span>
-                      {isDraft && (
-                        <span
-                          style={{
-                            fontSize: TYPE.scale.xs,
-                            fontWeight: TYPE.weight.medium,
-                            background: "rgba(107,103,128,0.15)",
-                            color: COLORS.textSecondary,
-                            padding: "2px 8px",
-                            borderRadius: RADIUS.sm,
-                          }}
-                        >
-                          Draft
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <span style={{ fontSize: 12, color: COLORS.textSecondary }}>
-                        Last run: {agent.lastRunRelative ?? "Never"}
-                      </span>
-                      {activitySummary ? (
-                        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 4 }}>
-                          {activitySummary}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <Badge color="gray">{agent.skills.length} skills</Badge>
-                      <Badge color="gray">{agent.lessonCount} lessons</Badge>
-                    </div>
-                  </Card>
-                );
-              })}
+              {regularAgents.map((agent) => (
+                <AgentCard key={agent.id} agent={agent} onClick={() => onSelectAgent(agent.id)} />
+              ))}
 
               {/* Add agent */}
               <Card
@@ -487,7 +450,7 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
               </Card>
             </div>
           </>
-        ))}
+        )}
     </div>
   );
 }

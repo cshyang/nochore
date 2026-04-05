@@ -7,6 +7,7 @@ import type {
   LearnedPolicyRule,
   RunEvent,
   RunRecord,
+  RunSummary,
   WorkItemRecord,
 } from "@nochore/harness";
 import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
@@ -65,6 +66,7 @@ export interface SerializedRun {
     }>;
     eventsLogged: number;
   };
+  summary?: RunSummary;
 }
 
 export interface SerializedPendingAction {
@@ -128,6 +130,7 @@ export function buildAgentView(params: {
     status,
     lastRunAt: latestRun ? latestRun.startedAt.getTime() : null,
     lastRunRelative: latestRun ? relativeTime(latestRun.startedAt.getTime()) : null,
+    lastRunHeadline: latestRun?.summary?.headline ?? null,
     nextRunAt: null,
     pendingCount,
     activeRunCount,
@@ -274,6 +277,7 @@ export function buildSerializedRun(
       proposals,
       eventsLogged: events.length,
     },
+    summary: run.summary,
   };
 }
 

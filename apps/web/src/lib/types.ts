@@ -163,6 +163,7 @@ export interface RunView {
   approvals: PendingActionView[];
   workItems: WorkItemView[];
   result?: RunResultView;
+  summary?: RunSummaryView;
 }
 
 export interface RunActivityStateView extends Omit<RunView, "approvals"> {
@@ -235,6 +236,7 @@ export interface AgentView {
   status: AgentOperationalStatus;
   lastRunAt: number | null;
   lastRunRelative: string | null;
+  lastRunHeadline?: string | null;
   nextRunAt: number | null;
   pendingCount: number;
   activeRunCount: number;

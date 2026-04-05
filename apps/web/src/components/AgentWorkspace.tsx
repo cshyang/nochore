@@ -48,7 +48,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const conversation = props.conversation;
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
-  const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "activity");
+  const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "runs");
   const chatRunCompleteRef = useRef<(() => void) | null>(null);
   const previousAgentIdRef = useRef(agent.id);
   const notifiedChatRunRef = useRef<string | null>(null);
@@ -68,7 +68,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   useEffect(() => {
     if (previousAgentIdRef.current !== agent.id) {
       previousAgentIdRef.current = agent.id;
-      setTab(props.initialTab ?? "activity");
+      setTab(props.initialTab ?? "runs");
       setSelectedRunId(props.initialRunId ?? null);
       setChatApprovalContext(resolvePendingApproval(runs, props.initialPendingActionId));
       setChatTriggeredRunId(null);
@@ -297,7 +297,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           />
         ) : null}
 
-        {tab === "activity" ? (
+        {tab === "runs" ? (
           <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
             <AgentWorkspaceActivityPane
               runs={runs}
@@ -366,7 +366,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           </div>
         ) : null}
 
-        {tab === "memory" ? (
+        {tab === "learned" ? (
           <div className="aw-panel-enter" style={{ ...memoryPanelStyle, flex: 1, minHeight: 0, overflowY: "auto" }}>
             <div style={memoryHeaderStyle}>
               <div style={placeholderIconStyle}>

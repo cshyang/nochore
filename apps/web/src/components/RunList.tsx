@@ -424,6 +424,21 @@ function ExpandedList({
                     >
                       {bottomLine}
                     </div>
+                    {run.summary?.headline && (
+                      <div
+                        style={{
+                          fontSize: TYPE.scale.xs,
+                          color: COLORS.textDim,
+                          lineHeight: TYPE.leading.snug,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          marginTop: 1,
+                        }}
+                      >
+                        {run.summary.headline}
+                      </div>
+                    )}
                   </div>
                 </button>
               );

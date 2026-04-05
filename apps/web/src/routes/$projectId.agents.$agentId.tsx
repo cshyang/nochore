@@ -37,12 +37,12 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   validateSearch: (
     search: Record<string, unknown>,
   ): {
-    tab?: "activity" | "chat" | "memory" | "settings";
+    tab?: "runs" | "chat" | "learned" | "settings";
     runId?: string;
     pendingActionId?: string;
   } => ({
     tab:
-      search.tab === "activity" || search.tab === "chat" || search.tab === "memory" || search.tab === "settings"
+      search.tab === "runs" || search.tab === "chat" || search.tab === "learned" || search.tab === "settings"
         ? search.tab
         : undefined,
     runId: typeof search.runId === "string" ? search.runId : undefined,

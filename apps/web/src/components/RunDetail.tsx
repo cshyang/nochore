@@ -1,4 +1,4 @@
-import { CheckCircle, CircleNotch, ListBullets, Play, TextAlignLeft, WarningCircle } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, CheckCircle, CircleNotch, ListBullets, Play, TextAlignLeft, WarningCircle } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -7,9 +7,9 @@ import { type ChecklistItem, DraftChecklist } from "~/components/agent-workspace
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { EventTimeline, type TimelineEvent } from "~/components/EventTimeline";
-import { COLORS, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { narrateEvent } from "~/lib/narrate";
-import type { RunView, WorkItemView } from "~/lib/types";
+import type { RunView, RunSummaryView, WorkItemView } from "~/lib/types";
 
 interface RunDetailProps {
   run: RunView | null;
@@ -57,6 +57,17 @@ function buildTimelineEvents(run: RunView): TimelineEvent[] {
     summary: narrateEvent(e.type, e.payload),
     timestamp: new Date(e.timestamp).getTime(),
   }));
+}
+
+function extractToolNames(run: RunView): string[] {
+  const names = new Set<string>();
+  for (const e of run.events) {
+    if (e.type === "tool_called") {
+      const name = e.payload?.toolName as string | undefined;
+      if (name) names.add(name);
+    }
+  }
+  return Array.from(names);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +207,120 @@ function WorkItemsSection({ workItems }: { workItems: WorkItemView[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function NarrativeCard({
+  run,
+  summary,
+  timelineEvents,
+}: {
+  run: RunView;
+  summary: RunSummaryView;
+  timelineEvents: TimelineEvent[];
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const finding = extractFinding(run);
+  const toolNames = useMemo(() => extractToolNames(run), [run]);
+  const relTime = run.startedAt
+    ? new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+        -Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60_000),
+        "minute",
+      )
+    : "";
+
+  return (
+    <div
+      style={{
+        background: COLORS.surface,
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: RADIUS.sm,
+        padding: 24,
+      }}
+    >
+      {/* Run meta line */}
+      <div
+        style={{
+          fontSize: TYPE.scale.xs,
+          color: COLORS.textDim,
+          marginBottom: 10,
+        }}
+      >
+        {humanize(run.triggerType ?? "manual")} &middot; {relTime}
+      </div>
+
+      {/* Headline */}
+      <div
+        style={{
+          fontSize: TYPE.scale.md,
+          color: COLORS.text,
+          fontWeight: TYPE.weight.semibold,
+          lineHeight: TYPE.leading.snug,
+          marginBottom: finding ? 12 : 0,
+        }}
+      >
+        {summary.headline}
+      </div>
+
+      {/* Finding text (markdown) */}
+      {finding && (
+        <div className="run-report-md" style={{ marginBottom: toolNames.length > 0 ? 14 : 0 }}>
+          <style>{markdownStyles}</style>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{finding}</ReactMarkdown>
+        </div>
+      )}
+
+      {/* Tool chips */}
+      {toolNames.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+          {toolNames.map((name) => (
+            <span
+              key={name}
+              style={{
+                background: COLORS.surfaceHover,
+                borderRadius: RADIUS.pill,
+                padding: "4px 10px",
+                fontSize: TYPE.scale.xs,
+                color: COLORS.textSecondary,
+              }}
+            >
+              {humanize(name)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Expandable details */}
+      {timelineEvents.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((v) => !v)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              color: COLORS.textDim,
+              fontSize: TYPE.scale.sm,
+              cursor: "pointer",
+              background: "none",
+              border: "none",
+              padding: 0,
+              fontFamily: TYPE.body,
+              transition: `color ${MOTION.duration} ${MOTION.ease}`,
+            }}
+          >
+            {detailsOpen ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
+            View details
+          </button>
+          {detailsOpen && (
+            <div style={{ ...timelineContainerStyle, marginTop: 10 }}>
+              <EventTimeline events={timelineEvents} timestampFormat="absolute" />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -464,6 +589,17 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── Narrative view: runs with a summary ────────────────────────────────
+  if (run.summary) {
+    return (
+      <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
+        <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
+        <NarrativeCard run={run} summary={run.summary} timelineEvents={timelineEvents} />
       </div>
     );
   }

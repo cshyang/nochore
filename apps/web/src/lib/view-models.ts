@@ -68,6 +68,13 @@ const LearnedRuleViewSchema = z.object({
   acceptedAt: z.string().optional(),
 });
 
+const RunSummaryViewSchema = z.object({
+  status: z.string(),
+  headline: z.string(),
+  details: z.array(z.string()),
+  finalText: z.string().optional(),
+});
+
 const RunResultViewSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
@@ -125,6 +132,7 @@ const RunViewSchema = z.object({
   events: z.array(RunEventViewSchema).default([]),
   approvals: z.array(PendingActionViewSchema).default([]),
   result: RunResultViewSchema.optional(),
+  summary: RunSummaryViewSchema.optional(),
 });
 
 const RunActivityStateViewSchema = RunViewSchema.extend({
@@ -180,6 +188,7 @@ const AgentViewSchema = z.object({
   status: z.enum(["running", "attention", "idle", "error"]),
   lastRunAt: z.number().nullable(),
   lastRunRelative: z.string().nullable(),
+  lastRunHeadline: z.string().nullable().optional(),
   nextRunAt: z.number().nullable(),
   pendingCount: z.number(),
   activeRunCount: z.number().default(0),
