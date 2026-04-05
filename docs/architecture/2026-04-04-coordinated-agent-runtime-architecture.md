@@ -356,81 +356,54 @@ That applies to:
 - projected timeline events
 - approval records created from child work
 
-## Simplest First Milestone
+## Implementation Status
 
-The smallest shippable milestone is:
+### Shipped: Phase 1 — Foundation (2026-04-04)
 
-1. add `work_items` table
-2. trigger child work as real Trigger.dev child tasks instead of inline `spawn_sub_run`
-3. extend projected `RunView` to include `workItems[]`
+- `work_items` table with full lifecycle (WorkItemRepository)
+- `worker-run` child Trigger.dev task via `triggerAndWait`
+- `spawn_sub_run` refactored from inline `executePiAgent()` to durable child tasks
+- DB-backed sub-run limit (replaces closure counter)
+- Events carry `workItemId` and `rootRunId` for correlation
+- `SerializedRun` + `RunView` include `workItems[]`
+- `WorkItemsSection` in `RunDetail` renders role, title, status, duration
+- SSE version derivation includes work item timestamps
+- Shared `run-helpers.ts` extracted for reuse by parent and child tasks
 
-That is enough to prove:
+### Shipped: Phase 2A — Hardening (2026-04-04)
 
-- parallel child execution
-- pause/resume without flattening everything into one event stream
-- frontend visibility of coordinated work
+- `work_item_id` nullable column on `approvals` table (additive migration)
+- `waiting_for_children` run status with transitions around `triggerAndWait`
+- Frontend "Coordinating" badge + work items view (replaces spinner)
+- Token counting: `inputTokens`/`outputTokens` accumulated from AI SDK `turn_end` events, stored on work items
 
-without committing to:
+### Shipped: Cleanup (2026-04-04)
 
-- full artifact registry
-- general inbox items
-- peer-agent coordination
-- topology promotion
+- Single-owner learned rule detection (removed from worker, web server only)
+- Removed unused Trigger.dev metadata events (`liveEvents` array)
+- Kept `metadata.set("status", ...)` for Trigger.dev dashboard
 
-## Phase 1 APIs
+### Not yet built
 
-Phase 1 only needs four core interfaces:
-
-1. `createWorkItem(parentRunId, spec)`
-2. `completeWorkItem(workItemId, result)`
-3. `listWorkItems(parentRunId)`
-4. `projectRunView(runId)` extended to include `workItems[]`
-
-Everything else can stay internal to the runtime implementation for now.
-
-## Scope Deferred After Phase 1
-
-The following should be explicitly deferred:
-
-- `artifacts` table
-- `inbox_items`
-- peer-agent run requests
-- `coordinationRights`
-- `topologyProfile`
-- sibling-agent routing
-
-They are valid future concepts, but they are not required to make the first coordinated runtime slice real.
+| Item | Priority | Notes |
+|---|---|---|
+| Parallel fan-out (`batchTriggerAndWait`) | Medium | Enables LLM to plan multiple workers then wait for all |
+| `artifacts` table | Low | Structured durable outputs; currently using events + work item `result` column |
+| Progressive autonomy QA fixes (1-4) | Medium | Edge cases in learned rules; no production data yet |
+| Detection pipeline tests | Medium | pattern-detector, condition-extractor, rule-resolver have zero unit tests |
+| Pinned specialists (V0.3) | Low | `SPECIALIST.md` in workspace for reusable roles |
+| Delegation config | Low | Per-agent `maxSubRuns`; currently hardcoded at 3 |
+| `inbox_items` | Low | Only needed for peer agents |
+| Peer coordination | Low | V1.0+ per evolution doc |
 
 ## Future: Peer Coordination
 
-Peer coordination should move to a future appendix, not Phase 1.
+Future concepts (not Phase 1-2):
 
-Future concepts:
-
-- `peer_request`
-- `peer_result`
+- `peer_request` / `peer_result`
 - `coordinationRights`
 - peer-agent work items
 - project topology fields
-
-The architecture should leave room for those, but the first implementation should focus entirely on internal worker coordination under one lead agent.
-
-## Current-to-Future Mapping
-
-| Current state | Next state |
-|---|---|
-| `agent-run` mixes orchestration and execution | runtime keeps both, but child work becomes durable |
-| `spawn_sub_run` executes inline | child worker tasks become real child Trigger.dev runs |
-| `RunView` is flat | `RunView` gains `workItems[]` |
-| approvals attach only to parent run semantics | approvals may originate from a child work item under the parent run |
-| frontend assumes one `activeRunId` and flat event stream | frontend still tracks one active run, but with nested work-item state |
-
-## Immediate Cleanup Before or During Phase 1
-
-These issues are worth fixing regardless of the broader architecture:
-
-1. Remove duplicate learned-rule suggestion detection so one approval lifecycle cannot emit duplicate `policy_rule_suggested` events.
-2. Decide whether Trigger metadata is going to be consumed; if not, keep it out of the critical-path design.
 
 ## Invariants
 

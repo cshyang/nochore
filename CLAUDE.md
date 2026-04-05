@@ -60,14 +60,17 @@ Key directories inside `apps/web/src/`:
 - `db/` — Drizzle schema + SQLite client
 
 **`services/worker/`** — trigger.dev task definitions:
-- `triggers/agent-run.ts` — Main pipeline task
+- `triggers/agent-run.ts` — Lead agent pipeline task (orchestrates child workers)
+- `triggers/worker-run.ts` — Child worker task (runs in separate Trigger.dev container)
 - `triggers/scheduled-runs.ts` — Cron-triggered agent runs
+- `lib/run-helpers.ts` — Shared runtime helpers (recordEvent, handleApprovalRequest, policy evaluation)
+- `lib/pi-runtime.ts` — pi-coding-agent wrapper (executePiAgent with token counting)
 
 ## Key Documents
 
 - `docs/architecture/philosophy.md` — Core thesis, four pillars, design axioms, competitive analysis
 - `docs/architecture/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter)
-- `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, Phase 1 spec
+- `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, implementation status + backlog
 - `docs/architecture/2026-03-31-agent-evolution-design.md` — Trust model, topology promotion, progressive autonomy
 
 ## Architecture Concepts
@@ -80,6 +83,7 @@ Key directories inside `apps/web/src/`:
 - **ContextAssembler** — shared by pipeline and chat, step-aware (different steps get different context)
 - **Stateless chat** — ADK-style: load state per request, process, save, discard
 - **Workspace permissions**: Agent can read all .md files, write to scratchpad/ and reports/. KNOWLEDGE.md and POLICY.md are human-curated only.
+- **Coordinated runtime**: Lead agent orchestrates child workers via `triggerAndWait`. Each worker runs in a separate Trigger.dev container with independent checkpoint/resume. Work items are durable DB records. Frontend tracks work items, not containers. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` for full status + backlog.
 
 ## Open Design Questions
 
