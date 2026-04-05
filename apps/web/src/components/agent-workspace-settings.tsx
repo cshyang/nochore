@@ -227,6 +227,45 @@ export function AgentWorkspaceSettingsPanel({
             />
           ))}
 
+        {/* Show required providers that aren't connected yet */}
+        {currentToolConfig.requiredProviders
+          .filter((rp) => !connectedProviders.has(rp.provider))
+          .map((rp) => {
+            const meta = getProviderMetadata(rp.provider);
+            return (
+              <SettingsCard key={rp.provider}>
+                <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                  <ProviderIcon provider={rp.provider} logos={providerLogos} size={20} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text, fontWeight: TYPE.weight.medium }}>
+                      {meta.name}
+                    </div>
+                    <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>
+                      Not connected — required for this agent
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onConnect?.(rp.provider)}
+                    style={{
+                      fontFamily: TYPE.body,
+                      padding: "6px 14px",
+                      borderRadius: RADIUS.md,
+                      border: `1px solid ${COLORS.accent}`,
+                      background: "transparent",
+                      color: COLORS.accent,
+                      fontSize: TYPE.scale.xs,
+                      cursor: "pointer",
+                      fontWeight: TYPE.weight.medium,
+                    }}
+                  >
+                    Connect
+                  </button>
+                </div>
+              </SettingsCard>
+            );
+          })}
+
         {showProviderPicker ? (
           <SettingsCard>
             <div style={{ padding: "14px 16px" }}>
