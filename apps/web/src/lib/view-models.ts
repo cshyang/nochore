@@ -120,17 +120,31 @@ const ActionableApprovalStateViewSchema = PendingActionViewSchema.extend({
   status: z.enum(["pending", "expired"]),
 });
 
+const WorkItemViewSchema = z.object({
+  id: z.string(),
+  parentRunId: z.string(),
+  kind: z.string(),
+  role: z.string(),
+  title: z.string(),
+  status: z.string(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+});
+
 const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   triggerType: z.string(),
-  status: z.enum(["queued", "running", "waiting_for_approval", "completed", "failed", "cancelled"]),
+  status: z.enum(["queued", "running", "waiting_for_approval", "waiting_for_children", "completed", "failed", "cancelled"]),
   startedAt: z.string(),
   completedAt: z.string().optional(),
   error: z.string().optional(),
   triggerRunId: z.string().optional(),
   events: z.array(RunEventViewSchema).default([]),
   approvals: z.array(PendingActionViewSchema).default([]),
+  workItems: z.array(WorkItemViewSchema).default([]),
   result: RunResultViewSchema.optional(),
   summary: RunSummaryViewSchema.optional(),
 });

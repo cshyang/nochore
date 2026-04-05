@@ -146,8 +146,8 @@ function workItemStatusColor(status: string): "green" | "red" | "yellow" | "blue
   }
 }
 
-function WorkItemsSection({ workItems }: { workItems: WorkItemView[] }) {
-  if (workItems.length === 0) return null;
+function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) {
+  if (!workItems || workItems.length === 0) return null;
 
   return (
     <div
