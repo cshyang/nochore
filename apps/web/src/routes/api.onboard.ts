@@ -183,9 +183,9 @@ export const Route = createFileRoute("/api/onboard")({
 
             search_tools: {
               description:
-                "Search for available tools across all connected platforms. " +
-                "Use after clarifying the user's intent to find relevant integrations. " +
-                "You can filter by toolkit (platform) or search by keyword.",
+                "Search for available tools across all platforms (Composio integrations + custom connectors). " +
+                "Use after recommending systems to find specific tool slugs. " +
+                "Custom Google Ads tools are always included when searching for 'googleads' or ad-related queries.",
               inputSchema: z.object({
                 query: z.string().optional().describe("Search query (e.g. 'campaign performance', 'send message')"),
                 toolkits: z
@@ -194,26 +194,52 @@ export const Route = createFileRoute("/api/onboard")({
                   .describe("Filter by toolkit slugs (e.g. ['googleads', 'slack'])"),
               }),
               execute: async (input: { query?: string; toolkits?: string[] }) => {
+                const results: Array<{ slug: string; name: string; description: string }> = [];
+
+                // Custom Google Ads tools (direct connector — always available)
+                const isGoogleAdsQuery =
+                  input.toolkits?.some((t) => t.toLowerCase().includes("google")) ||
+                  input.query?.toLowerCase().match(/google|ads|campaign|keyword|cpa|roas|spend/);
+                if (isGoogleAdsQuery) {
+                  results.push(
+                    {
+                      slug: "googleads_list_campaigns",
+                      name: "List Google Ads Campaigns",
+                      description:
+                        "List all active campaigns with impressions, clicks, cost, conversions over a date range.",
+                    },
+                    {
+                      slug: "googleads_campaign_performance",
+                      name: "Campaign Performance (Daily)",
+                      description:
+                        "Daily performance breakdown for a campaign: impressions, clicks, cost, conversions.",
+                    },
+                  );
+                }
+
+                // Composio tools
                 try {
                   const { createComposioClient } = await import("@nochore/harness");
                   const composio = await createComposioClient();
 
-                  // The SDK typing is narrower than the runtime search parameters supported here.
                   const tools = await composio.tools.getRawComposioTools({
                     ...(input.toolkits?.length ? { toolkits: input.toolkits } : {}),
                     ...(input.query ? { search: input.query } : {}),
                     limit: 20,
                   } as never);
 
-                  return (tools as Array<{ slug: string; name: string; description: string }>).map((t) => ({
-                    slug: t.slug,
-                    name: t.name,
-                    description: t.description,
-                  }));
+                  for (const t of tools as Array<{ slug: string; name: string; description: string }>) {
+                    // Don't duplicate if a custom tool already covers it
+                    if (!results.some((r) => r.slug === t.slug)) {
+                      results.push({ slug: t.slug, name: t.name, description: t.description });
+                    }
+                  }
                 } catch (err) {
-                  console.error("search_tools failed:", err);
-                  return [{ slug: "error", name: "Search failed", description: String(err) }];
+                  console.error("Composio search_tools failed:", err);
+                  // Custom tools still returned even if Composio fails
                 }
+
+                return results;
               },
             },
 
