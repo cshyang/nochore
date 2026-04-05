@@ -9,8 +9,9 @@ apps/web/              → TanStack Start frontend (the product UI)
 packages/harness/      → Core harness — types, pipeline, policy, skills, memory, chat
 services/worker/       → trigger.dev tasks (agent-run, scheduled runs)
 legacy/                → Campaign CLI (Python, being absorbed into platform)
-docs/                  → Product design docs (philosophy, UX, plans)
-docs/archive/          → Superseded artifacts (original prototype.jsx)
+docs/architecture/     → Durable architecture docs (philosophy, runtime design, evolution)
+docs/specs/            → Scoped design specs (per-feature, date-prefixed)
+docs/archive/          → Superseded artifacts
 .impeccable.md         → Design context (cross-cutting)
 trigger.config.ts      → trigger.dev config (root, points to services/worker/)
 ```
@@ -64,12 +65,10 @@ Key directories inside `apps/web/src/`:
 
 ## Key Documents
 
-- `docs/philosophy.md` — Core thesis, four pillars, design axioms, competitive analysis
-- `docs/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter)
-- `docs/plans/2026-03-21-harness-layer-design.md` — Pipeline design, contracts, decisions
-- `docs/plans/2026-03-21-harness-components.md` — File structure, module details, code examples
-- `docs/plans/2026-03-21-harness-implementation-plan.md` — 22-task implementation plan
-- `docs/plans/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, Phase 1 spec
+- `docs/architecture/philosophy.md` — Core thesis, four pillars, design axioms, competitive analysis
+- `docs/architecture/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter)
+- `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, Phase 1 spec
+- `docs/architecture/2026-03-31-agent-evolution-design.md` — Trust model, topology promotion, progressive autonomy
 
 ## Architecture Concepts
 
@@ -88,9 +87,9 @@ Key directories inside `apps/web/src/`:
 - ~~Harness Layer internals~~ → Simplified to single Trigger.dev task with manual tool loop (2026-03-24 platform simplification)
 - ~~SDK contracts~~ → Zod schemas for all types, AI SDK for tool schemas
 - ~~Memory schema~~ → Three-layer split (files/DB/JSONL), event log + lessons
-- ~~Policy composition~~ → Strictest rule wins, deterministic ordering. Learned rules (from approval patterns) sit alongside static rules but can never override a stricter static rule. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
-- ~~Progressive trust automation~~ → Learned policy rules derived from approval history. Pattern detection (counting, not ML), user-confirmed suggestions, full revocability. See `docs/plans/2026-03-30-progressive-autonomy-design.md`
-- ~~Coordinated runtime model~~ → 3-layer architecture (Identity/Runtime/Delivery), work items as first-class durable objects, `direct`/`coordinated` modes, worker failure contract. See `docs/plans/2026-04-04-coordinated-agent-runtime-architecture.md`
+- ~~Policy composition~~ → Strictest rule wins, deterministic ordering. Learned rules (from approval patterns) sit alongside static rules but can never override a stricter static rule. See `docs/archive/2026-03-30-progressive-autonomy-design.md`
+- ~~Progressive trust automation~~ → Learned policy rules derived from approval history. Pattern detection (counting, not ML), user-confirmed suggestions, full revocability. See `docs/archive/2026-03-30-progressive-autonomy-design.md`
+- ~~Coordinated runtime model~~ → 3-layer architecture (Identity/Runtime/Delivery), work items as first-class durable objects, `direct`/`coordinated` modes, worker failure contract. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md`
 
 ### Still Open
 - **Data type → tool resolution** — When multiple tools provide the same data type (Tier 2)

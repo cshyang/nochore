@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-04
 **Status:** Draft
-**Builds on:** `docs/philosophy.md`, `docs/plans/2026-03-31-agent-evolution-design.md`
+**Builds on:** `docs/architecture/philosophy.md`, `docs/architecture/2026-03-31-agent-evolution-design.md`
 
 ## Why This Document Exists
 
