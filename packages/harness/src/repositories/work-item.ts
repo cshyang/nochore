@@ -56,13 +56,20 @@ export class WorkItemRepository {
       .run();
   }
 
-  async complete(id: string, completedAt: Date, result?: string): Promise<void> {
+  async complete(
+    id: string,
+    completedAt: Date,
+    result?: string,
+    tokens?: { inputTokens?: number; outputTokens?: number },
+  ): Promise<void> {
     this.db
       .update(workItems)
       .set({
         status: "completed",
         completedAt: completedAt.getTime(),
         result: result ?? null,
+        ...(tokens?.inputTokens != null ? { inputTokens: tokens.inputTokens } : {}),
+        ...(tokens?.outputTokens != null ? { outputTokens: tokens.outputTokens } : {}),
       })
       .where(eq(workItems.id, id))
       .run();

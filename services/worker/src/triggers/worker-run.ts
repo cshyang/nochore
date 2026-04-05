@@ -31,6 +31,8 @@ export interface WorkerRunResult {
   output: string;
   durationMs: number;
   toolCallCount: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export const workerRunTask = task({
@@ -133,7 +135,12 @@ export const workerRunTask = task({
         },
       });
 
-      await runtime.workItemRepository.complete(payload.workItemId, new Date(), result.output);
+      await runtime.workItemRepository.complete(
+        payload.workItemId,
+        new Date(),
+        result.output,
+        { inputTokens: result.inputTokens, outputTokens: result.outputTokens },
+      );
       metadata.set("status", "completed");
 
       logger.info("Worker run completed", {
@@ -142,6 +149,8 @@ export const workerRunTask = task({
         role: payload.role,
         durationMs: result.durationMs,
         toolCallCount: result.toolCalls.length,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
       });
 
       return {
@@ -149,6 +158,8 @@ export const workerRunTask = task({
         output: result.output,
         durationMs: result.durationMs,
         toolCallCount: result.toolCalls.length,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -173,6 +184,8 @@ export const workerRunTask = task({
         output: "",
         durationMs: 0,
         toolCallCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
       };
     }
   },

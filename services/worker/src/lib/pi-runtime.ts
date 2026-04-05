@@ -47,6 +47,8 @@ export interface PiAgentResult {
   output: string;
   toolCalls: Array<{ toolName: string; timestamp: Date }>;
   durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 function createPiModel() {
@@ -123,6 +125,8 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
 
   let lastStopReason = "";
   const toolCalls: PiAgentResult["toolCalls"] = [];
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   session.subscribe((e: any) => {
     if (e.type === "tool_execution_start") {
@@ -153,6 +157,11 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
 
     if (e.type === "turn_end") {
       const msg = e.message;
+      // Accumulate token usage across turns
+      if (msg?.usage) {
+        totalInputTokens += msg.usage.promptTokens ?? msg.usage.inputTokens ?? 0;
+        totalOutputTokens += msg.usage.completionTokens ?? msg.usage.outputTokens ?? 0;
+      }
       if (msg?.stopReason) {
         lastStopReason = msg.stopReason;
         const logMeta: Record<string, unknown> = {
@@ -231,5 +240,7 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
     output,
     toolCalls,
     durationMs: Date.now() - start,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
   };
 }
