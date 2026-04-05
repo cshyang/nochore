@@ -87,6 +87,7 @@ export const workerRunTask = task({
             {
               ...event.payload,
               workItemId: payload.workItemId,
+              rootRunId: payload.rootRunId,
               subRunRole: payload.role,
             },
           );
@@ -123,6 +124,7 @@ export const workerRunTask = task({
             policyReason: policy.reason,
             eventIds,
             projectId: payload.projectId,
+            workItemId: payload.workItemId,
           });
 
           // Approval granted — mark work item back to running

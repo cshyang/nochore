@@ -54,8 +54,9 @@ export async function handleApprovalRequest(params: {
   policyReason: string;
   eventIds: string[];
   projectId: string;
+  workItemId?: string;
 }): Promise<{ block: boolean; reason?: string } | undefined> {
-  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, projectId } = params;
+  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, projectId, workItemId } = params;
   const approvalId = crypto.randomUUID();
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
@@ -86,6 +87,7 @@ export async function handleApprovalRequest(params: {
     reason: policyReason,
     policy: "approval",
     expiresAt: expiresAt.toISOString(),
+    ...(workItemId ? { workItemId } : {}),
   };
   const reqId = await recordEvent(runtime, runId, agent.id, "tool_approval_requested", reqPayload);
   eventIds.push(reqId);
@@ -125,13 +127,14 @@ export async function handleApprovalRequest(params: {
         toolName,
         reason,
         expiresAt: expiresAt.toISOString(),
+        ...(workItemId ? { workItemId } : {}),
       };
       const expiryId = await recordEvent(runtime, runId, agent.id, "tool_approval_expired", expiryPayload);
       eventIds.push(expiryId);
     } else {
       await runtime.approvalRepository.markResolved(approvalRecordId, status, reason, new Date());
 
-      const resPayload = { approvalId: approvalRecordId, toolName, status, reason };
+      const resPayload = { approvalId: approvalRecordId, toolName, status, reason, ...(workItemId ? { workItemId } : {}) };
       const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
       eventIds.push(resId);
     }
