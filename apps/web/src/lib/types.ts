@@ -135,6 +135,21 @@ export interface RunEventView {
   payload: Record<string, unknown>;
 }
 
+export interface WorkItemView {
+  id: string;
+  parentRunId: string;
+  kind: string;
+  role: string;
+  title: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  blockingReason?: string;
+  error?: string;
+}
+
 export interface RunView {
   id: string;
   agentId: string;
@@ -146,6 +161,7 @@ export interface RunView {
   triggerRunId?: string;
   events: RunEventView[];
   approvals: PendingActionView[];
+  workItems: WorkItemView[];
   result?: RunResultView;
 }
 

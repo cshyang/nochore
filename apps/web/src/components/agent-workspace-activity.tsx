@@ -57,6 +57,7 @@ export function AgentWorkspaceActivityPane({
       startedAt: new Date().toISOString(),
       events: [],
       approvals: [],
+      workItems: [],
     };
 
     return [placeholder, ...runs];

@@ -7,6 +7,7 @@ import type {
   LearnedPolicyRule,
   RunEvent,
   RunRecord,
+  WorkItemRecord,
 } from "@nochore/harness";
 import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
 
@@ -17,6 +18,21 @@ export interface SerializedRunEvent {
   type: string;
   timestamp: string;
   payload: Record<string, unknown>;
+}
+
+export interface SerializedWorkItem {
+  id: string;
+  parentRunId: string;
+  kind: string;
+  role: string;
+  title: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  blockingReason?: string;
+  error?: string;
 }
 
 export interface SerializedRun {
@@ -30,6 +46,7 @@ export interface SerializedRun {
   triggerRunId?: string;
   events: SerializedRunEvent[];
   approvals: SerializedPendingAction[];
+  workItems: SerializedWorkItem[];
   result?: {
     runId: string;
     agentId: string;
@@ -197,7 +214,12 @@ export function buildProjectView(params: {
   };
 }
 
-export function buildSerializedRun(run: RunRecord, events: RunEvent[], approvals: ApprovalRecord[]): SerializedRun {
+export function buildSerializedRun(
+  run: RunRecord,
+  events: RunEvent[],
+  approvals: ApprovalRecord[],
+  workItems: WorkItemRecord[] = [],
+): SerializedRun {
   const duration = run.completedAt
     ? run.completedAt.getTime() - run.startedAt.getTime()
     : Math.max(Date.now() - run.startedAt.getTime(), 0);
@@ -230,6 +252,20 @@ export function buildSerializedRun(run: RunRecord, events: RunEvent[], approvals
       payload: event.payload,
     })),
     approvals: approvals.map(buildSerializedPendingAction),
+    workItems: workItems.map((wi) => ({
+      id: wi.id,
+      parentRunId: wi.parentRunId,
+      kind: wi.kind,
+      role: wi.role,
+      title: wi.title,
+      status: wi.status,
+      startedAt: wi.startedAt?.toISOString(),
+      completedAt: wi.completedAt?.toISOString(),
+      inputTokens: wi.inputTokens,
+      outputTokens: wi.outputTokens,
+      blockingReason: wi.blockingReason,
+      error: wi.error,
+    })),
     result: {
       runId: run.id,
       agentId: run.agentId,

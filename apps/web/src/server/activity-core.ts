@@ -19,6 +19,7 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
         run,
         await deps.runEventRepository.listByRun(run.id),
         (await deps.approvalRepository.listByRun(run.id)).filter(isActionableApproval),
+        await deps.workItemRepository.listByParentRun(run.id),
       ),
     ),
   );
@@ -28,11 +29,17 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
   const latestRun = runs[0] ?? null;
   const latestActiveRun =
     activeRuns.sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime())[0] ?? null;
+  const workItemTimestamps = serializedRuns.flatMap((sr) =>
+    sr.workItems.flatMap((wi) =>
+      [wi.startedAt, wi.completedAt].filter((t): t is string => t != null).map((t) => new Date(t).getTime()),
+    ),
+  );
   const timestamps = [
     agent.updatedAt.getTime(),
     ...collectRunTimestamps(runs),
     ...collectApprovalTimestamps(actionableApprovals),
     ...(await deps.runEventRepository.listByAgent(agentId, 200)).map((event) => event.timestamp.getTime()),
+    ...workItemTimestamps,
   ];
 
   return {

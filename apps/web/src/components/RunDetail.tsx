@@ -9,7 +9,7 @@ import { Button } from "~/components/Button";
 import { EventTimeline, type TimelineEvent } from "~/components/EventTimeline";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import { narrateEvent } from "~/lib/narrate";
-import type { RunView } from "~/lib/types";
+import type { RunView, WorkItemView } from "~/lib/types";
 
 interface RunDetailProps {
   run: RunView | null;
@@ -113,6 +113,87 @@ function RunHeader({ run }: { run: RunView }) {
         {toolCount > 0 && findingCount > 0 && " \u00b7 "}
         {findingCount > 0 && `${findingCount} finding${findingCount === 1 ? "" : "s"}`}
       </span>
+    </div>
+  );
+}
+
+function workItemStatusColor(status: string): "green" | "red" | "yellow" | "blue" | "gray" {
+  switch (status) {
+    case "completed":
+      return "green";
+    case "failed":
+      return "red";
+    case "waiting_for_approval":
+    case "waiting_for_external":
+      return "yellow";
+    case "running":
+      return "blue";
+    default:
+      return "gray";
+  }
+}
+
+function WorkItemsSection({ workItems }: { workItems: WorkItemView[] }) {
+  if (workItems.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: TYPE.scale.xs,
+          fontWeight: TYPE.weight.semibold,
+          color: COLORS.textDim,
+          textTransform: "uppercase",
+          letterSpacing: TYPE.tracking.wide,
+          marginBottom: 2,
+        }}
+      >
+        Work Items
+      </div>
+      {workItems.map((wi) => (
+        <div
+          key={wi.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            background: COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: RADIUS.sm,
+          }}
+        >
+          <Badge color={workItemStatusColor(wi.status)}>{humanize(wi.role)}</Badge>
+          <span
+            style={{
+              fontSize: TYPE.scale.sm,
+              color: COLORS.textSecondary,
+              flex: 1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {wi.title}
+          </span>
+          {wi.startedAt && wi.completedAt && (
+            <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
+              {formatDuration(wi.startedAt, wi.completedAt)}
+            </span>
+          )}
+          {wi.error && (
+            <span style={{ fontSize: TYPE.scale.xs, color: COLORS.red }} title={wi.error}>
+              Error
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -247,6 +328,7 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
         <ApprovalArtifacts
           run={run}
           onRunNow={onRunNow}
@@ -305,6 +387,7 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
         <div
           style={{
             display: "flex",
@@ -357,6 +440,7 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
         <div
           style={{
             display: "flex",
@@ -409,6 +493,7 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
         <div
           style={{
             display: "flex",
@@ -460,6 +545,7 @@ export function RunDetail({
   return (
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
+      <WorkItemsSection workItems={run.workItems} />
 
       <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
 

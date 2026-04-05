@@ -52,6 +52,7 @@ describe("activity view helpers", () => {
           startedAt: new Date(Date.now() - 30_000).toISOString(),
           events: [],
           approvals: [],
+          workItems: [],
         },
       ],
     };

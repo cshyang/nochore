@@ -6,7 +6,7 @@ import {
   type PiToolDefinition,
 } from "@nochore/harness";
 import { logger, metadata, task } from "@trigger.dev/sdk/v3";
-import { buildPromptBundle, buildSubRunPrompt, createWorkerRuntime } from "../lib/agent-runtime";
+import { buildPromptBundle, createWorkerRuntime } from "../lib/agent-runtime";
 import { executePiAgent } from "../lib/pi-runtime";
 import {
   ApprovalCheckpointError,
@@ -18,6 +18,7 @@ import {
   recordEvent,
 } from "../lib/run-helpers";
 import { listProviderTools } from "../lib/tool-provider";
+import { workerRunTask } from "./worker-run";
 
 export const agentRunTask = task({
   id: "agent-run",
@@ -60,9 +61,8 @@ export const agentRunTask = task({
 
       const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
 
-      // Sub-run delegation tool
+      // Sub-run delegation tool — triggers durable child tasks
       const MAX_SUB_RUNS = 3;
-      let subRunCount = 0;
 
       const spawnSubRunTool: PiToolDefinition = {
         name: "spawn_sub_run",
@@ -85,7 +85,9 @@ export const agentRunTask = task({
           const taskDesc = (params.task as string) ?? "";
           const context = params.context as string | undefined;
 
-          if (subRunCount >= MAX_SUB_RUNS) {
+          // DB-backed limit check replaces closure counter
+          const currentCount = await runtime.workItemRepository.countByParentRun(runId);
+          if (currentCount >= MAX_SUB_RUNS) {
             return {
               content: [
                 { type: "text" as const, text: `Sub-run limit reached (${MAX_SUB_RUNS}). Cannot delegate further.` },
@@ -93,87 +95,70 @@ export const agentRunTask = task({
               details: { blocked: true, reason: "maxSubRuns" },
             };
           }
-          subRunCount++;
 
-          const startPayload = { role, task: taskDesc, subRunIndex: subRunCount };
+          // Create durable work item before triggering child task
+          const workItemId = await runtime.workItemRepository.create({
+            parentRunId: runId,
+            rootRunId: runId,
+            agentId: agent.id,
+            role,
+            title: taskDesc.slice(0, 200),
+          });
+
+          const startPayload = { role, task: taskDesc, workItemId, subRunIndex: currentCount + 1 };
           const startId = await recordEvent(runtime, runId, agent.id, "sub_run_started", startPayload);
           eventIds.push(startId);
 
-          const subPrompt = buildSubRunPrompt({
-            role,
-            task: taskDesc,
-            context,
-            agentInstructions: agent.instructions,
-          });
-
-          // Sub-run gets same tools minus spawn_sub_run (prevents recursion)
-          const subTools = allTools.filter((t) => t.name !== "spawn_sub_run");
-          const subToolConfigLookup = createToolConfigLookup(agent, subTools);
-
           try {
-            const subResult = await executePiAgent({
-              systemPrompt: subPrompt,
-              userPrompt: taskDesc,
-              workspacePath,
-              composioTools: subTools,
-              onEvent: async (event) => {
-                const id = await recordEvent(
-                  runtime,
-                  runId,
-                  agent.id,
-                  event.type as "tool_called" | "tool_executed" | "agent_message",
-                  { ...event.payload, subRunRole: role },
-                );
-                eventIds.push(id);
-                return id;
-              },
-              beforeToolCall: async (toolName, args) => {
-                const toolInput = normalizeToolInput(args);
-                const policy = evaluatePolicy(
-                  {
-                    toolName,
-                    toolInput,
-                    toolConfig: getToolConfigForCall(agent, subToolConfigLookup, toolName),
-                  },
-                  {
-                    now: new Date(),
-                    globalApprovalRequired: agent.toolConfig.globalApprovalRequired,
-                    recentToolCalls,
-                    learnedRules,
-                  },
-                );
-                if (policy.result === "auto") return undefined;
-                if (policy.result === "blocked") return { block: true, reason: policy.reason };
-                return handleApprovalRequest({
-                  runtime,
-                  agent,
-                  runId,
-                  toolName,
-                  toolInput,
-                  policyReason: policy.reason,
-                  eventIds,
-                  projectId: payload.projectId,
-                });
-              },
+            const result = await workerRunTask.triggerAndWait({
+              workItemId,
+              parentRunId: runId,
+              rootRunId: runId,
+              agentId: agent.id,
+              projectId: payload.projectId,
+              role,
+              task: taskDesc,
+              context,
+              agentInstructions: agent.instructions,
             });
 
-            const completePayload = { role, success: true, outputLength: subResult.output.length };
+            if (!result.ok) {
+              const errorMsg = String(result.error ?? "Child task failed");
+              await runtime.workItemRepository.fail(workItemId, new Date(), errorMsg);
+              const failPayload = { role, success: false, error: errorMsg, workItemId };
+              const failId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", failPayload);
+              eventIds.push(failId);
+
+              return {
+                content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
+                details: { role, success: false, error: errorMsg, workItemId },
+              };
+            }
+
+            const output = result.output;
+            const completePayload = {
+              role,
+              success: true,
+              outputLength: output.output.length,
+              workItemId,
+            };
             const completeId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", completePayload);
             eventIds.push(completeId);
 
             return {
-              content: [{ type: "text" as const, text: subResult.output || "(No output)" }],
-              details: { role, success: true, durationMs: subResult.durationMs },
+              content: [{ type: "text" as const, text: output.output || "(No output)" }],
+              details: { role, success: true, durationMs: output.durationMs, workItemId },
             };
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
-            const failPayload = { role, success: false, error: errorMsg };
+            await runtime.workItemRepository.fail(workItemId, new Date(), errorMsg);
+            const failPayload = { role, success: false, error: errorMsg, workItemId };
             const failId = await recordEvent(runtime, runId, agent.id, "sub_run_completed", failPayload);
             eventIds.push(failId);
 
             return {
               content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
-              details: { role, success: false, error: errorMsg },
+              details: { role, success: false, error: errorMsg, workItemId },
             };
           }
         },
