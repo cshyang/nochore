@@ -56,7 +56,7 @@ export function useOnboardingChatFlow(params: {
         parts: [
           {
             type: "text" as const,
-            text: "What would you like this agent to do? Describe its job in a sentence or two.",
+            text: "What outcome should this agent own? Describe the result you want.",
           },
         ],
       },

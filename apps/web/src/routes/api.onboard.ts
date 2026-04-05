@@ -99,15 +99,24 @@ export const Route = createFileRoute("/api/onboard")({
         const modelMessages = await convertToModelMessages(cleanedMessages as UIMessage[]);
 
         const createAgentSchema = z.object({
-          name: z.string().min(1).describe("A short, memorable agent name"),
-          description: z.string().min(1).describe("A concise one-sentence summary of what the agent does"),
+          name: z.string().min(1).describe("Short, outcome-oriented agent name (e.g., 'Grow Qualified Demand')"),
+          description: z
+            .string()
+            .min(1)
+            .describe("One-sentence outcome statement (e.g., 'Reduce qualified CPA while maintaining volume')"),
           instructions: z
             .string()
             .min(1)
             .describe(
-              "Detailed operational instructions (markdown). This becomes the agent's system prompt. " +
-                "Be specific: what data to pull, what patterns to look for, how to format findings, " +
-                "what thresholds trigger action.",
+              "Strategy note (markdown). This becomes the agent's program.md — how to pursue the outcome, " +
+                "what to watch, what patterns matter, how to format findings.",
+            ),
+          primaryMetric: z
+            .string()
+            .optional()
+            .describe(
+              "The comparabilityKey for the agent's primary success metric " +
+                "(format: metric_name|scope|window, e.g., 'qualified_cpa|account|7d')",
             ),
           skills: z.array(z.string()).default([]).describe("Skill IDs from available skills"),
           toolSlugs: z.array(z.string()).default([]).describe("Tool slugs confirmed by the user"),
@@ -227,6 +236,7 @@ export const Route = createFileRoute("/api/onboard")({
                     name: input.name.trim(),
                     description: input.description.trim(),
                     instructions: input.instructions.trim(),
+                    primaryMetric: input.primaryMetric?.trim(),
                     skills: resolvedSkills,
                     toolConfig: { globalApprovalRequired: false, requiredProviders: [], tools: {} },
                     notificationConfig: { inApp: true, email: false, slack: false },

@@ -12,7 +12,7 @@ interface OnboardingChatProps {
   onBack: () => void;
 }
 
-const EXAMPLE_PROMPTS = ["Monitor ad spend", "Score new leads", "Track competitors", "Optimize keywords"];
+const EXAMPLE_PROMPTS = ["Reduce ad waste", "Grow qualified leads", "Monitor funnel health", "Track competitor pricing"];
 
 export function OnboardingChat({
   projectId,
@@ -110,7 +110,7 @@ export function OnboardingChat({
                 textAlign: "center",
               }}
             >
-              What would you like this agent to do?
+              What outcome should this agent own?
             </div>
             <div
               style={{
@@ -121,7 +121,7 @@ export function OnboardingChat({
                 lineHeight: TYPE.leading.normal,
               }}
             >
-              Describe its job in a sentence or two. We&apos;ll turn that into an operational agent.
+              Describe the result you want. We&apos;ll build an agent that owns it.
             </div>
 
             <form onSubmit={handleSubmit}>

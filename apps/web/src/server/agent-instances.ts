@@ -51,6 +51,7 @@ type AgentRecordInput = {
   name: string;
   description: string;
   instructions: string;
+  primaryMetric?: string;
   skills: string[];
   toolConfig: ToolConfig;
   notificationConfig: NotificationConfig;
@@ -75,6 +76,7 @@ export const createAgent = createServerFn({ method: "POST" })
       description: data.description ?? "",
       instructions: data.instructions ?? "",
       skills: data.skills ?? [],
+      primaryMetric: data.primaryMetric,
       toolConfig: resolveToolConfig(data.toolConfig, data.requiredProviders),
       notificationConfig: data.notificationConfig ?? DEFAULT_NOTIFICATION_CONFIG,
       schedule: data.schedule ?? "manual",
@@ -173,6 +175,7 @@ async function createAgentRecord(input: AgentRecordInput) {
     name: input.name,
     description: input.description,
     instructions: input.instructions,
+    primaryMetric: input.primaryMetric,
     skills: input.skills,
     toolConfig: input.toolConfig,
     notificationConfig: input.notificationConfig,
