@@ -253,9 +253,20 @@ export const Route = createFileRoute("/api/onboard")({
 
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
-                // Connections are project-level, managed in Settings.
-                // The agent doesn't store requiredProviders — it works with
-                // whatever providers are connected at runtime.
+                // Derive required providers from tool slugs.
+                // Tool slug convention: provider_action (e.g., googleads_list_campaigns → googleads)
+                const providerSet = new Map<string, string>();
+                for (const slug of input.toolSlugs) {
+                  const provider = slug.split("_")[0]?.toLowerCase();
+                  if (provider && !providerSet.has(provider)) {
+                    providerSet.set(provider, `Required for ${input.name}`);
+                  }
+                }
+                const requiredProviders = Array.from(providerSet.entries()).map(([provider, reason]) => ({
+                  provider,
+                  reason,
+                }));
+
                 const agentResult = await createAgent({
                   data: {
                     projectId,
@@ -264,7 +275,7 @@ export const Route = createFileRoute("/api/onboard")({
                     instructions: input.instructions.trim(),
                     primaryMetric: input.primaryMetric?.trim(),
                     skills: resolvedSkills,
-                    toolConfig: { globalApprovalRequired: false, requiredProviders: [], tools: {} },
+                    toolConfig: { globalApprovalRequired: false, requiredProviders, tools: {} },
                     notificationConfig: { inApp: true, email: false, slack: false },
                     schedule: input.schedule,
                     status: "draft",
