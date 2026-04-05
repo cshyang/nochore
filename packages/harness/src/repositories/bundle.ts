@@ -8,6 +8,7 @@ import { RunEventRepository } from "./event";
 import { LearnedRuleRepository } from "./learned-rule";
 import { LessonRepository } from "./lesson";
 import { RunRepository } from "./run";
+import { WorkItemRepository } from "./work-item";
 
 // Concrete Drizzle-backed repository bundle for a single project database.
 export function createProjectRepositories(db: HarnessDb) {
@@ -21,5 +22,6 @@ export function createProjectRepositories(db: HarnessDb) {
     lessonRepository: new LessonRepository(db),
     runEventRepository: new RunEventRepository(db),
     runRepository: new RunRepository(db),
+    workItemRepository: new WorkItemRepository(db),
   };
 }

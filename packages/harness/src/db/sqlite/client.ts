@@ -15,6 +15,7 @@ const RESET_TABLES = [
   "approvals",
   "learned_policy_rules",
   "suggestion_suppressions",
+  "work_items",
   "run_events",
   "lessons",
   "agents",
@@ -22,7 +23,7 @@ const RESET_TABLES = [
   "projects",
 ] as const;
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 const CREATE_DDL = `
   CREATE TABLE IF NOT EXISTS projects (
@@ -193,6 +194,29 @@ const CREATE_DDL = `
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_connections_project_provider ON connections (project_id, provider);
+
+  CREATE TABLE IF NOT EXISTS work_items (
+    id TEXT PRIMARY KEY,
+    parent_run_id TEXT NOT NULL,
+    root_run_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'worker_run',
+    role TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    blocking_reason TEXT,
+    error TEXT,
+    result TEXT,
+    trigger_task_run_id TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    created_at INTEGER NOT NULL,
+    started_at INTEGER,
+    completed_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_work_items_parent_run ON work_items (parent_run_id);
+  CREATE INDEX IF NOT EXISTS idx_work_items_root_run ON work_items (root_run_id);
+  CREATE INDEX IF NOT EXISTS idx_work_items_agent_created ON work_items (agent_id, created_at);
 `;
 
 export function createDb(dbPath: string): HarnessDb {

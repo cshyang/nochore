@@ -82,3 +82,11 @@ export {
   type RunTriggerType,
   RunTriggerTypeSchema,
 } from "./run";
+export {
+  type WorkItemBlockingReason,
+  WorkItemBlockingReasonSchema,
+  type WorkItemRecord,
+  WorkItemRecordSchema,
+  type WorkItemStatus,
+  WorkItemStatusSchema,
+} from "./work-item";

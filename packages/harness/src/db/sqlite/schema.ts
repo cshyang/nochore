@@ -197,6 +197,34 @@ export const lessons = sqliteTable(
   (table) => [index("idx_lessons_agent_scope").on(table.agentId, table.scope)],
 );
 
+export const workItems = sqliteTable(
+  "work_items",
+  {
+    id: text("id").primaryKey(),
+    parentRunId: text("parent_run_id").notNull(),
+    rootRunId: text("root_run_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    kind: text("kind").notNull().default("worker_run"),
+    role: text("role").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("queued"),
+    blockingReason: text("blocking_reason"),
+    error: text("error"),
+    result: text("result"),
+    triggerTaskRunId: text("trigger_task_run_id"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    createdAt: integer("created_at").notNull(),
+    startedAt: integer("started_at"),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [
+    index("idx_work_items_parent_run").on(table.parentRunId),
+    index("idx_work_items_root_run").on(table.rootRunId),
+    index("idx_work_items_agent_created").on(table.agentId, table.createdAt),
+  ],
+);
+
 export const connections = sqliteTable(
   "connections",
   {

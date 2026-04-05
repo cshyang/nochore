@@ -36,3 +36,7 @@ export {
   type CreateRunInput,
   RunRepository,
 } from "./run";
+export {
+  type CreateWorkItemInput,
+  WorkItemRepository,
+} from "./work-item";

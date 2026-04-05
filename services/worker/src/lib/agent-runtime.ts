@@ -28,6 +28,7 @@ type WorkerRepositories = Pick<
   | "lessonRepository"
   | "runEventRepository"
   | "runRepository"
+  | "workItemRepository"
 >;
 
 export interface WorkerRuntime extends WorkerRepositories {
@@ -66,6 +67,7 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
     lessonRepository: repositories.lessonRepository,
     runEventRepository: repositories.runEventRepository,
     runRepository: repositories.runRepository,
+    workItemRepository: repositories.workItemRepository,
     composio,
     userId: getComposioUserId(projectId),
     activeProviders: providers,
