@@ -1,6 +1,6 @@
 export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
 export type AgentOperationalStatus = "running" | "attention" | "idle" | "error";
-export type RunStatus = "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
+export type RunStatus = "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "completed" | "failed" | "cancelled";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "blocked" | "expired";
 export type RunEventType =
   | "run_started"

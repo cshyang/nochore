@@ -8,6 +8,7 @@ export const RunStatusSchema = z.enum([
   "queued",
   "running",
   "waiting_for_approval",
+  "waiting_for_children",
   "completed",
   "failed",
   "cancelled",

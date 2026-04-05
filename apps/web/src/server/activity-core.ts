@@ -2,7 +2,7 @@ import type { ApprovalRecord, RunRecord, RunStatus } from "@nochore/harness";
 import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction, buildSerializedRun } from "./models";
 
-const ACTIVE_RUN_STATUSES = new Set<RunStatus>(["queued", "running", "waiting_for_approval"]);
+const ACTIVE_RUN_STATUSES = new Set<RunStatus>(["queued", "running", "waiting_for_approval", "waiting_for_children"]);
 const ACTIONABLE_APPROVAL_STATUSES = new Set<ApprovalRecord["status"]>(["pending", "expired"]);
 
 export async function loadAgentActivityState(projectId: string, agentId: string) {

@@ -77,6 +77,8 @@ function RunHeader({ run }: { run: RunView }) {
       <Badge color="yellow">Cancelled</Badge>
     ) : run.status === "waiting_for_approval" ? (
       <Badge color="yellow">Waiting</Badge>
+    ) : run.status === "waiting_for_children" ? (
+      <Badge color="blue">Coordinating</Badge>
     ) : run.status === "queued" ? (
       <Badge color="gray">Queued</Badge>
     ) : (
@@ -285,6 +287,37 @@ export function RunDetail({
 
   const status = (run.status ?? "").toLowerCase();
   const finding = extractFinding(run);
+
+  // ── Coordinating children ──────────────────────────────────────────────
+  if (status === "waiting_for_children") {
+    return (
+      <div style={{ flex: 1, padding: "24px 20px" }}>
+        <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "14px 20px",
+            background: COLORS.accentSubtle,
+            border: `1px solid ${COLORS.accentBorder}`,
+            borderRadius: RADIUS.sm,
+          }}
+        >
+          <CircleNotch
+            size={16}
+            weight="bold"
+            color={COLORS.accent}
+            style={{ animation: "spin 1s linear infinite" }}
+          />
+          <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
+            Coordinating specialist work...
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   // ── Running / queued ───────────────────────────────────────────────────
   if (status === "running" || status === "queued") {

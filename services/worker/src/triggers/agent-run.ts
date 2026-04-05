@@ -109,6 +109,9 @@ export const agentRunTask = task({
           const startId = await recordEvent(runtime, runId, agent.id, "sub_run_started", startPayload);
           eventIds.push(startId);
 
+          await runtime.runRepository.markWaitingForChildren(runId);
+          metadata.set("status", "waiting_for_children");
+
           try {
             const result = await workerRunTask.triggerAndWait({
               workItemId,
@@ -123,6 +126,8 @@ export const agentRunTask = task({
             });
 
             if (!result.ok) {
+              await runtime.runRepository.markRunning(runId);
+              metadata.set("status", "running");
               const errorMsg = String(result.error ?? "Child task failed");
               await runtime.workItemRepository.fail(workItemId, new Date(), errorMsg);
               const failPayload = { role, success: false, error: errorMsg, workItemId };
@@ -135,6 +140,8 @@ export const agentRunTask = task({
               };
             }
 
+            await runtime.runRepository.markRunning(runId);
+            metadata.set("status", "running");
             const output = result.output;
             const completePayload = {
               role,
@@ -150,6 +157,8 @@ export const agentRunTask = task({
               details: { role, success: true, durationMs: output.durationMs, workItemId },
             };
           } catch (err) {
+            await runtime.runRepository.markRunning(runId);
+            metadata.set("status", "running");
             const errorMsg = err instanceof Error ? err.message : String(err);
             await runtime.workItemRepository.fail(workItemId, new Date(), errorMsg);
             const failPayload = { role, success: false, error: errorMsg, workItemId };

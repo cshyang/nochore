@@ -52,6 +52,10 @@ export class RunRepository {
     this.db.update(runs).set({ status: "waiting_for_approval" }).where(eq(runs.id, id)).run();
   }
 
+  async markWaitingForChildren(id: string): Promise<void> {
+    this.db.update(runs).set({ status: "waiting_for_children" }).where(eq(runs.id, id)).run();
+  }
+
   async complete(id: string, completedAt: Date, summary: RunSummary): Promise<void> {
     this.db
       .update(runs)

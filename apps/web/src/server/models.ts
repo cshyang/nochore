@@ -39,7 +39,7 @@ export interface SerializedRun {
   id: string;
   agentId: string;
   triggerType: string;
-  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
+  status: "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "completed" | "failed" | "cancelled";
   startedAt: string;
   completedAt?: string;
   error?: string;
@@ -97,7 +97,7 @@ export function buildAgentView(params: {
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
   const activeRunCount = params.runs.filter(
-    (run) => run.status === "queued" || run.status === "running" || run.status === "waiting_for_approval",
+    (run) => run.status === "queued" || run.status === "running" || run.status === "waiting_for_approval" || run.status === "waiting_for_children",
   ).length;
   const pendingCount = params.approvals.filter(
     (approval) => approval.status === "pending" || approval.status === "expired",
@@ -311,6 +311,8 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
       return "running";
     case "waiting_for_approval":
       return "waiting_for_approval";
+    case "waiting_for_children":
+      return "waiting_for_children";
   }
 }
 
