@@ -7,8 +7,9 @@
     "services/*"
   ],
   "scripts": {
-    "test": "npm --workspace @nochore/harness test && npm run test:worker",
-    "test:worker": "vitest run services/worker/src/lib/agent-runtime.test.ts services/worker/src/lib/tool-provider.test.ts",
+    "test": "npm --workspace @nochore/harness test && npm run test:web && npm run test:worker",
+    "test:web": "vitest run apps/web/src/server/deps.test.ts",
+    "test:worker": "vitest run --exclude '.worktrees/**' services/worker/src/lib/agent-runtime.test.ts services/worker/src/lib/tool-provider.test.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "format": "biome format --fix ."
