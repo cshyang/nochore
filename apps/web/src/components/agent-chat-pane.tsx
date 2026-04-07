@@ -77,7 +77,7 @@ export function AgentChatPane({
   }, [onClearPendingApproval, pendingApproval]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
       {/* Scrollable message area */}
       <div
         ref={scrollRef}
@@ -85,6 +85,7 @@ export function AgentChatPane({
           flex: 1,
           overflowY: "auto",
           padding: "0 0 24px",
+          minWidth: 0,
         }}
       >
         <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>

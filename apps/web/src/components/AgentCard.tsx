@@ -53,6 +53,7 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
         flexDirection: "column",
         gap: 8,
         fontFamily: "inherit",
+        minHeight: 120,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = COLORS.borderStrong;
@@ -109,10 +110,11 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
           style={{
             fontSize: TYPE.scale.sm,
             color: COLORS.textSecondary,
-            lineHeight: 1.4,
+            lineHeight: 1.5,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
           }}
         >
           {agent.description}
@@ -175,12 +177,6 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
         </div>
       )}
 
-      {/* Row 5: Open CTA */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-        <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>
-          Open {"\u2192"}
-        </span>
-      </div>
     </button>
   );
 }

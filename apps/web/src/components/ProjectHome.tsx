@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AgentCard } from "~/components/AgentCard";
 import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
@@ -239,106 +239,100 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                 Needs attention
               </div>
 
-              {groupedNeedsInput.length > 0 && (
-                <Card style={{ marginBottom: 12, borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                    <Badge color="orange">
-                      {project.needsInput.length} approval{project.needsInput.length === 1 ? "" : "s"} need input
-                    </Badge>
-                  </div>
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {groupedNeedsInput.map((group) => (
-                      <div key={group.agentId} style={{ display: "grid", gap: 8 }}>
-                        <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-                          {group.agentName}
-                        </div>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          {group.items.map((item) => (
-                            <button
-                              type="button"
-                              key={item.id}
-                              onClick={() =>
-                                onSelectAgent(item.agentId, {
-                                  runId: item.runId,
-                                  pendingActionId: item.approval.id,
-                                  tab: "runs",
-                                })
-                              }
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: 12,
-                                padding: "10px 0",
-                                width: "100%",
-                                background: "none",
-                                border: "none",
-                                borderBottom: `1px solid ${COLORS.border}`,
-                                textAlign: "left",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <div style={{ display: "grid", gap: 3 }}>
-                                <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
-                                  {humanizeToolName(item.approval.proposal.toolName)}
-                                </div>
-                                <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
-                                  {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
-                                  {item.approval.proposal.reason}
-                                </div>
-                              </div>
-                              <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
+              <Card style={{ borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
+                {(() => {
+                  let rowIndex = 0;
+                  const rows: ReactNode[] = [];
 
-              {needsAttention.length > 0 && (
-                <Card style={{ borderColor: COLORS.orangeDim, background: COLORS.orangeSubtle }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                    <Badge color="orange">
-                      {needsAttention.length} need{needsAttention.length === 1 ? "s" : ""} attention
-                    </Badge>
-                  </div>
-                  {needsAttention.map((agent) => (
-                    <button
-                      type="button"
-                      key={agent.id}
-                      onClick={() => onSelectAgent(agent.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "8px 0",
-                        cursor: "pointer",
-                        background: "none",
-                        border: "none",
-                        borderBottomColor: COLORS.border,
-                        borderBottomStyle: "solid",
-                        borderBottomWidth: "1px",
-                        width: "100%",
-                        textAlign: "left",
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}
+                  for (const group of groupedNeedsInput) {
+                    for (const item of group.items) {
+                      const isFirst = rowIndex === 0;
+                      rowIndex++;
+                      rows.push(
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() =>
+                            onSelectAgent(item.agentId, {
+                              runId: item.runId,
+                              pendingActionId: item.approval.id,
+                              tab: "runs",
+                            })
+                          }
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            padding: "12px 16px",
+                            width: "100%",
+                            background: "none",
+                            border: "none",
+                            borderTop: isFirst ? "none" : `1px solid ${COLORS.border}`,
+                            textAlign: "left",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            transition,
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(224,144,90,0.04)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                         >
-                          {agent.name}
+                          <div style={{ display: "grid", gap: 2, flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{group.agentName}</div>
+                            <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+                              {humanizeToolName(item.approval.proposal.toolName)}
+                            </div>
+                            <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
+                              {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
+                              {item.approval.proposal.reason}
+                            </div>
+                          </div>
+                          <span style={{ color: COLORS.textDim, fontSize: 16, paddingTop: 2, flexShrink: 0 }}>{"\u2192"}</span>
+                        </button>
+                      );
+                    }
+                  }
+
+                  for (const agent of needsAttention) {
+                    const isFirst = rowIndex === 0;
+                    rowIndex++;
+                    rows.push(
+                      <button
+                        type="button"
+                        key={agent.id}
+                        onClick={() => onSelectAgent(agent.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          padding: "12px 16px",
+                          width: "100%",
+                          background: "none",
+                          border: "none",
+                          borderTop: isFirst ? "none" : `1px solid ${COLORS.border}`,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition,
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(224,144,90,0.04)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                      >
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
+                            {agent.name}
+                          </div>
+                          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>Needs attention</div>
                         </div>
-                        <div style={{ fontSize: TYPE.scale.sm, color: COLORS.orange, marginTop: 1 }}>
-                          Needs attention
-                        </div>
-                      </div>
-                      <span style={{ color: COLORS.textDim, fontSize: 18 }}>{"\u2192"}</span>
-                    </button>
-                  ))}
-                </Card>
-              )}
+                        <span style={{ color: COLORS.textDim, fontSize: 16, flexShrink: 0 }}>{"\u2192"}</span>
+                      </button>
+                    );
+                  }
+
+                  return rows;
+                })()}
+              </Card>
             </div>
           )}
 
