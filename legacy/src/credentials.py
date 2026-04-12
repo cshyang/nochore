@@ -10,7 +10,7 @@ console = Console(stderr=True)
 class CredentialManager:
     """Manages API credentials for Meta and Google Ads."""
     
-    def __init__(self, env_file: str = ".env.local"):
+    def __init__(self, env_file: str = str(Path(__file__).parents[2] / ".env")):
         self.env_file = Path(env_file)
         self._load_credentials()
     

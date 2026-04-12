@@ -3,7 +3,6 @@ name = "ads-report-automation"
 version = "1.0.0"
 description = "CLI tool for automated advertising reports"
 authors = [{name = "Ads Report Team"}]
-readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "rich>=13.0.0",

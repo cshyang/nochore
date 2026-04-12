@@ -59,9 +59,18 @@ business:
     - source: "nota_meta"
       theme: "Seasonal - CNY"
       campaign_name_regex: "(?i)cny|seasonal"
+    - source: "nota_meta"
+      theme: "Leads - Event Space"
+      campaign_name_regex: "(?i)leads.*event|event.*leads"
+    - source: "nota_meta"
+      theme: "Engagement - Retargeting"
+      campaign_name_regex: "(?i)engagement|retargeting"
     - source: "nota_ads"
       theme: "Performance Max - Google Map"
       campaign_name_regex: "(?i)performance max|pmax|map"
+    - source: "nota_ads"
+      theme: "Event Space - Search"
+      campaign_name_regex: "(?i)event space"
 
   lead_rules:
     google_ads:
