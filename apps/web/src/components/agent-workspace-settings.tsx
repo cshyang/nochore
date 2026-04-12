@@ -27,6 +27,22 @@ const fieldStyle = {
   transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
 };
 
+type SettingsLocalTab = "basics" | "access" | "autonomy";
+
+type SettingsOverviewItem = {
+  tab: SettingsLocalTab;
+  title: string;
+  summary: string;
+  detail: string;
+  meta: string;
+};
+
+const SETTINGS_TAB_OPTIONS: Array<{ value: SettingsLocalTab; label: string }> = [
+  { value: "basics", label: "Basics" },
+  { value: "access", label: "Access" },
+  { value: "autonomy", label: "Autonomy" },
+];
+
 function humanize(value: string): string {
   return value
     .replace(/_/g, " ")
@@ -69,6 +85,7 @@ export function AgentWorkspaceSettingsPanel({
   onRevokeLearnedRule?: AgentWorkspaceProps["onRevokeLearnedRule"];
   providerLogos?: Record<string, string>;
 }) {
+  const [localTab, setLocalTab] = useState<SettingsLocalTab>("basics");
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description ?? "");
   const [instructions, setInstructions] = useState(agent.instructions ?? "");
@@ -77,8 +94,10 @@ export function AgentWorkspaceSettingsPanel({
   const [notificationConfig, setNotificationConfig] = useState(getNotificationConfig(agent.notificationConfig));
   const [primaryMetric, setPrimaryMetric] = useState(agent.primaryMetric ?? "");
   const [saving, setSaving] = useState(false);
+  const [showProviderPicker, setShowProviderPicker] = useState(false);
 
   useEffect(() => {
+    setLocalTab("basics");
     setName(agent.name);
     setDescription(agent.description ?? "");
     setInstructions(agent.instructions ?? "");
@@ -86,7 +105,7 @@ export function AgentWorkspaceSettingsPanel({
     setSelectedSkills(agent.skills ?? []);
     setNotificationConfig(getNotificationConfig(agent.notificationConfig));
     setPrimaryMetric(agent.primaryMetric ?? "");
-  }, [agent]);
+  }, [agent.id]);
 
   const persist = async (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
     if (!onUpdateAgent) return;
@@ -98,19 +117,267 @@ export function AgentWorkspaceSettingsPanel({
     }
   };
 
-  const [showProviderPicker, setShowProviderPicker] = useState(false);
-  const connectedProviders = new Set(connections.filter((c) => c.status === "active").map((c) => c.provider));
+  const connectedProviders = useMemo(
+    () => new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider)),
+    [connections],
+  );
+  const activeConnections = useMemo(
+    () => connections.filter((connection) => connection.status === "active"),
+    [connections],
+  );
   const projectId = agent.projectId ?? "";
   const currentToolConfig = agent.toolConfig ?? { globalApprovalRequired: false, requiredProviders: [], tools: {} };
+  const missingRequiredProviders = useMemo(
+    () => currentToolConfig.requiredProviders.filter((requirement) => !connectedProviders.has(requirement.provider)),
+    [connectedProviders, currentToolConfig.requiredProviders],
+  );
   const policyTools = useMemo(
     () => buildPolicyTools(currentToolConfig, policyToolCatalog, connectedProviders),
     [currentToolConfig, policyToolCatalog, connectedProviders],
   );
-
   const persistToolConfig = async (nextToolConfig: ToolConfigView) => {
     await persist({ toolConfig: nextToolConfig });
   };
 
+  const overviewItems = useMemo(
+    () =>
+      buildSettingsOverview({
+        name,
+        schedule,
+        primaryMetric,
+        instructions,
+        activeConnectionsCount: activeConnections.length,
+        missingRequiredProvidersCount: missingRequiredProviders.length,
+        selectedSkillCount: selectedSkills.length,
+        enabledToolCount: policyTools.filter((tool) => tool.enabled).length,
+        globalApprovalRequired: currentToolConfig.globalApprovalRequired,
+        learnedRuleCount: learnedRules.length,
+        learnedRuleSuggestionCount: learnedRuleSuggestions.length,
+        notificationConfig,
+      }),
+    [
+      name,
+      schedule,
+      primaryMetric,
+      instructions,
+      activeConnections.length,
+      missingRequiredProviders.length,
+      selectedSkills.length,
+      policyTools,
+      currentToolConfig.globalApprovalRequired,
+      learnedRules.length,
+      learnedRuleSuggestions.length,
+      notificationConfig,
+    ],
+  );
+
+  return (
+    <div style={{ display: "grid", gap: SPACE[5], paddingBottom: SPACE[5] }}>
+      <SettingsOverviewStrip items={overviewItems} activeTab={localTab} onChange={setLocalTab} />
+      <SettingsLocalTabs activeTab={localTab} onChange={setLocalTab} />
+
+      {localTab === "basics" ? (
+        <SettingsBasicsPanel
+          name={name}
+          description={description}
+          instructions={instructions}
+          schedule={schedule}
+          primaryMetric={primaryMetric}
+          saving={saving}
+          onNameChange={setName}
+          onDescriptionChange={setDescription}
+          onInstructionsChange={setInstructions}
+          onScheduleChange={(value) => {
+            setSchedule(value);
+            void persist({ schedule: value });
+          }}
+          onPrimaryMetricChange={setPrimaryMetric}
+          onPersist={persist}
+        />
+      ) : null}
+
+      {localTab === "access" ? (
+        <SettingsAccessPanel
+          skills={skills}
+          selectedSkills={selectedSkills}
+          policyTools={policyTools}
+          connections={connections}
+          missingRequiredProviders={missingRequiredProviders}
+          showProviderPicker={showProviderPicker}
+          projectId={projectId}
+          providerLogos={providerLogos}
+          onSetSelectedSkills={setSelectedSkills}
+          onPersist={persist}
+          onShowProviderPicker={setShowProviderPicker}
+          onConnect={onConnect}
+          onDisconnect={onDisconnect}
+        />
+      ) : null}
+
+      {localTab === "autonomy" ? (
+        <SettingsAutonomyPanel
+          currentToolConfig={currentToolConfig}
+          policyTools={policyTools}
+          learnedRules={learnedRules}
+          learnedRuleSuggestions={learnedRuleSuggestions}
+          notificationConfig={notificationConfig}
+          onPersistToolConfig={persistToolConfig}
+          onSetNotificationConfig={setNotificationConfig}
+          onPersist={persist}
+          onAcceptLearnedRule={onAcceptLearnedRule}
+          onDismissLearnedRule={onDismissLearnedRule}
+          onSuppressLearnedRule={onSuppressLearnedRule}
+          onRevokeLearnedRule={onRevokeLearnedRule}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SettingsOverviewStrip({
+  items,
+  activeTab,
+  onChange,
+}: {
+  items: SettingsOverviewItem[];
+  activeTab: SettingsLocalTab;
+  onChange: (tab: SettingsLocalTab) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 12,
+      }}
+    >
+      {items.map((item) => {
+        const isActive = item.tab === activeTab;
+        return (
+          <button
+            key={item.tab}
+            type="button"
+            onClick={() => onChange(item.tab)}
+            style={{
+              padding: "14px 16px",
+              borderRadius: RADIUS.lg,
+              border: `1px solid ${isActive ? COLORS.accentBorder : COLORS.border}`,
+              background: isActive ? COLORS.accentSubtle : COLORS.surface,
+              color: COLORS.text,
+              textAlign: "left",
+              cursor: "pointer",
+              display: "grid",
+              gap: 6,
+              minHeight: 138,
+              transition: `border-color ${MOTION.duration} ${MOTION.ease}, background ${MOTION.duration} ${MOTION.ease}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: TYPE.scale.xs,
+                fontWeight: TYPE.weight.semibold,
+                letterSpacing: TYPE.tracking.wide,
+                textTransform: "uppercase",
+                color: isActive ? COLORS.accentBright : COLORS.textDim,
+              }}
+            >
+              {item.title}
+            </div>
+            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, lineHeight: TYPE.leading.snug }}>
+              {item.summary}
+            </div>
+            <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
+              {item.detail}
+            </div>
+            <div style={{ marginTop: "auto", fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{item.meta}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SettingsLocalTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: SettingsLocalTab;
+  onChange: (tab: SettingsLocalTab) => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 2,
+        background: COLORS.bg,
+        paddingTop: 4,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          gap: 24,
+          overflowX: "auto",
+          borderBottom: `1px solid ${COLORS.border}`,
+          scrollbarWidth: "thin",
+        }}
+      >
+        {SETTINGS_TAB_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "12px 0",
+              marginBottom: -1,
+              cursor: "pointer",
+              color: activeTab === option.value ? COLORS.text : COLORS.textDim,
+              borderBottom: `2px solid ${activeTab === option.value ? COLORS.accent : "transparent"}`,
+              fontWeight: TYPE.weight.medium,
+              fontSize: TYPE.scale.sm,
+              fontFamily: TYPE.body,
+              whiteSpace: "nowrap",
+              transition: `color ${MOTION.duration} ${MOTION.ease}`,
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsBasicsPanel({
+  name,
+  description,
+  instructions,
+  schedule,
+  primaryMetric,
+  saving,
+  onNameChange,
+  onDescriptionChange,
+  onInstructionsChange,
+  onScheduleChange,
+  onPrimaryMetricChange,
+  onPersist,
+}: {
+  name: string;
+  description: string;
+  instructions: string;
+  schedule: string;
+  primaryMetric: string;
+  saving: boolean;
+  onNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onInstructionsChange: (value: string) => void;
+  onScheduleChange: (value: string) => void;
+  onPrimaryMetricChange: (value: string) => void;
+  onPersist: (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => Promise<void>;
+}) {
   return (
     <div style={{ display: "grid", gap: 18 }}>
       <SectionHeading>Outcome</SectionHeading>
@@ -119,32 +386,77 @@ export function AgentWorkspaceSettingsPanel({
           <input
             className="input"
             value={name}
-            onChange={(event) => setName(event.target.value)}
-            onBlur={() => void persist({ name })}
+            onChange={(event) => onNameChange(event.target.value)}
+            onBlur={() => void onPersist({ name })}
             style={fieldStyle}
           />
         </SettingsRow>
-        <SettingsRow icon="◌" title="Description" description="A concise summary of the agent's job." defaultExpanded>
+        <SettingsRow
+          icon="◌"
+          title="Description"
+          description="A concise summary of the agent's job."
+          defaultExpanded
+          isLast
+        >
           <textarea
             className="textarea"
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            onBlur={() => void persist({ description })}
+            onChange={(event) => onDescriptionChange(event.target.value)}
+            onBlur={() => void onPersist({ description })}
             rows={4}
             style={{ ...fieldStyle, minHeight: 120, resize: "vertical" }}
           />
         </SettingsRow>
-        <SettingsRow icon="◷" title="Schedule" value={humanize(schedule)} defaultExpanded>
+      </SettingsCard>
+
+      <SectionHeading>Strategy</SectionHeading>
+      <SettingsCard>
+        <SettingsRow
+          icon="⟡"
+          title="Strategy note"
+          description="Tell the agent what to optimize for, what to avoid, and how to think."
+          defaultExpanded
+          isLast
+        >
+          <textarea
+            className="textarea"
+            value={instructions}
+            onChange={(event) => onInstructionsChange(event.target.value)}
+            onBlur={() => void onPersist({ instructions })}
+            placeholder="Tell the agent what to optimize for, what to avoid, and how to think."
+            rows={12}
+            style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
+          />
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
+              {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
+            </span>
+            <Button variant="secondary" size="sm" onClick={() => void onPersist({ instructions, description, name })}>
+              Save instructions
+            </Button>
+          </div>
+        </SettingsRow>
+      </SettingsCard>
+
+      <SectionHeading>Cadence</SectionHeading>
+      <SettingsCard>
+        <SettingsRow icon="◷" title="Schedule" value={humanize(schedule)} defaultExpanded isLast>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
               <button
                 type="button"
                 className="pill"
                 key={value}
-                onClick={() => {
-                  setSchedule(value);
-                  void persist({ schedule: value });
-                }}
+                onClick={() => onScheduleChange(value)}
                 style={{
                   fontFamily: TYPE.body,
                   padding: "6px 14px",
@@ -163,34 +475,6 @@ export function AgentWorkspaceSettingsPanel({
             ))}
           </div>
         </SettingsRow>
-        <SettingsRow icon="⟡" title="Strategy note" description="Tell the agent what to optimize for, what to avoid, and how to think." defaultExpanded>
-          <textarea
-            className="textarea"
-            value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
-            onBlur={() => void persist({ instructions })}
-            placeholder="Tell the agent what to optimize for, what to avoid, and how to think."
-            rows={12}
-            style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
-          />
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
-              {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
-            </span>
-            <Button variant="secondary" size="sm" onClick={() => void persist({ instructions, description, name })}>
-              Save instructions
-            </Button>
-          </div>
-        </SettingsRow>
       </SettingsCard>
 
       <SectionHeading>Success Metric</SectionHeading>
@@ -200,22 +484,59 @@ export function AgentWorkspaceSettingsPanel({
           title="Primary metric"
           description="The comparability key that identifies which observed metric to track. Your agent will emit metric observations during runs."
           defaultExpanded
+          isLast
         >
           <input
             className="input"
             value={primaryMetric}
-            onChange={(event) => setPrimaryMetric(event.target.value)}
-            onBlur={() => void persist({ primaryMetric })}
+            onChange={(event) => onPrimaryMetricChange(event.target.value)}
+            onBlur={() => void onPersist({ primaryMetric })}
             placeholder="e.g., qualified_cpa|last_7_days|account"
             style={{ ...fieldStyle, fontFamily: TYPE.mono, fontSize: TYPE.scale.sm }}
           />
         </SettingsRow>
       </SettingsCard>
+    </div>
+  );
+}
 
+function SettingsAccessPanel({
+  skills,
+  selectedSkills,
+  policyTools,
+  connections,
+  missingRequiredProviders,
+  showProviderPicker,
+  projectId,
+  providerLogos,
+  onSetSelectedSkills,
+  onPersist,
+  onShowProviderPicker,
+  onConnect,
+  onDisconnect,
+}: {
+  skills: NonNullable<AgentWorkspaceProps["availableSkills"]>;
+  selectedSkills: string[];
+  policyTools: ToolConfigEntryView[];
+  connections: NonNullable<AgentWorkspaceProps["projectConnections"]>;
+  missingRequiredProviders: ToolConfigView["requiredProviders"];
+  showProviderPicker: boolean;
+  projectId: string;
+  providerLogos: Record<string, string>;
+  onSetSelectedSkills: (skills: string[]) => void;
+  onPersist: (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => Promise<void>;
+  onShowProviderPicker: (open: boolean) => void;
+  onConnect?: AgentWorkspaceProps["onConnect"];
+  onDisconnect?: AgentWorkspaceProps["onDisconnect"];
+}) {
+  const connectedProviders = new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider));
+
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
       <SectionHeading>Systems</SectionHeading>
       <div style={{ display: "grid", gap: 6 }}>
         {connections
-          .filter((c) => c.status === "active")
+          .filter((connection) => connection.status === "active")
           .map((connection) => (
             <ConnectionRow
               key={connection.id}
@@ -227,44 +548,41 @@ export function AgentWorkspaceSettingsPanel({
             />
           ))}
 
-        {/* Show required providers that aren't connected yet */}
-        {currentToolConfig.requiredProviders
-          .filter((rp) => !connectedProviders.has(rp.provider))
-          .map((rp) => {
-            const meta = getProviderMetadata(rp.provider);
-            return (
-              <SettingsCard key={rp.provider}>
-                <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                  <ProviderIcon provider={rp.provider} logos={providerLogos} size={20} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text, fontWeight: TYPE.weight.medium }}>
-                      {meta.name}
-                    </div>
-                    <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>
-                      Not connected — required for this agent
-                    </div>
+        {missingRequiredProviders.map((requirement) => {
+          const meta = getProviderMetadata(requirement.provider);
+          return (
+            <SettingsCard key={requirement.provider}>
+              <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                <ProviderIcon provider={requirement.provider} logos={providerLogos} size={20} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text, fontWeight: TYPE.weight.medium }}>
+                    {meta.name}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onConnect?.(rp.provider)}
-                    style={{
-                      fontFamily: TYPE.body,
-                      padding: "6px 14px",
-                      borderRadius: RADIUS.md,
-                      border: `1px solid ${COLORS.accent}`,
-                      background: "transparent",
-                      color: COLORS.accent,
-                      fontSize: TYPE.scale.xs,
-                      cursor: "pointer",
-                      fontWeight: TYPE.weight.medium,
-                    }}
-                  >
-                    Connect
-                  </button>
+                  <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>
+                    Not connected — required for this agent
+                  </div>
                 </div>
-              </SettingsCard>
-            );
-          })}
+                <button
+                  type="button"
+                  onClick={() => onConnect?.(requirement.provider)}
+                  style={{
+                    fontFamily: TYPE.body,
+                    padding: "6px 14px",
+                    borderRadius: RADIUS.md,
+                    border: `1px solid ${COLORS.accent}`,
+                    background: "transparent",
+                    color: COLORS.accent,
+                    fontSize: TYPE.scale.xs,
+                    cursor: "pointer",
+                    fontWeight: TYPE.weight.medium,
+                  }}
+                >
+                  Connect
+                </button>
+              </div>
+            </SettingsCard>
+          );
+        })}
 
         {showProviderPicker ? (
           <SettingsCard>
@@ -280,7 +598,7 @@ export function AgentWorkspaceSettingsPanel({
                       type="button"
                       key={slug}
                       onClick={() => {
-                        setShowProviderPicker(false);
+                        onShowProviderPicker(false);
                         onConnect?.(slug);
                       }}
                       style={{
@@ -319,7 +637,7 @@ export function AgentWorkspaceSettingsPanel({
               </div>
               <button
                 type="button"
-                onClick={() => setShowProviderPicker(false)}
+                onClick={() => onShowProviderPicker(false)}
                 style={{
                   fontFamily: TYPE.body,
                   marginTop: 10,
@@ -338,7 +656,7 @@ export function AgentWorkspaceSettingsPanel({
         ) : (
           <button
             type="button"
-            onClick={() => setShowProviderPicker(true)}
+            onClick={() => onShowProviderPicker(true)}
             style={{
               fontFamily: TYPE.body,
               padding: "12px 16px",
@@ -381,8 +699,8 @@ export function AgentWorkspaceSettingsPanel({
                         const next = isEnabled
                           ? selectedSkills.filter((id) => id !== skill.id)
                           : [...selectedSkills, skill.id];
-                        setSelectedSkills(next);
-                        void persist({ skills: next });
+                        onSetSelectedSkills(next);
+                        void onPersist({ skills: next });
                       }}
                     />
                   }
@@ -395,13 +713,45 @@ export function AgentWorkspaceSettingsPanel({
           </>
         )}
       </SettingsCard>
+    </div>
+  );
+}
 
+function SettingsAutonomyPanel({
+  currentToolConfig,
+  policyTools,
+  learnedRules,
+  learnedRuleSuggestions,
+  notificationConfig,
+  onPersistToolConfig,
+  onSetNotificationConfig,
+  onPersist,
+  onAcceptLearnedRule,
+  onDismissLearnedRule,
+  onSuppressLearnedRule,
+  onRevokeLearnedRule,
+}: {
+  currentToolConfig: ToolConfigView;
+  policyTools: ToolConfigEntryView[];
+  learnedRules: LearnedRuleView[];
+  learnedRuleSuggestions: LearnedRuleView[];
+  notificationConfig: NotificationConfigView;
+  onPersistToolConfig: (toolConfig: ToolConfigView) => Promise<void>;
+  onSetNotificationConfig: (notificationConfig: NotificationConfigView) => void;
+  onPersist: (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => Promise<void>;
+  onAcceptLearnedRule?: AgentWorkspaceProps["onAcceptLearnedRule"];
+  onDismissLearnedRule?: AgentWorkspaceProps["onDismissLearnedRule"];
+  onSuppressLearnedRule?: AgentWorkspaceProps["onSuppressLearnedRule"];
+  onRevokeLearnedRule?: AgentWorkspaceProps["onRevokeLearnedRule"];
+}) {
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
       <SectionHeading>Policy</SectionHeading>
       <SettingsCard>
         <PolicyHeaderRow
           checked={currentToolConfig.globalApprovalRequired}
           onChange={(checked) =>
-            void persistToolConfig({
+            void onPersistToolConfig({
               ...currentToolConfig,
               globalApprovalRequired: checked,
             })
@@ -415,7 +765,7 @@ export function AgentWorkspaceSettingsPanel({
                 key={tool.toolName}
                 tool={tool}
                 onChange={(approvalMode) =>
-                  void persistToolConfig({
+                  void onPersistToolConfig({
                     ...currentToolConfig,
                     tools: {
                       ...currentToolConfig.tools,
@@ -434,9 +784,12 @@ export function AgentWorkspaceSettingsPanel({
             Connect a provider to configure approval policy for its tools.
           </div>
         )}
+      </SettingsCard>
 
+      <SectionHeading>Learned Rules</SectionHeading>
+      <SettingsCard>
         {learnedRules.length === 0 && learnedRuleSuggestions.length === 0 ? (
-          <div style={{ padding: "0 16px 16px", color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
+          <div style={{ padding: "16px", color: COLORS.textDim, fontSize: TYPE.scale.sm }}>
             No learned rules yet. Repeated approval decisions will start surfacing here once the agent has enough
             evidence.
           </div>
@@ -503,8 +856,8 @@ export function AgentWorkspaceSettingsPanel({
               checked={notificationConfig.inApp !== false}
               onChange={(checked) => {
                 const next = { ...notificationConfig, inApp: checked };
-                setNotificationConfig(next);
-                void persist({ notificationConfig: next });
+                onSetNotificationConfig(next);
+                void onPersist({ notificationConfig: next });
               }}
             />
           }
@@ -518,8 +871,8 @@ export function AgentWorkspaceSettingsPanel({
               checked={notificationConfig.email === true}
               onChange={(checked) => {
                 const next = { ...notificationConfig, email: checked };
-                setNotificationConfig(next);
-                void persist({ notificationConfig: next });
+                onSetNotificationConfig(next);
+                void onPersist({ notificationConfig: next });
               }}
             />
           }
@@ -534,8 +887,8 @@ export function AgentWorkspaceSettingsPanel({
               checked={notificationConfig.slack === true}
               onChange={(checked) => {
                 const next = { ...notificationConfig, slack: checked };
-                setNotificationConfig(next);
-                void persist({ notificationConfig: next });
+                onSetNotificationConfig(next);
+                void onPersist({ notificationConfig: next });
               }}
             />
           }
@@ -543,6 +896,69 @@ export function AgentWorkspaceSettingsPanel({
       </SettingsCard>
     </div>
   );
+}
+
+function buildSettingsOverview({
+  name,
+  schedule,
+  primaryMetric,
+  instructions,
+  activeConnectionsCount,
+  missingRequiredProvidersCount,
+  selectedSkillCount,
+  enabledToolCount,
+  globalApprovalRequired,
+  learnedRuleCount,
+  learnedRuleSuggestionCount,
+  notificationConfig,
+}: {
+  name: string;
+  schedule: string;
+  primaryMetric: string;
+  instructions: string;
+  activeConnectionsCount: number;
+  missingRequiredProvidersCount: number;
+  selectedSkillCount: number;
+  enabledToolCount: number;
+  globalApprovalRequired: boolean;
+  learnedRuleCount: number;
+  learnedRuleSuggestionCount: number;
+  notificationConfig: NotificationConfigView;
+}): SettingsOverviewItem[] {
+  const notificationSummary = getEnabledNotificationLabels(notificationConfig);
+  const metricLabel = getPrimaryMetricLabel(primaryMetric);
+
+  return [
+    {
+      tab: "basics",
+      title: "Basics",
+      summary: name.trim() || "Untitled Agent",
+      detail: `${humanize(schedule)} cadence · ${metricLabel}`,
+      meta: instructions.trim()
+        ? truncateText(instructions.trim().replace(/\s+/g, " "), 92)
+        : "Add a strategy note so the agent knows what to optimize for.",
+    },
+    {
+      tab: "access",
+      title: "Access",
+      summary: `${activeConnectionsCount} ${pluralize(activeConnectionsCount, "system")} connected`,
+      detail:
+        missingRequiredProvidersCount > 0
+          ? `${missingRequiredProvidersCount} required ${pluralize(missingRequiredProvidersCount, "provider")} missing`
+          : "All required systems are connected",
+      meta: `${selectedSkillCount} ${pluralize(selectedSkillCount, "skill")} enabled · ${enabledToolCount} ${pluralize(enabledToolCount, "tool")} available`,
+    },
+    {
+      tab: "autonomy",
+      title: "Autonomy",
+      summary: globalApprovalRequired ? "All write actions require approval" : "Per-tool approval rules active",
+      detail:
+        learnedRuleSuggestionCount > 0
+          ? `${learnedRuleCount} learned ${pluralize(learnedRuleCount, "rule")} · ${learnedRuleSuggestionCount} pending ${pluralize(learnedRuleSuggestionCount, "suggestion")}`
+          : `${learnedRuleCount} learned ${pluralize(learnedRuleCount, "rule")}`,
+      meta: notificationSummary.length > 0 ? notificationSummary.join(", ") : "No notification channels enabled",
+    },
+  ];
 }
 
 function PolicyHeaderRow({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
@@ -1000,4 +1416,29 @@ function formatConditionValue(value: unknown): string {
   }
 
   return String(value);
+}
+
+function getPrimaryMetricLabel(primaryMetric: string): string {
+  const key = primaryMetric.split("|")[0]?.trim();
+  return key ? humanize(key) : "No primary metric";
+}
+
+function getEnabledNotificationLabels(config: NotificationConfigView): string[] {
+  const labels: string[] = [];
+  if (config.inApp) labels.push("In-app");
+  if (config.email) labels.push("Email");
+  if (config.slack) labels.push("Slack");
+  return labels;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
