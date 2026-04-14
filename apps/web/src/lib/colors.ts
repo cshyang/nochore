@@ -60,6 +60,21 @@ export const COLORS = {
   // Utility
   white: "#FFFFFF",
   black: "#000000",
+
+  // Neutral overlays & scrims
+  grayDim: "rgba(110, 106, 122, 0.12)",
+  cardOutline: "rgba(107, 103, 128, 0.15)",
+  scrimHeavy: "rgba(0, 0, 0, 0.6)",
+
+  // Draft / ghost-hover background
+  draftBg: "rgba(224, 144, 90, 0.04)",
+} as const;
+
+// Elevation — reusable shadows
+export const SHADOW = {
+  sm: "0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
+  md: "0 8px 24px rgba(0,0,0,0.4)",
+  xl: "0 24px 80px rgba(0,0,0,0.5)",
 } as const;
 
 // Spacing scale (8px grid)

@@ -1,49 +1,36 @@
 /**
  * Bridge between Composio tools and pi-coding-agent ToolDefinitions.
  *
- * Uses @composio/core directly (no VercelProvider) to get raw tool metadata
- * and execute tools via composio.tools.execute(). Each Composio tool becomes
- * a pi ToolDefinition that the agent can call like any built-in tool.
+ * Goes through ComposioAdapter (harness) rather than calling @composio/core directly.
+ * Each Composio tool becomes a pi ToolDefinition that the agent can call like any
+ * built-in tool.
  */
 
-import { Composio } from "@composio/core";
-import type { PiToolDefinition } from "@nochore/harness";
+import { type ComposioAdapter, createComposioAdapter, type PiToolDefinition } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
 
-let _composio: Composio | null = null;
+let _adapter: Promise<ComposioAdapter> | null = null;
 
-function getComposio(): Composio {
-  if (!_composio) {
-    _composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+function getAdapter(): Promise<ComposioAdapter> {
+  if (!_adapter) {
+    _adapter = createComposioAdapter();
   }
-  return _composio;
+  return _adapter;
 }
 
-/**
- * Fetch Composio tools for the given toolkits and wrap each as a pi ToolDefinition.
- *
- * The raw metadata provides name/description/schema. Execution goes through
- * composio.tools.execute() which handles auth, versioning, and the actual API call.
- */
 export async function getComposioToolsForPi(params: {
   userId: string;
   toolkits: string[];
 }): Promise<PiToolDefinition[]> {
   if (!params.toolkits.length) return [];
 
-  const composio = getComposio();
-
-  const rawTools = (await composio.tools.getRawComposioTools({
+  const adapter = await getAdapter();
+  const rawTools = await adapter.getRawTools({
+    userId: params.userId,
     toolkits: params.toolkits,
     important: false,
     limit: 100,
-  })) as Array<{
-    slug: string;
-    name: string;
-    description: string;
-    inputSchema?: Record<string, unknown>;
-    parameters?: Record<string, unknown>;
-  }>;
+  });
 
   logger.info("Composio tools fetched for pi-agent", {
     userId: params.userId,
@@ -63,11 +50,11 @@ export async function getComposioToolsForPi(params: {
       });
 
       try {
-        const result = (await composio.tools.execute(tool.slug, {
+        const result = await adapter.execute({
           userId: params.userId,
-          arguments: toolParams,
-          dangerouslySkipVersionCheck: true,
-        })) as { data?: unknown; error?: string | null; successful?: boolean };
+          toolSlug: tool.slug,
+          args: toolParams,
+        });
 
         const output = JSON.stringify(result.data ?? result);
         logger.info(`Composio tool completed: ${tool.slug}`, {

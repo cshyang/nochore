@@ -1,0 +1,82 @@
+// Domain surface — stable, pure-TS API.
+// Types/schemas, policy engine, catalog loaders, conversation helpers,
+// connection interfaces. No db-client, no repository classes, no raw SDK factories.
+
+export {
+  getAgentDefinitionById,
+  getPromptDefinitionById,
+  getSkillDefinitionById,
+  listAgentDefinitions,
+  listPromptDefinitions,
+  listSkillDefinitions,
+} from "../catalog/index";
+export type {
+  ComposioAdapter,
+  ComposioCatalogEntry,
+  ComposioExecuteResult,
+  ComposioRawTool,
+  PiToolDefinition,
+} from "../connections/index";
+export {
+  buildConversationTranscript,
+  CHECKPOINT_KEEP_RECENT_TOKENS,
+  classifyRunLessonWrites,
+  estimateConversationStateTokens,
+  estimateTextTokens,
+  extractStructuredConversationEvents,
+  findCompactionBoundary,
+  INLINE_COMPACTION_KEEP_RECENT_TOKENS,
+  RECENT_MODEL_MESSAGE_LIMIT,
+  RECENT_VISIBLE_MESSAGE_LIMIT,
+  rehydrateConversationMessages,
+  sanitizeConversationMessage,
+  shouldAttemptChatMemoryDistillation,
+  shouldInlineCompact,
+  shouldRefreshCheckpoint,
+} from "../conversation/runtime";
+export { evaluatePolicy } from "../policy/engine";
+export { detectAndSuggestLearnedRules } from "../policy/progressive-autonomy";
+export { buildToolConfigEntry } from "../policy/tool-catalog";
+
+export { listPromptSkills, type PromptSkill } from "../skills/index";
+export {
+  type AgentConfig,
+  AgentConfigSchema,
+  type AgentSchedule,
+  AgentScheduleSchema,
+  type ApprovalRecord,
+  ApprovalRecordSchema,
+  type ApprovalStatus,
+  ApprovalStatusSchema,
+  type ConversationCheckpoint,
+  ConversationCheckpointSchema,
+  type ConversationEvent,
+  ConversationEventSchema,
+  type ConversationThread,
+  ConversationThreadSchema,
+  type LearnedPolicyRule,
+  LearnedPolicyRuleSchema,
+  type MetricObservation,
+  MetricObservationSchema,
+  type NotificationConfig,
+  NotificationConfigSchema,
+  type ProviderRequirement,
+  ProviderRequirementSchema,
+  type RunEvent,
+  RunEventSchema,
+  type RunRecord,
+  type RunStatus,
+  RunStatusSchema,
+  type RunSummary,
+  RunSummarySchema,
+  type RunTrigger,
+  RunTriggerSchema,
+  type ToolConfig,
+  type ToolConfigEntry,
+  ToolConfigEntrySchema,
+  ToolConfigSchema,
+  type ToolMode,
+  ToolModeSchema,
+  type WorkItemRecord,
+  WorkItemRecordSchema,
+} from "../types/index";

@@ -32,9 +32,7 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
   }
 
   // Empty state: no runs yet
-  const connectedProviders = agent.connections
-    .filter((c) => c.status === "active" || !c.status)
-    .map((c) => c.provider);
+  const connectedProviders = agent.connections.filter((c) => c.status === "active" || !c.status).map((c) => c.provider);
 
   return (
     <button
@@ -92,7 +90,7 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
             style={{
               fontSize: TYPE.scale.xs,
               fontWeight: TYPE.weight.medium,
-              background: "rgba(107,103,128,0.15)",
+              background: COLORS.cardOutline,
               color: COLORS.textSecondary,
               padding: "2px 8px",
               borderRadius: RADIUS.sm,
@@ -176,7 +174,6 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
           {"\uD83D\uDFE1"} {agent.pendingCount} pending approval{agent.pendingCount === 1 ? "" : "s"}
         </div>
       )}
-
     </button>
   );
 }
@@ -192,7 +189,7 @@ function MetricSparklineRow({
   currentValue?: number;
   unit?: string;
 }) {
-  const metricLabel = primaryMetric ? primaryMetric.split("|")[0] ?? "" : "";
+  const metricLabel = primaryMetric ? (primaryMetric.split("|")[0] ?? "") : "";
   const values = sparkline.map((p) => p.value);
   const daySpan = Math.round(
     (sparkline[sparkline.length - 1]!.timestamp - sparkline[0]!.timestamp) / (24 * 60 * 60 * 1000),
@@ -231,23 +228,13 @@ function MetricSparklineRow({
       )}
       <Sparkline values={values} width={120} height={24} />
       {daySpan > 0 && (
-        <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, flexShrink: 0 }}>
-          ({daySpan}d)
-        </span>
+        <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, flexShrink: 0 }}>({daySpan}d)</span>
       )}
     </div>
   );
 }
 
-function Sparkline({
-  values,
-  width,
-  height,
-}: {
-  values: number[];
-  width: number;
-  height: number;
-}) {
+function Sparkline({ values, width, height }: { values: number[]; width: number; height: number }) {
   if (values.length < 2) return null;
 
   const min = Math.min(...values);
@@ -266,12 +253,7 @@ function Sparkline({
     .join(" ");
 
   return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      style={{ flexShrink: 0 }}
-    >
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ flexShrink: 0 }}>
       <polyline
         points={points}
         fill="none"

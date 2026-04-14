@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { Button } from "~/components/Button";
 import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
-import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, SHADOW, SPACE, TYPE } from "~/lib/colors";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
 import type {
   ConnectionView,
@@ -110,7 +110,10 @@ export function AgentWorkspaceSettingsPanel({
   };
 
   const connectedProviders = useMemo(
-    () => new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider)),
+    () =>
+      new Set(
+        connections.filter((connection) => connection.status === "active").map((connection) => connection.provider),
+      ),
     [connections],
   );
   const projectId = agent.projectId ?? "";
@@ -313,7 +316,7 @@ function BriefingModal({
         style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(0, 0, 0, 0.6)",
+          background: COLORS.scrimHeavy,
           border: "none",
           cursor: "default",
           zIndex: 0,
@@ -332,7 +335,7 @@ function BriefingModal({
           border: `1px solid ${COLORS.border}`,
           borderRadius: RADIUS.lg,
           overflow: "hidden",
-          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.5)",
+          boxShadow: SHADOW.xl,
         }}
       >
         <div
@@ -442,9 +445,7 @@ function SettingsBasicsPanel({
   onOpenBriefing: () => void;
 }) {
   const lineCount = briefing ? briefing.split("\n").length : 0;
-  const briefingSummary = briefing
-    ? `${lineCount} line${lineCount === 1 ? "" : "s"}`
-    : "Not set";
+  const briefingSummary = briefing ? `${lineCount} line${lineCount === 1 ? "" : "s"}` : "Not set";
 
   const labelStyle = {
     fontSize: TYPE.scale.sm,
@@ -483,9 +484,7 @@ function SettingsBasicsPanel({
       {/* Briefing */}
       <div style={labelStyle}>Briefing</div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
-          {briefingSummary}
-        </span>
+        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{briefingSummary}</span>
         <Button variant="secondary" size="sm" onClick={onOpenBriefing}>
           Edit
         </Button>
@@ -564,7 +563,9 @@ function SettingsAccessPanel({
   onConnect?: AgentWorkspaceProps["onConnect"];
   onDisconnect?: AgentWorkspaceProps["onDisconnect"];
 }) {
-  const connectedProviders = new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider));
+  const connectedProviders = new Set(
+    connections.filter((connection) => connection.status === "active").map((connection) => connection.provider),
+  );
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -1009,9 +1010,7 @@ function PolicyApprovalRow({
         gap: 12,
       }}
     >
-      <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium, color: COLORS.text }}>
-        {tool.title}
-      </div>
+      <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium, color: COLORS.text }}>{tool.title}</div>
       <ModeSegmentedControl value={tool.approvalMode} onChange={onChange} />
     </div>
   );
@@ -1389,4 +1388,3 @@ function formatConditionValue(value: unknown): string {
 
   return String(value);
 }
-

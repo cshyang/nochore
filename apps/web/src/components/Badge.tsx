@@ -8,7 +8,7 @@ const colorMap: Record<BadgeColor, { bg: string; text: string }> = {
   yellow: { bg: COLORS.orangeDim, text: COLORS.orange },
   accent: { bg: COLORS.accentDim, text: COLORS.accent },
   red: { bg: COLORS.redDim, text: COLORS.red },
-  gray: { bg: "rgba(110, 106, 122, 0.12)", text: COLORS.textSecondary },
+  gray: { bg: COLORS.grayDim, text: COLORS.textSecondary },
   blue: { bg: COLORS.accentDim, text: COLORS.accent },
   read: { bg: COLORS.readDim, text: COLORS.read },
   write: { bg: COLORS.writeDim, text: COLORS.write },

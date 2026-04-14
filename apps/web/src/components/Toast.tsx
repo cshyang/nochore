@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { COLORS, MOTION, RADIUS } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, SHADOW } from "~/lib/colors";
 
 export interface ToastData {
   id: string;
@@ -50,7 +50,7 @@ export function Toast({ toast, onDismiss }: { toast: ToastData; onDismiss: (id: 
         alignItems: "center",
         gap: 10,
         maxWidth: 380,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+        boxShadow: SHADOW.md,
         transform: visible ? "translateX(0)" : "translateX(120%)",
         opacity: visible ? 1 : 0,
         transition: `all ${MOTION.durationSlow} ${MOTION.ease}`,
