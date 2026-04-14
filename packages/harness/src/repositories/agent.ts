@@ -11,6 +11,7 @@ import {
   NotificationConfigSchema,
   ToolConfigSchema,
 } from "../types";
+import { parseJson } from "./marshaling";
 
 type Db = HarnessDb;
 
@@ -135,12 +136,4 @@ function toAgentRecord(row: typeof agents.$inferSelect): AgentRecord {
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
   };
-}
-
-function parseJson<T>(value: string, fallback: T): T {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
 }
