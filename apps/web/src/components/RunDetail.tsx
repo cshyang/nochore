@@ -1,4 +1,13 @@
-import { CaretDown, CaretRight, CheckCircle, CircleNotch, ListBullets, Play, TextAlignLeft, WarningCircle } from "@phosphor-icons/react";
+import {
+  CaretDown,
+  CaretRight,
+  CheckCircle,
+  CircleNotch,
+  ListBullets,
+  Play,
+  TextAlignLeft,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,7 +18,10 @@ import { Button } from "~/components/Button";
 import { EventTimeline, type TimelineEvent } from "~/components/EventTimeline";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { narrateEvent } from "~/lib/narrate";
-import type { RunView, RunSummaryView, WorkItemView } from "~/lib/types";
+import { workItemStatusColor } from "~/lib/status-format";
+import { humanize } from "~/lib/text-format";
+import { formatDuration } from "~/lib/time-format";
+import type { RunSummaryView, RunView, WorkItemView } from "~/lib/types";
 
 interface RunDetailProps {
   run: RunView | null;
@@ -30,24 +42,6 @@ interface RunDetailProps {
 function extractFinding(run: RunView): string | null {
   const finding = run.events.find((e) => e.type === "finding_recorded");
   return (finding?.payload?.text as string) ?? null;
-}
-
-function formatDuration(start: string | undefined, end: string | undefined): string {
-  if (!start || !end) return "";
-  const seconds = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rem = minutes % 60;
-  return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
-}
-
-function humanize(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 function buildTimelineEvents(run: RunView): TimelineEvent[] {
@@ -79,7 +73,7 @@ function findLatestStopEvent(run: RunView) {
 }
 
 function findWorkItemForApproval(run: RunView, approval: RunView["approvals"][number]) {
-  return approval.workItemId ? run.workItems.find((item) => item.id === approval.workItemId) ?? null : null;
+  return approval.workItemId ? (run.workItems.find((item) => item.id === approval.workItemId) ?? null) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,23 +138,6 @@ function RunHeader({ run }: { run: RunView }) {
       </span>
     </div>
   );
-}
-
-function workItemStatusColor(status: string): "green" | "red" | "yellow" | "blue" | "gray" {
-  switch (status) {
-    case "completed":
-      return "green";
-    case "failed":
-      return "red";
-    case "stopped":
-    case "waiting_for_approval":
-    case "waiting_for_external":
-      return "yellow";
-    case "running":
-      return "blue";
-    default:
-      return "gray";
-  }
 }
 
 function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) {
@@ -433,17 +410,12 @@ export function RunDetail({
   const status = (run.status ?? "").toLowerCase();
   const finding = extractFinding(run);
   const actionableApprovals = getActionableApprovals(run);
-  const blockingApproval = actionableApprovals.find((approval) => approval.workItemId) ?? actionableApprovals[0] ?? null;
+  const blockingApproval =
+    actionableApprovals.find((approval) => approval.workItemId) ?? actionableApprovals[0] ?? null;
   const blockingWorkItem = blockingApproval ? findWorkItemForApproval(run, blockingApproval) : null;
   const stopEvent = findLatestStopEvent(run);
   const approvalArtifacts = (
-    <ApprovalArtifacts
-      run={run}
-      onRunNow={onRunNow}
-      onApprove={onApprove}
-      onReject={onReject}
-      onAskChat={onAskChat}
-    />
+    <ApprovalArtifacts run={run} onRunNow={onRunNow} onApprove={onApprove} onReject={onReject} onAskChat={onAskChat} />
   );
 
   // ── Coordinating children ──────────────────────────────────────────────
@@ -879,15 +851,15 @@ function ApprovalArtifacts({
         const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
 
         return (
-        <ApprovalCard
-          key={approval.id}
-          approval={approval}
-          title={title}
-          onApprove={onApprove ? (item) => onApprove(item.id, "Approved from run detail") : undefined}
-          onReject={onReject ? (item) => onReject(item.id, "Rejected from run detail") : undefined}
-          onAskChat={onAskChat}
-          onRerun={approval.status === "expired" && onRunNow ? () => onRunNow() : undefined}
-        />
+          <ApprovalCard
+            key={approval.id}
+            approval={approval}
+            title={title}
+            onApprove={onApprove ? (item) => onApprove(item.id, "Approved from run detail") : undefined}
+            onReject={onReject ? (item) => onReject(item.id, "Rejected from run detail") : undefined}
+            onAskChat={onAskChat}
+            onRerun={approval.status === "expired" && onRunNow ? () => onRunNow() : undefined}
+          />
         );
       })}
     </div>

@@ -5,6 +5,7 @@ import { Button } from "~/components/Button";
 import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, SHADOW, SPACE, TYPE } from "~/lib/colors";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
+import { humanize } from "~/lib/text-format";
 import type {
   ConnectionView,
   LearnedRuleView,
@@ -35,13 +36,6 @@ const SETTINGS_TAB_OPTIONS: Array<{ value: SettingsLocalTab; label: string }> = 
   { value: "access", label: "Access" },
   { value: "autonomy", label: "Autonomy" },
 ];
-
-function humanize(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 function getNotificationConfig(notificationConfig: NotificationConfigView | undefined): NotificationConfigView {
   return notificationConfig ?? { inApp: true, email: false, slack: false };

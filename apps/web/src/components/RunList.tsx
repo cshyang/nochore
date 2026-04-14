@@ -1,6 +1,8 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useState } from "react";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { statusColor, statusLabel } from "~/lib/status-format";
+import { formatDuration, formatTime } from "~/lib/time-format";
 import type { RunView } from "~/lib/types";
 
 interface RunListProps {
@@ -13,62 +15,6 @@ interface RunListProps {
 interface DateGroup {
   label: string;
   runs: RunView[];
-}
-
-function statusColor(run: RunView): string {
-  if (run.status === "waiting_for_children" && run.hasActionableApprovals) {
-    return COLORS.orange;
-  }
-
-  switch (run.status) {
-    case "completed":
-      return COLORS.green;
-    case "failed":
-      return COLORS.red;
-    case "stopped":
-      return COLORS.orange;
-    case "cancelled":
-      return COLORS.textSecondary;
-    case "waiting_for_approval":
-      return COLORS.orange;
-    case "waiting_for_children":
-      return COLORS.accent;
-    case "running":
-      return COLORS.accent;
-    case "queued":
-      return COLORS.textDim;
-    default:
-      return COLORS.textDim;
-  }
-}
-
-function formatDuration(start: string | undefined, end: string | undefined): string {
-  if (!start || !end) return "";
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
-  const seconds = Math.round((endMs - startMs) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function statusLabel(run: RunView): string {
-  if (run.status === "waiting_for_children" && run.hasActionableApprovals) return "needs input";
-  if (run.status === "waiting_for_approval") return "waiting";
-  if (run.status === "waiting_for_children") return "coordinating";
-  if (run.status === "stopped") return "stopped";
-  if (run.status === "cancelled") return "cancelled";
-  return run.status;
 }
 
 function getDateGroup(dateStr: string): string {

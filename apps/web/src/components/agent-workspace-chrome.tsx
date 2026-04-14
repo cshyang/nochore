@@ -1,12 +1,13 @@
+import { ArrowLeft, DotsThree, Info, Play } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { ArrowLeft, Info, DotsThree, Play } from "@phosphor-icons/react";
+import type { WorkspaceTab } from "~/components/agent-workspace.types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
-import type { WorkspaceTab } from "~/components/agent-workspace.types";
 import { Card } from "~/components/Card";
 import { formatAgentActivitySummary } from "~/lib/activity";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { getProviderMetadata } from "~/lib/provider-metadata";
+import { humanize } from "~/lib/text-format";
 import type { AgentView, ProjectView, ProviderRequirementView } from "~/lib/types";
 
 export type ChecklistItem = {
@@ -15,13 +16,6 @@ export type ChecklistItem = {
   hint?: string;
   action?: { label: string; onClick: () => void };
 };
-
-export function humanize(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 export function DraftChecklist({
   items,
@@ -223,9 +217,7 @@ export function AgentWorkspaceHeader({
             <Badge color="accent">
               {project.icon} {project.name}
             </Badge>
-            <Badge color={statusBadgeColor}>
-              {humanize(agent.status ?? (isDraft ? "draft" : "idle"))}
-            </Badge>
+            <Badge color={statusBadgeColor}>{humanize(agent.status ?? (isDraft ? "draft" : "idle"))}</Badge>
           </div>
           <h1
             style={{

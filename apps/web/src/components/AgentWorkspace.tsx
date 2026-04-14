@@ -7,13 +7,13 @@ import {
   AgentWorkspaceHeader,
   type ChecklistItem,
   FirstRunPrompt,
-  humanize,
   listProviderNames,
   WorkspaceTabs,
 } from "~/components/agent-workspace-chrome";
 import { AgentWorkspaceSettingsPanel } from "~/components/agent-workspace-settings";
 import { Button } from "~/components/Button";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { humanize } from "~/lib/text-format";
 import type { PendingActionView } from "~/lib/types";
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
@@ -266,7 +266,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 Run now
               </Button>
             ) : undefined
-            }
+          }
           moreOpen={moreOpen}
           onToggleMore={() => setMoreOpen((value) => !value)}
           onCloseMore={() => setMoreOpen(false)}
