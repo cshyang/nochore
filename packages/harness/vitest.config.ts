@@ -8,6 +8,8 @@ export default defineConfig({
       "src/persistence/__tests__/project.test.ts",
       "src/repositories/__tests__/repositories-v2.test.ts",
       "src/repositories/__tests__/marshaling.test.ts",
+      "src/repositories/__tests__/learned-rule.test.ts",
+      "src/repositories/__tests__/event.test.ts",
       "src/workspace/__tests__/store-v2.test.ts",
       "src/skills/__tests__/prompt-skills.test.ts",
       "src/skills/__tests__/executor.test.ts",
