@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { Button } from "~/components/Button";
 import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
@@ -28,14 +29,6 @@ const fieldStyle = {
 };
 
 type SettingsLocalTab = "basics" | "access" | "autonomy";
-
-type SettingsOverviewItem = {
-  tab: SettingsLocalTab;
-  title: string;
-  summary: string;
-  detail: string;
-  meta: string;
-};
 
 const SETTINGS_TAB_OPTIONS: Array<{ value: SettingsLocalTab; label: string }> = [
   { value: "basics", label: "Basics" },
@@ -87,20 +80,19 @@ export function AgentWorkspaceSettingsPanel({
 }) {
   const [localTab, setLocalTab] = useState<SettingsLocalTab>("basics");
   const [name, setName] = useState(agent.name);
-  const [description, setDescription] = useState(agent.description ?? "");
-  const [instructions, setInstructions] = useState(agent.instructions ?? "");
+  const [briefing, setBriefing] = useState(agent.instructions ?? agent.description ?? "");
   const [schedule, setSchedule] = useState(agent.schedule ?? "manual");
   const [selectedSkills, setSelectedSkills] = useState<string[]>(agent.skills ?? []);
   const [notificationConfig, setNotificationConfig] = useState(getNotificationConfig(agent.notificationConfig));
   const [primaryMetric, setPrimaryMetric] = useState(agent.primaryMetric ?? "");
   const [saving, setSaving] = useState(false);
   const [showProviderPicker, setShowProviderPicker] = useState(false);
+  const [briefingModalOpen, setBriefingModalOpen] = useState(false);
 
   useEffect(() => {
     setLocalTab("basics");
     setName(agent.name);
-    setDescription(agent.description ?? "");
-    setInstructions(agent.instructions ?? "");
+    setBriefing(agent.instructions ?? agent.description ?? "");
     setSchedule(agent.schedule ?? "manual");
     setSelectedSkills(agent.skills ?? []);
     setNotificationConfig(getNotificationConfig(agent.notificationConfig));
@@ -121,10 +113,6 @@ export function AgentWorkspaceSettingsPanel({
     () => new Set(connections.filter((connection) => connection.status === "active").map((connection) => connection.provider)),
     [connections],
   );
-  const activeConnections = useMemo(
-    () => connections.filter((connection) => connection.status === "active"),
-    [connections],
-  );
   const projectId = agent.projectId ?? "";
   const currentToolConfig = agent.toolConfig ?? { globalApprovalRequired: false, requiredProviders: [], tools: {} };
   const missingRequiredProviders = useMemo(
@@ -139,60 +127,25 @@ export function AgentWorkspaceSettingsPanel({
     await persist({ toolConfig: nextToolConfig });
   };
 
-  const overviewItems = useMemo(
-    () =>
-      buildSettingsOverview({
-        name,
-        schedule,
-        primaryMetric,
-        instructions,
-        activeConnectionsCount: activeConnections.length,
-        missingRequiredProvidersCount: missingRequiredProviders.length,
-        selectedSkillCount: selectedSkills.length,
-        enabledToolCount: policyTools.filter((tool) => tool.enabled).length,
-        globalApprovalRequired: currentToolConfig.globalApprovalRequired,
-        learnedRuleCount: learnedRules.length,
-        learnedRuleSuggestionCount: learnedRuleSuggestions.length,
-        notificationConfig,
-      }),
-    [
-      name,
-      schedule,
-      primaryMetric,
-      instructions,
-      activeConnections.length,
-      missingRequiredProviders.length,
-      selectedSkills.length,
-      policyTools,
-      currentToolConfig.globalApprovalRequired,
-      learnedRules.length,
-      learnedRuleSuggestions.length,
-      notificationConfig,
-    ],
-  );
-
   return (
-    <div style={{ display: "grid", gap: SPACE[5], paddingBottom: SPACE[5] }}>
-      <SettingsOverviewStrip items={overviewItems} activeTab={localTab} onChange={setLocalTab} />
+    <div style={{ display: "grid", gap: 18, paddingBottom: SPACE[5] }}>
       <SettingsLocalTabs activeTab={localTab} onChange={setLocalTab} />
 
       {localTab === "basics" ? (
         <SettingsBasicsPanel
           name={name}
-          description={description}
-          instructions={instructions}
+          briefing={briefing}
           schedule={schedule}
           primaryMetric={primaryMetric}
           saving={saving}
           onNameChange={setName}
-          onDescriptionChange={setDescription}
-          onInstructionsChange={setInstructions}
           onScheduleChange={(value) => {
             setSchedule(value);
             void persist({ schedule: value });
           }}
           onPrimaryMetricChange={setPrimaryMetric}
           onPersist={persist}
+          onOpenBriefing={() => setBriefingModalOpen(true)}
         />
       ) : null}
 
@@ -230,69 +183,24 @@ export function AgentWorkspaceSettingsPanel({
           onRevokeLearnedRule={onRevokeLearnedRule}
         />
       ) : null}
-    </div>
-  );
-}
 
-function SettingsOverviewStrip({
-  items,
-  activeTab,
-  onChange,
-}: {
-  items: SettingsOverviewItem[];
-  activeTab: SettingsLocalTab;
-  onChange: (tab: SettingsLocalTab) => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        gap: 12,
-      }}
-    >
-      {items.map((item) => {
-        const isActive = item.tab === activeTab;
-        return (
-          <button
-            key={item.tab}
-            type="button"
-            onClick={() => onChange(item.tab)}
-            style={{
-              padding: "14px 16px",
-              borderRadius: RADIUS.lg,
-              border: `1px solid ${isActive ? COLORS.accentBorder : COLORS.border}`,
-              background: isActive ? COLORS.accentSubtle : COLORS.surface,
-              color: COLORS.text,
-              textAlign: "left",
-              cursor: "pointer",
-              display: "grid",
-              gap: 6,
-              minHeight: 138,
-              transition: `border-color ${MOTION.duration} ${MOTION.ease}, background ${MOTION.duration} ${MOTION.ease}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: TYPE.scale.xs,
-                fontWeight: TYPE.weight.semibold,
-                letterSpacing: TYPE.tracking.wide,
-                textTransform: "uppercase",
-                color: isActive ? COLORS.accentBright : COLORS.textDim,
-              }}
-            >
-              {item.title}
-            </div>
-            <div style={{ fontSize: TYPE.scale.md, fontWeight: TYPE.weight.semibold, lineHeight: TYPE.leading.snug }}>
-              {item.summary}
-            </div>
-            <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
-              {item.detail}
-            </div>
-            <div style={{ marginTop: "auto", fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{item.meta}</div>
-          </button>
-        );
-      })}
+      {briefingModalOpen ? (
+        <BriefingModal
+          value={briefing}
+          saving={saving}
+          onChange={setBriefing}
+          onSave={(value) => {
+            const firstLine = value.split("\n")[0].trim();
+            const description = firstLine.length > 200 ? `${firstLine.slice(0, 197)}...` : firstLine;
+            void persist({ instructions: value, description });
+            setBriefingModalOpen(false);
+          }}
+          onClose={() => {
+            setBriefing(agent.instructions ?? agent.description ?? "");
+            setBriefingModalOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -311,191 +219,318 @@ function SettingsLocalTabs({
         top: 0,
         zIndex: 2,
         background: COLORS.bg,
-        paddingTop: 4,
+        paddingTop: 8,
+        paddingBottom: 4,
       }}
     >
       <div
         style={{
-          display: "flex",
-          gap: 24,
-          overflowX: "auto",
-          borderBottom: `1px solid ${COLORS.border}`,
-          scrollbarWidth: "thin",
+          display: "inline-flex",
+          gap: 4,
+          padding: 4,
+          background: COLORS.bgRaised,
+          borderRadius: RADIUS.md,
         }}
       >
-        {SETTINGS_TAB_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: "12px 0",
-              marginBottom: -1,
-              cursor: "pointer",
-              color: activeTab === option.value ? COLORS.text : COLORS.textDim,
-              borderBottom: `2px solid ${activeTab === option.value ? COLORS.accent : "transparent"}`,
-              fontWeight: TYPE.weight.medium,
-              fontSize: TYPE.scale.sm,
-              fontFamily: TYPE.body,
-              whiteSpace: "nowrap",
-              transition: `color ${MOTION.duration} ${MOTION.ease}`,
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
+        {SETTINGS_TAB_OPTIONS.map((option) => {
+          const isActive = activeTab === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              style={{
+                background: isActive ? COLORS.surface : "transparent",
+                border: isActive ? `1px solid ${COLORS.border}` : "1px solid transparent",
+                borderRadius: RADIUS.sm,
+                padding: "6px 14px",
+                cursor: "pointer",
+                color: isActive ? COLORS.text : COLORS.textDim,
+                fontWeight: isActive ? TYPE.weight.semibold : TYPE.weight.medium,
+                fontSize: TYPE.scale.xs,
+                fontFamily: TYPE.body,
+                whiteSpace: "nowrap",
+                transition: `all ${MOTION.duration} ${MOTION.ease}`,
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function BriefingModal({
+  value,
+  saving,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  value: string;
+  saving: boolean;
+  onChange: (value: string) => void;
+  onSave: (value: string) => void;
+  onClose: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 40,
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.6)",
+          border: "none",
+          cursor: "default",
+          zIndex: 0,
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+          width: "100%",
+          maxWidth: 860,
+          height: "min(85vh, 720px)",
+          display: "flex",
+          flexDirection: "column",
+          background: COLORS.surface,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: RADIUS.lg,
+          overflow: "hidden",
+          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.5)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "18px 24px",
+            borderBottom: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: TYPE.scale.md,
+                fontWeight: TYPE.weight.semibold,
+                fontFamily: TYPE.display,
+                color: COLORS.text,
+              }}
+            >
+              Briefing
+            </div>
+            <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 2 }}>
+              Tell the agent what to do, what to optimize for, and how to think.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: COLORS.textDim,
+              fontSize: 18,
+              cursor: "pointer",
+              padding: "4px 8px",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0, padding: 24, display: "flex", flexDirection: "column" }}>
+          <textarea
+            ref={textareaRef}
+            className="textarea"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Describe the agent's job, what it should optimize for, what to avoid, and any domain-specific context it needs."
+            style={{
+              ...fieldStyle,
+              flex: 1,
+              resize: "none",
+              lineHeight: TYPE.leading.loose,
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "16px 24px",
+            borderTop: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
+            {saving ? "Saving..." : "This becomes the agent's working prompt."}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => onSave(value)}>
+              Save briefing
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function SettingsBasicsPanel({
   name,
-  description,
-  instructions,
+  briefing,
   schedule,
   primaryMetric,
   saving,
   onNameChange,
-  onDescriptionChange,
-  onInstructionsChange,
   onScheduleChange,
   onPrimaryMetricChange,
   onPersist,
+  onOpenBriefing,
 }: {
   name: string;
-  description: string;
-  instructions: string;
+  briefing: string;
   schedule: string;
   primaryMetric: string;
   saving: boolean;
   onNameChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  onInstructionsChange: (value: string) => void;
   onScheduleChange: (value: string) => void;
   onPrimaryMetricChange: (value: string) => void;
   onPersist: (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => Promise<void>;
+  onOpenBriefing: () => void;
 }) {
-  return (
-    <div style={{ display: "grid", gap: 18 }}>
-      <SectionHeading>Outcome</SectionHeading>
-      <SettingsCard>
-        <SettingsRow icon="✦" title="Name" description="How the workspace refers to this agent." defaultExpanded>
-          <input
-            className="input"
-            value={name}
-            onChange={(event) => onNameChange(event.target.value)}
-            onBlur={() => void onPersist({ name })}
-            style={fieldStyle}
-          />
-        </SettingsRow>
-        <SettingsRow
-          icon="◌"
-          title="Description"
-          description="A concise summary of the agent's job."
-          defaultExpanded
-          isLast
-        >
-          <textarea
-            className="textarea"
-            value={description}
-            onChange={(event) => onDescriptionChange(event.target.value)}
-            onBlur={() => void onPersist({ description })}
-            rows={4}
-            style={{ ...fieldStyle, minHeight: 120, resize: "vertical" }}
-          />
-        </SettingsRow>
-      </SettingsCard>
+  const lineCount = briefing ? briefing.split("\n").length : 0;
+  const briefingSummary = briefing
+    ? `${lineCount} line${lineCount === 1 ? "" : "s"}`
+    : "Not set";
 
-      <SectionHeading>Strategy</SectionHeading>
-      <SettingsCard>
-        <SettingsRow
-          icon="⟡"
-          title="Strategy note"
-          description="Tell the agent what to optimize for, what to avoid, and how to think."
-          defaultExpanded
-          isLast
-        >
-          <textarea
-            className="textarea"
-            value={instructions}
-            onChange={(event) => onInstructionsChange(event.target.value)}
-            onBlur={() => void onPersist({ instructions })}
-            placeholder="Tell the agent what to optimize for, what to avoid, and how to think."
-            rows={12}
-            style={{ ...fieldStyle, minHeight: 220, resize: "vertical" }}
-          />
-          <div
+  const labelStyle = {
+    fontSize: TYPE.scale.sm,
+    fontWeight: TYPE.weight.medium,
+    color: COLORS.text,
+    fontFamily: TYPE.body,
+    paddingTop: 8,
+  } as const;
+
+  const hintStyle = {
+    fontSize: TYPE.scale.xs,
+    color: COLORS.textDim,
+    marginTop: 2,
+  } as const;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "120px 1fr",
+        gap: "16px 20px",
+        alignItems: "start",
+        paddingTop: 8,
+      }}
+    >
+      {/* Name */}
+      <div style={labelStyle}>Name</div>
+      <input
+        className="input"
+        value={name}
+        onChange={(event) => onNameChange(event.target.value)}
+        onBlur={() => void onPersist({ name })}
+        style={fieldStyle}
+      />
+
+      {/* Briefing */}
+      <div style={labelStyle}>Briefing</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
+          {briefingSummary}
+        </span>
+        <Button variant="secondary" size="sm" onClick={onOpenBriefing}>
+          Edit
+        </Button>
+      </div>
+
+      {/* Schedule */}
+      <div style={labelStyle}>Schedule</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
+          <button
+            type="button"
+            className="pill"
+            key={value}
+            onClick={() => onScheduleChange(value)}
             style={{
-              marginTop: 10,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
+              fontFamily: TYPE.body,
+              padding: "5px 12px",
+              borderRadius: RADIUS.pill,
+              border: `1px solid ${schedule === value ? COLORS.accent : COLORS.border}`,
+              background: schedule === value ? COLORS.accentDim : "transparent",
+              color: schedule === value ? COLORS.accent : COLORS.textSecondary,
+              fontSize: TYPE.scale.xs,
+              fontWeight: TYPE.weight.medium,
+              cursor: "pointer",
+              transition: `all ${MOTION.duration} ${MOTION.ease}`,
             }}
           >
-            <span style={{ color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
-              {saving ? "Saving changes..." : "The instructions become the agent's working prompt."}
-            </span>
-            <Button variant="secondary" size="sm" onClick={() => void onPersist({ instructions, description, name })}>
-              Save instructions
-            </Button>
-          </div>
-        </SettingsRow>
-      </SettingsCard>
+            {humanize(value)}
+          </button>
+        ))}
+      </div>
 
-      <SectionHeading>Cadence</SectionHeading>
-      <SettingsCard>
-        <SettingsRow icon="◷" title="Schedule" value={humanize(schedule)} defaultExpanded isLast>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {["manual", "hourly", "6hours", "daily", "weekly"].map((value) => (
-              <button
-                type="button"
-                className="pill"
-                key={value}
-                onClick={() => onScheduleChange(value)}
-                style={{
-                  fontFamily: TYPE.body,
-                  padding: "6px 14px",
-                  borderRadius: RADIUS.pill,
-                  border: `1px solid ${schedule === value ? COLORS.accent : COLORS.border}`,
-                  background: schedule === value ? COLORS.accentDim : "transparent",
-                  color: schedule === value ? COLORS.accent : COLORS.textSecondary,
-                  fontSize: TYPE.scale.xs,
-                  fontWeight: TYPE.weight.medium,
-                  cursor: "pointer",
-                  transition: `all ${MOTION.duration} ${MOTION.ease}`,
-                }}
-              >
-                {humanize(value)}
-              </button>
-            ))}
-          </div>
-        </SettingsRow>
-      </SettingsCard>
-
-      <SectionHeading>Success Metric</SectionHeading>
-      <SettingsCard>
-        <SettingsRow
-          icon="◎"
-          title="Primary metric"
-          description="The comparability key that identifies which observed metric to track. Your agent will emit metric observations during runs."
-          defaultExpanded
-          isLast
-        >
-          <input
-            className="input"
-            value={primaryMetric}
-            onChange={(event) => onPrimaryMetricChange(event.target.value)}
-            onBlur={() => void onPersist({ primaryMetric })}
-            placeholder="e.g., qualified_cpa|last_7_days|account"
-            style={{ ...fieldStyle, fontFamily: TYPE.mono, fontSize: TYPE.scale.sm }}
-          />
-        </SettingsRow>
-      </SettingsCard>
+      {/* Primary metric */}
+      <div>
+        <div style={labelStyle}>Metric key</div>
+        <div style={hintStyle}>Tracked across runs</div>
+      </div>
+      <input
+        className="input"
+        value={primaryMetric}
+        onChange={(event) => onPrimaryMetricChange(event.target.value)}
+        onBlur={() => void onPersist({ primaryMetric })}
+        placeholder="e.g., qualified_cpa|last_7_days|account"
+        style={{ ...fieldStyle, fontFamily: TYPE.mono, fontSize: TYPE.scale.sm }}
+      />
     </div>
   );
 }
@@ -896,69 +931,6 @@ function SettingsAutonomyPanel({
       </SettingsCard>
     </div>
   );
-}
-
-function buildSettingsOverview({
-  name,
-  schedule,
-  primaryMetric,
-  instructions,
-  activeConnectionsCount,
-  missingRequiredProvidersCount,
-  selectedSkillCount,
-  enabledToolCount,
-  globalApprovalRequired,
-  learnedRuleCount,
-  learnedRuleSuggestionCount,
-  notificationConfig,
-}: {
-  name: string;
-  schedule: string;
-  primaryMetric: string;
-  instructions: string;
-  activeConnectionsCount: number;
-  missingRequiredProvidersCount: number;
-  selectedSkillCount: number;
-  enabledToolCount: number;
-  globalApprovalRequired: boolean;
-  learnedRuleCount: number;
-  learnedRuleSuggestionCount: number;
-  notificationConfig: NotificationConfigView;
-}): SettingsOverviewItem[] {
-  const notificationSummary = getEnabledNotificationLabels(notificationConfig);
-  const metricLabel = getPrimaryMetricLabel(primaryMetric);
-
-  return [
-    {
-      tab: "basics",
-      title: "Basics",
-      summary: name.trim() || "Untitled Agent",
-      detail: `${humanize(schedule)} cadence · ${metricLabel}`,
-      meta: instructions.trim()
-        ? truncateText(instructions.trim().replace(/\s+/g, " "), 92)
-        : "Add a strategy note so the agent knows what to optimize for.",
-    },
-    {
-      tab: "access",
-      title: "Access",
-      summary: `${activeConnectionsCount} ${pluralize(activeConnectionsCount, "system")} connected`,
-      detail:
-        missingRequiredProvidersCount > 0
-          ? `${missingRequiredProvidersCount} required ${pluralize(missingRequiredProvidersCount, "provider")} missing`
-          : "All required systems are connected",
-      meta: `${selectedSkillCount} ${pluralize(selectedSkillCount, "skill")} enabled · ${enabledToolCount} ${pluralize(enabledToolCount, "tool")} available`,
-    },
-    {
-      tab: "autonomy",
-      title: "Autonomy",
-      summary: globalApprovalRequired ? "All write actions require approval" : "Per-tool approval rules active",
-      detail:
-        learnedRuleSuggestionCount > 0
-          ? `${learnedRuleCount} learned ${pluralize(learnedRuleCount, "rule")} · ${learnedRuleSuggestionCount} pending ${pluralize(learnedRuleSuggestionCount, "suggestion")}`
-          : `${learnedRuleCount} learned ${pluralize(learnedRuleCount, "rule")}`,
-      meta: notificationSummary.length > 0 ? notificationSummary.join(", ") : "No notification channels enabled",
-    },
-  ];
 }
 
 function PolicyHeaderRow({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
@@ -1418,27 +1390,3 @@ function formatConditionValue(value: unknown): string {
   return String(value);
 }
 
-function getPrimaryMetricLabel(primaryMetric: string): string {
-  const key = primaryMetric.split("|")[0]?.trim();
-  return key ? humanize(key) : "No primary metric";
-}
-
-function getEnabledNotificationLabels(config: NotificationConfigView): string[] {
-  const labels: string[] = [];
-  if (config.inApp) labels.push("In-app");
-  if (config.email) labels.push("Email");
-  if (config.slack) labels.push("Slack");
-  return labels;
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return count === 1 ? singular : plural;
-}
-
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}

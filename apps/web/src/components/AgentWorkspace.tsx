@@ -236,7 +236,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         className="aw-shell"
         style={{
           background: `radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 32%), linear-gradient(180deg, ${COLORS.bg} 0%, ${COLORS.bg} 100%)`,
-          padding: "28px clamp(20px, 3vw, 40px) 40px",
+          padding: "8px clamp(20px, 3vw, 40px) 16px",
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",

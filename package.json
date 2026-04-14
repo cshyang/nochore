@@ -15,7 +15,7 @@
     "format": "biome format --fix ."
   },
   "dependencies": {
-    "@composio/core": "^0.6.7",
+    "@composio/core": "^0.6.10",
     "@composio/vercel": "^0.6.7",
     "@mariozechner/pi-coding-agent": "^0.62.0",
     "@trigger.dev/sdk": "^4.4.3",

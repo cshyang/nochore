@@ -195,7 +195,7 @@ export function AgentWorkspaceHeader({
         justifyContent: "space-between",
         gap: 18,
         flexWrap: "wrap",
-        marginBottom: 18,
+        marginBottom: 10,
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 16, minWidth: 0 }}>
@@ -219,7 +219,7 @@ export function AgentWorkspaceHeader({
           <ArrowLeft size={16} />
         </button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
             <Badge color="accent">
               {project.icon} {project.name}
             </Badge>
@@ -242,11 +242,11 @@ export function AgentWorkspaceHeader({
           </h1>
           <p
             style={{
-              margin: "8px 0 0",
+              margin: "4px 0 0",
               color: COLORS.textSecondary,
               maxWidth: 780,
               lineHeight: TYPE.leading.normal,
-              fontSize: TYPE.scale.base,
+              fontSize: TYPE.scale.sm,
               fontFamily: TYPE.body,
             }}
           >
@@ -338,7 +338,7 @@ export function WorkspaceTabs({
   requiredProviders: number;
 }) {
   return (
-    <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 22 }}>
+    <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 14 }}>
       {(["runs", "chat", "learned", "settings"] as const).map((item) => (
         <button
           type="button"
