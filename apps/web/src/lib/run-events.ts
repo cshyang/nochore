@@ -1,6 +1,5 @@
-import type { TimelineEvent } from "~/components/EventTimeline";
 import { narrateEvent } from "./narrate";
-import type { PendingActionView, RunView, WorkItemView } from "./types";
+import type { PendingActionView, RunView, TimelineEvent, WorkItemView } from "./types";
 
 export function extractFinding(run: RunView): string | null {
   const finding = run.events.find((e) => e.type === "finding_recorded");

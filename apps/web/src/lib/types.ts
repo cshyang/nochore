@@ -146,6 +146,13 @@ export interface RunEventView {
   payload: Record<string, unknown>;
 }
 
+export interface TimelineEvent {
+  id: string;
+  type: string;
+  summary: string;
+  timestamp: number; // epoch ms
+}
+
 export interface WorkItemView {
   id: string;
   parentRunId: string;

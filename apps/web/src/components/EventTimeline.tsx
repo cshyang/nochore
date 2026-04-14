@@ -2,15 +2,9 @@ import { ArrowRight, Check, CircleNotch, Lightning, Warning } from "@phosphor-ic
 import type { CSSProperties } from "react";
 import { Badge } from "~/components/Badge";
 import { COLORS, RADIUS } from "~/lib/colors";
+import type { TimelineEvent } from "~/lib/types";
 
-// --- Types ---
-
-export interface TimelineEvent {
-  id: string;
-  type: string;
-  summary: string;
-  timestamp: number; // epoch ms
-}
+export type { TimelineEvent };
 
 export interface EventTimelineProps {
   events: TimelineEvent[];
