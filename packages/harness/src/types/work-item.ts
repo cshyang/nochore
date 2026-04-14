@@ -5,6 +5,7 @@ export const WorkItemStatusSchema = z.enum([
   "running",
   "waiting_for_approval",
   "waiting_for_external",
+  "stopped",
   "completed",
   "failed",
   "cancelled",

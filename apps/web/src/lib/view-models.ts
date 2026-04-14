@@ -102,6 +102,7 @@ const PendingActionViewSchema = z.object({
   id: z.string(),
   runId: z.string(),
   agentId: z.string(),
+  workItemId: z.string().optional(),
   proposal: z.object({
     id: z.string(),
     toolName: z.string(),
@@ -131,13 +132,16 @@ const WorkItemViewSchema = z.object({
   completedAt: z.string().optional(),
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
+  blockingReason: z.string().optional(),
+  error: z.string().optional(),
 });
 
 const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   triggerType: z.string(),
-  status: z.enum(["queued", "running", "waiting_for_approval", "waiting_for_children", "completed", "failed", "cancelled"]),
+  status: z.enum(["queued", "running", "waiting_for_approval", "waiting_for_children", "stopped", "completed", "failed", "cancelled"]),
+  hasActionableApprovals: z.boolean().default(false),
   startedAt: z.string(),
   completedAt: z.string().optional(),
   error: z.string().optional(),
@@ -149,9 +153,7 @@ const RunViewSchema = z.object({
   summary: RunSummaryViewSchema.optional(),
 });
 
-const RunActivityStateViewSchema = RunViewSchema.extend({
-  approvals: z.array(ActionableApprovalStateViewSchema).default([]),
-});
+const RunActivityStateViewSchema = RunViewSchema;
 
 const SkillViewSchema = z.object({
   id: z.string(),

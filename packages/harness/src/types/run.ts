@@ -9,6 +9,7 @@ export const RunStatusSchema = z.enum([
   "running",
   "waiting_for_approval",
   "waiting_for_children",
+  "stopped",
   "completed",
   "failed",
   "cancelled",
@@ -75,6 +76,7 @@ export const RunEventTypeSchema = z.enum([
   "sub_run_completed",
   "metric_observed",
   "run_completed",
+  "run_stopped",
   "run_cancelled",
   "run_failed",
 ]);

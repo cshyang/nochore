@@ -18,7 +18,7 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
       buildSerializedRun(
         run,
         await deps.runEventRepository.listByRun(run.id),
-        (await deps.approvalRepository.listByRun(run.id)).filter(isActionableApproval),
+        await deps.approvalRepository.listByRun(run.id),
         await deps.workItemRepository.listByParentRun(run.id),
       ),
     ),

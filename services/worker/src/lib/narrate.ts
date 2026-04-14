@@ -25,6 +25,7 @@ export type RunEventType =
   | "sub_run_started"
   | "sub_run_completed"
   | "run_completed"
+  | "run_stopped"
   | "run_cancelled"
   | "run_failed";
 
@@ -90,7 +91,7 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
 
     case "tool_approval_resolved": {
       const name = payload.toolName as string | undefined;
-      const status = payload.status as string | undefined;
+      const status = (payload.status as string | undefined) ?? (payload.decision as string | undefined);
       return `${humanizeToolName(name ?? "unknown")} ${status ?? "resolved"}`;
     }
 
@@ -141,6 +142,10 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
 
     case "sub_run_completed": {
       const role = payload.role as string | undefined;
+      const outcome = payload.outcome as string | undefined;
+      if (outcome === "stopped") {
+        return `${titleCase(role ?? "Specialist")} stopped awaiting human input`;
+      }
       const success = payload.success as boolean | undefined;
       return `${titleCase(role ?? "Specialist")} ${success !== false ? "completed" : "failed"}`;
     }
@@ -149,6 +154,13 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
       const summary = payload.summary as { headline?: string; status?: string } | undefined;
       const headline = summary?.headline;
       return headline ? `Completed -- ${truncate(headline, 170)}` : "Run completed";
+    }
+
+    case "run_stopped": {
+      const cause = payload.cause as string | undefined;
+      const reason = payload.reason as string | undefined;
+      const prefix = cause === "approval_expired" ? "Run stopped waiting for approval" : "Run stopped by human";
+      return reason ? `${prefix} -- ${truncate(reason, 140)}` : prefix;
     }
 
     case "run_cancelled": {

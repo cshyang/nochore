@@ -42,6 +42,7 @@ export class WorkItemRepository {
       .set({
         status: "running",
         startedAt: Date.now(),
+        blockingReason: null,
         ...(triggerTaskRunId ? { triggerTaskRunId } : {}),
       })
       .where(eq(workItems.id, id))
@@ -67,6 +68,7 @@ export class WorkItemRepository {
       .set({
         status: "completed",
         completedAt: completedAt.getTime(),
+        blockingReason: null,
         result: result ?? null,
         ...(tokens?.inputTokens != null ? { inputTokens: tokens.inputTokens } : {}),
         ...(tokens?.outputTokens != null ? { outputTokens: tokens.outputTokens } : {}),
@@ -81,6 +83,20 @@ export class WorkItemRepository {
       .set({
         status: "failed",
         completedAt: completedAt.getTime(),
+        blockingReason: null,
+        error,
+      })
+      .where(eq(workItems.id, id))
+      .run();
+  }
+
+  async stop(id: string, completedAt: Date, error: string): Promise<void> {
+    this.db
+      .update(workItems)
+      .set({
+        status: "stopped",
+        completedAt: completedAt.getTime(),
+        blockingReason: null,
         error,
       })
       .where(eq(workItems.id, id))
@@ -93,6 +109,7 @@ export class WorkItemRepository {
       .set({
         status: "cancelled",
         completedAt: completedAt.getTime(),
+        blockingReason: null,
       })
       .where(eq(workItems.id, id))
       .run();
@@ -142,7 +159,7 @@ function toWorkItemRecord(row: typeof workItems.$inferSelect): WorkItemRecord {
     role: row.role,
     title: row.title,
     status: WorkItemStatusSchema.parse(row.status),
-    blockingReason: row.blockingReason as WorkItemRecord["blockingReason"],
+    blockingReason: (row.blockingReason ?? undefined) as WorkItemRecord["blockingReason"],
     error: row.error ?? undefined,
     result: row.result ?? undefined,
     triggerTaskRunId: row.triggerTaskRunId ?? undefined,

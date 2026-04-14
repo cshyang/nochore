@@ -141,11 +141,23 @@ export const agentRunTask = task({
               };
             }
 
+            const output = result.output;
+            if (output.status === "stopped") {
+              await handleStoppedSubRun({
+                runtime,
+                runId,
+                agentId: agent.id,
+                role,
+                workItemId,
+                result: output,
+                eventIds,
+              });
+            }
             await runtime.runRepository.markRunning(runId);
             metadata.set("status", "running");
-            const output = result.output;
             const completePayload = {
               role,
+              outcome: "completed",
               success: true,
               outputLength: output.output.length,
               workItemId,
@@ -158,6 +170,10 @@ export const agentRunTask = task({
               details: { role, success: true, durationMs: output.durationMs, workItemId },
             };
           } catch (err) {
+            if (err instanceof ApprovalCheckpointError) {
+              throw err;
+            }
+
             await runtime.runRepository.markRunning(runId);
             metadata.set("status", "running");
             const errorMsg = err instanceof Error ? err.message : String(err);
@@ -352,6 +368,19 @@ export const agentRunTask = task({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isApprovalTerminal = error instanceof ApprovalCheckpointError;
+
+      if (isApprovalTerminal) {
+        await stopRunForApproval({
+          runtime,
+          runId,
+          agentId: agent.id,
+          error,
+          eventIds,
+        });
+        logger.info("Agent run stopped", { runId, agentId: agent.id, reason: message, cause: error.stopCause });
+        return { runId, agentId: agent.id, stopped: true };
+      }
+
       const summary = buildSummary({
         status: "failed",
         finalText: "",
@@ -368,13 +397,60 @@ export const agentRunTask = task({
       await runtime.runRepository.fail(runId, new Date(), message, summary);
       await recordRunResultInConversation(runtime, agent.id, summary);
       logger.error("Agent run failed", { runId, agentId: agent.id, error: message });
-      if (!isApprovalTerminal) {
-        throw error;
-      }
-      return { runId, agentId: agent.id, summary };
+      throw error;
     }
   },
 });
+
+export async function stopRunForApproval(params: {
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  runId: string;
+  agentId: string;
+  error: ApprovalCheckpointError;
+  eventIds: string[];
+  metadataApi?: { set: (key: string, value: string) => void };
+}) {
+  const stopPayload = {
+    cause: params.error.stopCause,
+    reason: params.error.message,
+    ...(params.error.approvalId ? { approvalId: params.error.approvalId } : {}),
+    ...(params.error.workItemId ? { workItemId: params.error.workItemId } : {}),
+  };
+  const stopId = await recordEvent(params.runtime, params.runId, params.agentId, "run_stopped", stopPayload);
+  params.eventIds.push(stopId);
+  await params.runtime.runRepository.stop(params.runId, new Date(), params.error.message);
+  (params.metadataApi ?? metadata).set("status", "stopped");
+}
+
+export async function handleStoppedSubRun(params: {
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  runId: string;
+  agentId: string;
+  role: string;
+  workItemId: string;
+  result: Extract<WorkerRunResult, { status: "stopped" }>;
+  eventIds: string[];
+}): Promise<never> {
+  const stopPayload = {
+    role: params.role,
+    outcome: "stopped",
+    success: false,
+    cause: params.result.cause,
+    reason: params.result.reason,
+    workItemId: params.workItemId,
+    ...(params.result.approvalId ? { approvalId: params.result.approvalId } : {}),
+  };
+  const eventId = await recordEvent(params.runtime, params.runId, params.agentId, "sub_run_completed", stopPayload);
+  params.eventIds.push(eventId);
+  throw new ApprovalCheckpointError(
+    params.result.reason ?? "A specialist run stopped awaiting human input",
+    params.result.cause === "approval_expired" ? "expired" : "rejected",
+    {
+      approvalId: params.result.approvalId,
+      workItemId: params.workItemId,
+    },
+  );
+}
 
 async function ensureRunRecord(
   runtime: Awaited<ReturnType<typeof createWorkerRuntime>>,

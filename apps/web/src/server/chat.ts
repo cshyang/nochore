@@ -43,6 +43,8 @@ export const getChatHistory = createServerFn({ method: "GET" })
         content:
           run.status === "failed"
             ? (run.error ?? "The run failed.")
+            : run.status === "stopped"
+              ? (run.error ?? "The run was stopped.")
             : run.status === "cancelled"
               ? (run.error ?? "The run was cancelled.")
               : `Run ${run.status} via ${run.triggerType}.`,

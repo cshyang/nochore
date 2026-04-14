@@ -38,9 +38,11 @@ export async function approveActionWithResolution(params: {
     payload: {
       approvalId: approval.id,
       decision: params.decision,
+      status: params.decision,
       reason: params.reason,
       toolName: approval.toolName,
       toolInput: approval.toolInput,
+      ...(approval.workItemId ? { workItemId: approval.workItemId } : {}),
     },
   });
 

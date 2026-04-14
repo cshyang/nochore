@@ -15,16 +15,24 @@ interface DateGroup {
   runs: RunView[];
 }
 
-function statusColor(status: string): string {
-  switch (status) {
+function statusColor(run: RunView): string {
+  if (run.status === "waiting_for_children" && run.hasActionableApprovals) {
+    return COLORS.orange;
+  }
+
+  switch (run.status) {
     case "completed":
       return COLORS.green;
     case "failed":
       return COLORS.red;
-    case "cancelled":
+    case "stopped":
       return COLORS.orange;
+    case "cancelled":
+      return COLORS.textSecondary;
     case "waiting_for_approval":
       return COLORS.orange;
+    case "waiting_for_children":
+      return COLORS.accent;
     case "running":
       return COLORS.accent;
     case "queued":
@@ -54,10 +62,13 @@ function formatTime(dateStr: string): string {
   });
 }
 
-function statusLabel(status: string): string {
-  if (status === "waiting_for_approval") return "waiting";
-  if (status === "cancelled") return "cancelled";
-  return status;
+function statusLabel(run: RunView): string {
+  if (run.status === "waiting_for_children" && run.hasActionableApprovals) return "needs input";
+  if (run.status === "waiting_for_approval") return "waiting";
+  if (run.status === "waiting_for_children") return "coordinating";
+  if (run.status === "stopped") return "stopped";
+  if (run.status === "cancelled") return "cancelled";
+  return run.status;
 }
 
 function getDateGroup(dateStr: string): string {
@@ -173,7 +184,7 @@ function CollapsedRail({
         }}
       >
         {runs.map((run, index) => {
-          const color = statusColor(run.status);
+          const color = statusColor(run);
           const isSelected = run.id === selectedRunId;
           const isRunning = run.status === "running" || run.id === activeRunId;
           const isHovered = run.id === hoveredId;
@@ -354,11 +365,11 @@ function ExpandedList({
               const isSelected = run.id === selectedRunId;
               const isHovered = run.id === hoveredId;
               const isRunning = run.status === "running" || run.id === activeRunId;
-              const color = statusColor(run.status);
+              const color = statusColor(run);
 
               const duration = formatDuration(run.startedAt, run.completedAt);
               const trigger = run.triggerType ?? "manual";
-              const label = statusLabel(run.status);
+              const label = statusLabel(run);
 
               const bottomParts = [label, trigger];
               if (duration) bottomParts.push(duration);

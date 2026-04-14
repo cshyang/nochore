@@ -18,17 +18,6 @@ export async function startAgentRun(params: {
     startedAt: new Date(),
     status: "queued",
   });
-  await runEventRepository.append({
-    runId,
-    agentId: params.agentId,
-    timestamp: new Date(),
-    type: "run_started",
-    payload: {
-      triggerType: params.trigger.type,
-      trigger: params.trigger,
-    },
-  });
-
   try {
     const handle = await tasks.trigger("agent-run", {
       agentId: params.agentId,

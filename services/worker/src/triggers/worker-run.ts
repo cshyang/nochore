@@ -26,13 +26,39 @@ export interface WorkerRunPayload {
   agentInstructions: string;
 }
 
-export interface WorkerRunResult {
+export interface WorkerRunCompletedResult {
   workItemId: string;
+  status: "completed";
   output: string;
   durationMs: number;
   toolCallCount: number;
   inputTokens: number;
   outputTokens: number;
+}
+
+export interface WorkerRunStoppedResult {
+  workItemId: string;
+  status: "stopped";
+  output: string;
+  durationMs: number;
+  toolCallCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cause: ApprovalCheckpointError["stopCause"];
+  reason: string;
+  approvalId?: string;
+}
+
+export type WorkerRunResult = WorkerRunCompletedResult | WorkerRunStoppedResult;
+
+export async function stopWorkItemForApproval(params: {
+  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  workItemId: string;
+  error: ApprovalCheckpointError;
+  metadataApi?: { set: (key: string, value: string) => void };
+}) {
+  await params.runtime.workItemRepository.stop(params.workItemId, new Date(), params.error.message);
+  (params.metadataApi ?? metadata).set("status", "stopped");
 }
 
 export const workerRunTask = task({
@@ -210,6 +236,7 @@ export const workerRunTask = task({
 
       return {
         workItemId: payload.workItemId,
+        status: "completed",
         output: result.output,
         durationMs: result.durationMs,
         toolCallCount: result.toolCalls.length,
@@ -220,27 +247,45 @@ export const workerRunTask = task({
       const message = error instanceof Error ? error.message : String(error);
       const isApprovalTerminal = error instanceof ApprovalCheckpointError;
 
-      await runtime.workItemRepository.fail(payload.workItemId, new Date(), message);
-      metadata.set("status", "failed");
+      if (isApprovalTerminal) {
+        await stopWorkItemForApproval({
+          runtime,
+          workItemId: payload.workItemId,
+          error,
+        });
+      } else {
+        await runtime.workItemRepository.fail(payload.workItemId, new Date(), message);
+        metadata.set("status", "failed");
+      }
 
-      logger.error("Worker run failed", {
+      if (!isApprovalTerminal) {
+        logger.error("Worker run failed", {
+          workItemId: payload.workItemId,
+          parentRunId: payload.parentRunId,
+          role: payload.role,
+          error: message,
+        });
+        throw error;
+      }
+
+      logger.info("Worker run stopped", {
         workItemId: payload.workItemId,
         parentRunId: payload.parentRunId,
         role: payload.role,
-        error: message,
+        reason: message,
       });
 
-      if (!isApprovalTerminal) {
-        throw error;
-      }
-      // Approval rejection/expiry: return empty output instead of rethrowing
       return {
         workItemId: payload.workItemId,
+        status: "stopped",
         output: "",
         durationMs: 0,
         toolCallCount: 0,
         inputTokens: 0,
         outputTokens: 0,
+        cause: error.stopCause,
+        reason: error.message,
+        approvalId: error.approvalId,
       };
     }
   },

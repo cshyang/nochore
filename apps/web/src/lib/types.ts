@@ -1,6 +1,14 @@
 export type LifecycleStatus = "draft" | "live" | "paused" | "archived";
 export type AgentOperationalStatus = "running" | "attention" | "idle" | "error";
-export type RunStatus = "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "completed" | "failed" | "cancelled";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting_for_approval"
+  | "waiting_for_children"
+  | "stopped"
+  | "completed"
+  | "failed"
+  | "cancelled";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "blocked" | "expired";
 export type RunEventType =
   | "run_started"
@@ -16,6 +24,7 @@ export type RunEventType =
   | "notification_sent"
   | "lesson_distilled"
   | "run_completed"
+  | "run_stopped"
   | "metric_observed"
   | "run_cancelled"
   | "run_failed";
@@ -103,6 +112,7 @@ export interface PendingActionView {
   id: string;
   runId: string;
   agentId: string;
+  workItemId?: string;
   proposal: {
     id: string;
     toolName: string;
@@ -156,6 +166,7 @@ export interface RunView {
   agentId: string;
   triggerType: string;
   status: RunStatus;
+  hasActionableApprovals: boolean;
   startedAt: string;
   completedAt?: string;
   error?: string;
@@ -167,9 +178,7 @@ export interface RunView {
   summary?: RunSummaryView;
 }
 
-export interface RunActivityStateView extends Omit<RunView, "approvals"> {
-  approvals: ActionableApprovalStateView[];
-}
+export interface RunActivityStateView extends RunView {}
 
 export interface ApprovalView {
   id: string;
@@ -183,6 +192,7 @@ export interface ApprovalView {
   requestReason?: string;
   requestEventId?: string;
   decisionReason?: string;
+  workItemId?: string;
   createdAt: string;
   expiresAt?: string;
   resolvedAt?: string;

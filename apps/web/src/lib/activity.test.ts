@@ -49,6 +49,7 @@ describe("activity view helpers", () => {
           agentId: "agent_1",
           triggerType: "manual",
           status: "waiting_for_approval",
+          hasActionableApprovals: false,
           startedAt: new Date(Date.now() - 30_000).toISOString(),
           events: [],
           approvals: [],

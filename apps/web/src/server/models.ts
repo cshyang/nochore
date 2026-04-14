@@ -42,7 +42,8 @@ export interface SerializedRun {
   id: string;
   agentId: string;
   triggerType: string;
-  status: "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "completed" | "failed" | "cancelled";
+  status: "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "stopped" | "completed" | "failed" | "cancelled";
+  hasActionableApprovals: boolean;
   startedAt: string;
   completedAt?: string;
   error?: string;
@@ -75,6 +76,7 @@ export interface SerializedPendingAction {
   id: string;
   runId: string;
   agentId: string;
+  workItemId?: string;
   proposal: {
     id: string;
     toolName: string;
@@ -251,6 +253,7 @@ export function buildSerializedRun(
     agentId: run.agentId,
     triggerType: run.triggerType,
     status: mapRunStatus(run.status),
+    hasActionableApprovals: approvals.some((approval) => approval.status === "pending" || approval.status === "expired"),
     startedAt: run.startedAt.toISOString(),
     completedAt: run.completedAt?.toISOString(),
     error: run.error,
@@ -293,6 +296,7 @@ export function buildSerializedPendingAction(approval: ApprovalRecord): Serializ
     id: approval.id,
     runId: approval.runId,
     agentId: approval.agentId,
+    workItemId: approval.workItemId,
     proposal: {
       id: approval.id,
       toolName: approval.toolName,
@@ -316,6 +320,8 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
       return "failed";
     case "cancelled":
       return "cancelled";
+    case "stopped":
+      return "stopped";
     case "queued":
       return "queued";
     case "running":

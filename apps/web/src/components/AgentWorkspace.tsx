@@ -117,7 +117,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     }
 
     const isTerminal =
-      run.status === "completed" || run.status === "failed" || run.status === "cancelled";
+      run.status === "completed" || run.status === "failed" || run.status === "cancelled" || run.status === "stopped";
 
     if (!isTerminal || notifiedChatRunRef.current === run.id) {
       return;

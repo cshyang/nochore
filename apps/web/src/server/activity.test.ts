@@ -32,6 +32,16 @@ describe("activity projection helpers", () => {
     ).toBe("error");
   });
 
+  it("treats stopped runs as non-errors once approvals are resolved", () => {
+    expect(
+      derivePrimaryStatus({
+        pendingApprovalCount: 0,
+        activeRunCount: 0,
+        latestRunStatus: "stopped",
+      }),
+    ).toBe("idle");
+  });
+
   it("changes version when a fresher timestamp is present", () => {
     const earlier = deriveActivityVersion([1_000, 2_000, 3_000]);
     const later = deriveActivityVersion([1_000, 2_000, 4_000]);

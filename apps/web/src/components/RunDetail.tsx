@@ -70,6 +70,18 @@ function extractToolNames(run: RunView): string[] {
   return Array.from(names);
 }
 
+function getActionableApprovals(run: RunView) {
+  return run.approvals.filter((approval) => approval.status === "pending" || approval.status === "expired");
+}
+
+function findLatestStopEvent(run: RunView) {
+  return [...run.events].reverse().find((event) => event.type === "run_stopped") ?? null;
+}
+
+function findWorkItemForApproval(run: RunView, approval: RunView["approvals"][number]) {
+  return approval.workItemId ? run.workItems.find((item) => item.id === approval.workItemId) ?? null : null;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -84,12 +96,16 @@ function RunHeader({ run }: { run: RunView }) {
       <Badge color="green">Completed</Badge>
     ) : run.status === "failed" ? (
       <Badge color="red">Failed</Badge>
+    ) : run.status === "stopped" ? (
+      <Badge color="yellow">Stopped</Badge>
     ) : run.status === "cancelled" ? (
       <Badge color="yellow">Cancelled</Badge>
     ) : run.status === "waiting_for_approval" ? (
       <Badge color="yellow">Waiting</Badge>
     ) : run.status === "waiting_for_children" ? (
-      <Badge color="blue">Coordinating</Badge>
+      <Badge color={run.hasActionableApprovals ? "yellow" : "blue"}>
+        {run.hasActionableApprovals ? "Needs input" : "Coordinating"}
+      </Badge>
     ) : run.status === "queued" ? (
       <Badge color="gray">Queued</Badge>
     ) : (
@@ -136,6 +152,7 @@ function workItemStatusColor(status: string): "green" | "red" | "yellow" | "blue
       return "green";
     case "failed":
       return "red";
+    case "stopped":
     case "waiting_for_approval":
     case "waiting_for_external":
       return "yellow";
@@ -201,8 +218,11 @@ function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) {
             </span>
           )}
           {wi.error && (
-            <span style={{ fontSize: TYPE.scale.xs, color: COLORS.red }} title={wi.error}>
-              Error
+            <span
+              style={{ fontSize: TYPE.scale.xs, color: wi.status === "stopped" ? COLORS.orange : COLORS.red }}
+              title={wi.error}
+            >
+              {wi.status === "stopped" ? "Stopped" : "Error"}
             </span>
           )}
         </div>
@@ -412,34 +432,76 @@ export function RunDetail({
 
   const status = (run.status ?? "").toLowerCase();
   const finding = extractFinding(run);
+  const actionableApprovals = getActionableApprovals(run);
+  const blockingApproval = actionableApprovals.find((approval) => approval.workItemId) ?? actionableApprovals[0] ?? null;
+  const blockingWorkItem = blockingApproval ? findWorkItemForApproval(run, blockingApproval) : null;
+  const stopEvent = findLatestStopEvent(run);
+  const approvalArtifacts = (
+    <ApprovalArtifacts
+      run={run}
+      onRunNow={onRunNow}
+      onApprove={onApprove}
+      onReject={onReject}
+      onAskChat={onAskChat}
+    />
+  );
 
   // ── Coordinating children ──────────────────────────────────────────────
   if (status === "waiting_for_children") {
+    const title = run.hasActionableApprovals ? "Specialist waiting for approval" : "Coordinating specialist work";
+    const description = run.hasActionableApprovals
+      ? blockingWorkItem
+        ? `${humanize(blockingWorkItem.role)} is paused until an approval decision is made.`
+        : "A delegated specialist is paused until an approval decision is made."
+      : "Specialist work is still in progress.";
+
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: 10,
+            alignItems: "flex-start",
+            gap: 14,
             padding: "14px 20px",
-            background: COLORS.accentSubtle,
-            border: `1px solid ${COLORS.accentBorder}`,
+            background: run.hasActionableApprovals ? COLORS.orangeSubtle : COLORS.accentSubtle,
+            border: `1px solid ${run.hasActionableApprovals ? COLORS.orange : COLORS.accentBorder}`,
             borderRadius: RADIUS.sm,
+            marginBottom: 16,
           }}
         >
           <CircleNotch
             size={16}
             weight="bold"
-            color={COLORS.accent}
+            color={run.hasActionableApprovals ? COLORS.orange : COLORS.accent}
             style={{ animation: "spin 1s linear infinite" }}
           />
-          <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
-            Coordinating specialist work...
-          </span>
+          <div>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                marginBottom: 4,
+              }}
+            >
+              {title}
+            </div>
+            <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, lineHeight: TYPE.leading.normal }}>
+              {description}
+            </div>
+          </div>
         </div>
+        {timelineEvents.length > 0 && (
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((value) => !value)} />
+        )}
+        {showEvents && (
+          <div style={timelineContainerStyle}>
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
+          </div>
+        )}
       </div>
     );
   }
@@ -487,13 +549,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        <ApprovalArtifacts
-          run={run}
-          onRunNow={onRunNow}
-          onApprove={onApprove}
-          onReject={onReject}
-          onAskChat={onAskChat}
-        />
+        {approvalArtifacts}
         <div
           style={{
             display: "flex",
@@ -541,11 +597,74 @@ export function RunDetail({
     );
   }
 
+  if (status === "stopped") {
+    const stopCause = stopEvent?.payload?.cause as string | undefined;
+    const stopReason = (stopEvent?.payload?.reason as string | undefined) ?? run.error;
+    const stopTitle = stopCause === "approval_expired" ? "Stopped waiting for approval" : "Stopped by human";
+    const stopDescription =
+      stopReason ??
+      (stopCause === "approval_expired"
+        ? "This run stopped after the approval window expired."
+        : "This run stopped after an approval was declined.");
+
+    return (
+      <div style={{ flex: 1, padding: "24px 20px" }}>
+        <RunHeader run={run} />
+        <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 14,
+            padding: 20,
+            background: COLORS.orangeSubtle,
+            border: `1px solid ${COLORS.orange}`,
+            borderRadius: RADIUS.sm,
+            marginBottom: 16,
+          }}
+        >
+          <WarningCircle size={20} weight="bold" color={COLORS.orange} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div
+              style={{
+                fontSize: TYPE.scale.base,
+                fontWeight: TYPE.weight.semibold,
+                color: COLORS.text,
+                marginBottom: 4,
+              }}
+            >
+              {stopTitle}
+            </div>
+            <div
+              style={{
+                fontSize: TYPE.scale.sm,
+                color: COLORS.textSecondary,
+                lineHeight: TYPE.leading.normal,
+              }}
+            >
+              {stopDescription}
+            </div>
+          </div>
+        </div>
+        {timelineEvents.length > 0 && (
+          <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((value) => !value)} />
+        )}
+        {showEvents && (
+          <div style={timelineContainerStyle}>
+            <EventTimeline events={timelineEvents} timestampFormat="absolute" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (status === "cancelled") {
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
         <div
           style={{
             display: "flex",
@@ -599,6 +718,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
         <NarrativeCard run={run} summary={run.summary} timelineEvents={timelineEvents} />
       </div>
     );
@@ -610,6 +730,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
         <div
           style={{
             display: "flex",
@@ -663,6 +784,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
+        {approvalArtifacts}
         <div
           style={{
             display: "flex",
@@ -715,6 +837,7 @@ export function RunDetail({
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
       <WorkItemsSection workItems={run.workItems} />
+      {approvalArtifacts}
 
       <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
 
@@ -745,26 +868,28 @@ function ApprovalArtifacts({
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
 }) {
-  const actionableApprovals = run.approvals.filter(
-    (approval) => approval.status === "pending" || approval.status === "expired",
-  );
-
-  if (actionableApprovals.length === 0) {
+  if (run.approvals.length === 0) {
     return null;
   }
 
   return (
     <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-      {actionableApprovals.map((approval) => (
+      {run.approvals.map((approval) => {
+        const workItem = findWorkItemForApproval(run, approval);
+        const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
+
+        return (
         <ApprovalCard
           key={approval.id}
           approval={approval}
+          title={title}
           onApprove={onApprove ? (item) => onApprove(item.id, "Approved from run detail") : undefined}
           onReject={onReject ? (item) => onReject(item.id, "Rejected from run detail") : undefined}
           onAskChat={onAskChat}
           onRerun={approval.status === "expired" && onRunNow ? () => onRunNow() : undefined}
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

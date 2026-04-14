@@ -25,7 +25,21 @@ export type RunEventType =
   | "metric_observed"
   | "lesson_distilled"
   | "run_completed"
+  | "run_stopped"
   | "run_failed";
+
+export type ApprovalStopCause = "approval_rejected" | "approval_expired";
+
+type ApprovalWaitApi = {
+  createToken: (params: { idempotencyKey: string; timeout: string; tags: string[] }) => Promise<{ id: string }>;
+  forToken: <T>(token: { id: string }) => {
+    unwrap: () => Promise<T | undefined>;
+  };
+};
+
+type ApprovalMetadataApi = {
+  set: (key: string, value: string) => void;
+};
 
 export async function recordEvent(
   runtime: Awaited<ReturnType<typeof createWorkerRuntime>>,
@@ -56,13 +70,27 @@ export async function handleApprovalRequest(params: {
   eventIds: string[];
   projectId: string;
   workItemId?: string;
+  waitApi?: ApprovalWaitApi;
+  metadataApi?: ApprovalMetadataApi;
 }): Promise<{ block: boolean; reason?: string } | undefined> {
-  const { runtime, agent, runId, toolName, toolInput, policyReason, eventIds, projectId, workItemId } = params;
+  const {
+    runtime,
+    agent,
+    runId,
+    toolName,
+    toolInput,
+    policyReason,
+    eventIds,
+    projectId,
+    workItemId,
+    waitApi = wait,
+    metadataApi = metadata,
+  } = params;
   const approvalId = crypto.randomUUID();
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
 
-  const token = await wait.createToken({
+  const token = await waitApi.createToken({
     idempotencyKey: `approval-${runId}-${approvalId}`,
     timeout: "24h",
     tags: [projectId, agent.id, runId, approvalId, toolName],
@@ -95,14 +123,16 @@ export async function handleApprovalRequest(params: {
   eventIds.push(reqId);
   await runtime.approvalRepository.setRequestEventId(approvalRecordId, reqId);
 
-  await runtime.runRepository.markWaitingForApproval(runId);
-  metadata.set("status", "waiting_for_approval");
+  if (!workItemId) {
+    await runtime.runRepository.markWaitingForApproval(runId);
+    metadataApi.set("status", "waiting_for_approval");
+  }
 
   // Container checkpoints here — resumes when human responds
   let decision: { decision: string; reason?: string };
   let timedOut = false;
   try {
-    decision = (await wait.forToken<{ decision: string; reason?: string }>(token).unwrap()) ?? {
+    decision = (await waitApi.forToken<{ decision: string; reason?: string }>(token).unwrap()) ?? {
       decision: "rejected",
       reason: "Token completed without data",
     };
@@ -144,13 +174,21 @@ export async function handleApprovalRequest(params: {
     reason = approvalRow?.decisionReason ?? reason;
   }
 
-  if ((approvalRow?.status ?? status) === "approved") {
-    await runtime.runRepository.markRunning(runId);
-    metadata.set("status", "running");
+  const finalStatus = wasAlreadyResolved ? (approvalRow?.status ?? status) : status;
+
+  if (finalStatus === "approved") {
+    if (!workItemId) {
+      await runtime.runRepository.markRunning(runId);
+      metadataApi.set("status", "running");
+    }
     return undefined;
   }
 
-  throw new ApprovalCheckpointError(reason, (approvalRow?.status ?? status) === "expired" ? "expired" : "rejected");
+  throw new ApprovalCheckpointError(
+    reason,
+    finalStatus === "expired" ? "expired" : "rejected",
+    { approvalId: approvalRecordId, workItemId },
+  );
 }
 
 export function normalizeToolInput(input: unknown): Record<string, unknown> {
@@ -159,12 +197,20 @@ export function normalizeToolInput(input: unknown): Record<string, unknown> {
 }
 
 export class ApprovalCheckpointError extends Error {
+  readonly stopCause: ApprovalStopCause;
+  readonly approvalId?: string;
+  readonly workItemId?: string;
+
   constructor(
     message: string,
     readonly status: "rejected" | "expired",
+    details?: { approvalId?: string; workItemId?: string },
   ) {
     super(message);
     this.name = "ApprovalCheckpointError";
+    this.stopCause = status === "expired" ? "approval_expired" : "approval_rejected";
+    this.approvalId = details?.approvalId;
+    this.workItemId = details?.workItemId;
   }
 }
 

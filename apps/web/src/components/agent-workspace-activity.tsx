@@ -54,6 +54,7 @@ export function AgentWorkspaceActivityPane({
       agentId: runs[0]?.agentId ?? "",
       triggerType: "manual",
       status: activeRunId === selectedRunId ? "running" : "queued",
+      hasActionableApprovals: false,
       startedAt: new Date().toISOString(),
       events: [],
       approvals: [],

@@ -10,6 +10,7 @@ import { ConversationThreadRepository } from "../conversation-thread";
 import { RunEventRepository } from "../event";
 import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
+import { WorkItemRepository } from "../work-item";
 
 describe("simplified repositories", () => {
   it("creates a concrete repository bundle for one project database", () => {
@@ -109,6 +110,28 @@ describe("simplified repositories", () => {
     expect(run?.completedAt?.toISOString()).toBe(cancelledAt.toISOString());
   });
 
+  it("marks stopped runs as terminal without a summary", async () => {
+    const db = createTestDb();
+    const repo = new RunRepository(db);
+    const startedAt = new Date("2026-03-24T10:00:00Z");
+    const stoppedAt = new Date("2026-03-24T10:02:00Z");
+
+    const id = await repo.create({
+      agentId: "agent_001",
+      triggerType: "manual",
+      startedAt,
+    });
+
+    await repo.markRunning(id);
+    await repo.stop(id, stoppedAt, "Approval rejected");
+
+    const run = await repo.getById(id);
+    expect(run?.status).toBe("stopped");
+    expect(run?.error).toBe("Approval rejected");
+    expect(run?.summary).toBeUndefined();
+    expect(run?.completedAt?.toISOString()).toBe(stoppedAt.toISOString());
+  });
+
   it("appends timeline events in order for a run", async () => {
     const db = createTestDb();
     const repo = new RunEventRepository(db);
@@ -167,6 +190,30 @@ describe("simplified repositories", () => {
     expect(approval?.requestEventId).toBe("evt_approval_requested");
     expect(approval?.expiresAt?.toISOString()).toBe("2026-03-25T10:02:00.000Z");
     expect(approvals).toHaveLength(1);
+  });
+
+  it("stops work items as a terminal state and clears blocking metadata", async () => {
+    const db = createTestDb();
+    const repo = new WorkItemRepository(db);
+    const completedAt = new Date("2026-03-24T10:03:00Z");
+
+    const id = await repo.create({
+      parentRunId: "run_001",
+      rootRunId: "run_001",
+      agentId: "agent_001",
+      role: "analyst",
+      title: "Inspect approval gate",
+    });
+
+    await repo.markRunning(id);
+    await repo.markWaitingForApproval(id);
+    await repo.stop(id, completedAt, "Approval expired");
+
+    const workItem = await repo.getById(id);
+    expect(workItem?.status).toBe("stopped");
+    expect(workItem?.error).toBe("Approval expired");
+    expect(workItem?.blockingReason).toBeUndefined();
+    expect(workItem?.completedAt?.toISOString()).toBe(completedAt.toISOString());
   });
 
   it("returns only active lessons for an agent", async () => {
