@@ -9,6 +9,95 @@
 
 import { useState } from "react";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { getProviderMetadata } from "~/lib/provider-metadata";
+
+// ---------------------------------------------------------------------------
+// Shared style tokens
+// ---------------------------------------------------------------------------
+
+export const fieldStyle = {
+  width: "100%",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: RADIUS.lg,
+  background: COLORS.bg,
+  color: COLORS.text,
+  padding: "12px 14px",
+  fontSize: TYPE.scale.base,
+  lineHeight: TYPE.leading.normal,
+  outline: "none",
+  fontFamily: TYPE.body,
+  transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
+} as const;
+
+export function smallActionStyle(color: string) {
+  return {
+    fontFamily: TYPE.body,
+    padding: "4px 10px",
+    borderRadius: RADIUS.pill,
+    border: `1px solid ${COLORS.border}`,
+    background: "transparent",
+    color,
+    fontSize: TYPE.scale.xs,
+    transition: `all ${MOTION.duration} ${MOTION.ease}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Toggle — minimal pill switch
+// ---------------------------------------------------------------------------
+
+export function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 36,
+        height: 20,
+        border: "none",
+        borderRadius: RADIUS.pill,
+        background: checked ? COLORS.accent : COLORS.borderStrong,
+        position: "relative",
+        cursor: "pointer",
+        transition: `background ${MOTION.duration} ${MOTION.ease}`,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 2,
+          left: checked ? 18 : 2,
+          width: 16,
+          height: 16,
+          borderRadius: RADIUS.pill,
+          background: COLORS.white,
+          transition: `left ${MOTION.duration} ${MOTION.ease}`,
+        }}
+      />
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProviderIcon — logo img with emoji fallback from provider metadata
+// ---------------------------------------------------------------------------
+
+export function ProviderIcon({
+  provider,
+  logos,
+  size = 20,
+}: {
+  provider: string;
+  logos: Record<string, string>;
+  size?: number;
+}) {
+  const logoUrl = logos[provider];
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: 4, flexShrink: 0 }} />;
+  }
+  const meta = getProviderMetadata(provider);
+  return <span style={{ fontSize: size, flexShrink: 0 }}>{meta.icon}</span>;
+}
 
 // ---------------------------------------------------------------------------
 // SectionHeading — group label that sits ABOVE the card

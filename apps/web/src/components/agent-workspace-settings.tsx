@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { Button } from "~/components/Button";
-import { SectionHeading, SettingsCard, SettingsRow } from "~/components/SettingsComponents";
+import {
+  fieldStyle,
+  ProviderIcon,
+  SectionHeading,
+  SettingsCard,
+  SettingsRow,
+  smallActionStyle,
+  Toggle,
+} from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, SHADOW, SPACE, TYPE } from "~/lib/colors";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
 import { humanize } from "~/lib/text-format";
@@ -14,20 +22,6 @@ import type {
   ToolConfigView,
 } from "~/lib/types";
 import { updateConnectionConfig } from "~/server/connections";
-
-const fieldStyle = {
-  width: "100%",
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: RADIUS.lg,
-  background: COLORS.bg,
-  color: COLORS.text,
-  padding: "12px 14px",
-  fontSize: TYPE.scale.base,
-  lineHeight: TYPE.leading.normal,
-  outline: "none",
-  fontFamily: TYPE.body,
-  transition: `border-color ${MOTION.duration} ${MOTION.ease}`,
-};
 
 type SettingsLocalTab = "basics" | "access" | "autonomy";
 
@@ -1090,55 +1084,6 @@ function buildPolicyTools(
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      style={{
-        width: 36,
-        height: 20,
-        border: "none",
-        borderRadius: RADIUS.pill,
-        background: checked ? COLORS.accent : COLORS.borderStrong,
-        position: "relative",
-        cursor: "pointer",
-        transition: `background ${MOTION.duration} ${MOTION.ease}`,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: checked ? 18 : 2,
-          width: 16,
-          height: 16,
-          borderRadius: RADIUS.pill,
-          background: COLORS.white,
-          transition: `left ${MOTION.duration} ${MOTION.ease}`,
-        }}
-      />
-    </button>
-  );
-}
-
-function ProviderIcon({
-  provider,
-  logos,
-  size = 20,
-}: {
-  provider: string;
-  logos: Record<string, string>;
-  size?: number;
-}) {
-  const logoUrl = logos[provider];
-  if (logoUrl) {
-    return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: 4, flexShrink: 0 }} />;
-  }
-  const meta = getProviderMetadata(provider);
-  return <span style={{ fontSize: size, flexShrink: 0 }}>{meta.icon}</span>;
-}
-
 const PROVIDER_CONFIG_FIELDS: Record<string, { key: string; label: string; placeholder: string }> = {
   googleads: { key: "customerId", label: "Customer ID", placeholder: "e.g. 123-456-7890" },
 };
@@ -1245,19 +1190,6 @@ function ConnectionRow({
       ) : null}
     </SettingsCard>
   );
-}
-
-function smallActionStyle(color: string) {
-  return {
-    fontFamily: TYPE.body,
-    padding: "4px 10px",
-    borderRadius: RADIUS.pill,
-    border: `1px solid ${COLORS.border}`,
-    background: "transparent",
-    color,
-    fontSize: TYPE.scale.xs,
-    transition: `all ${MOTION.duration} ${MOTION.ease}`,
-  };
 }
 
 function PolicyRuleGroup({
