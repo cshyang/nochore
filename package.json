@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "test": "npm --workspace @nochore/harness test && npm run test:web && npm run test:worker",
-    "test:web": "vitest run apps/web/src/server/deps.test.ts apps/web/src/server/activity.test.ts apps/web/src/server/models.test.ts apps/web/src/lib/time-format.test.ts apps/web/src/lib/text-format.test.ts apps/web/src/lib/status-format.test.ts",
+    "test:web": "vitest run apps/web/src/server/deps.test.ts apps/web/src/server/activity.test.ts apps/web/src/server/models.test.ts apps/web/src/lib/time-format.test.ts apps/web/src/lib/text-format.test.ts apps/web/src/lib/status-format.test.ts apps/web/src/lib/run-events.test.ts",
     "test:worker": "vitest run --exclude '.worktrees/**' services/worker/src/lib/agent-runtime.test.ts services/worker/src/lib/tool-provider.test.ts services/worker/src/lib/run-helpers.test.ts services/worker/src/triggers/agent-run.test.ts services/worker/src/triggers/worker-run.test.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",

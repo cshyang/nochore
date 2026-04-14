@@ -17,7 +17,14 @@ import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { EventTimeline, type TimelineEvent } from "~/components/EventTimeline";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
-import { narrateEvent } from "~/lib/narrate";
+import {
+  buildTimelineEvents,
+  extractFinding,
+  extractToolNames,
+  findLatestStopEvent,
+  findWorkItemForApproval,
+  getActionableApprovals,
+} from "~/lib/run-events";
 import { workItemStatusColor } from "~/lib/status-format";
 import { humanize } from "~/lib/text-format";
 import { formatDuration } from "~/lib/time-format";
@@ -33,47 +40,6 @@ interface RunDetailProps {
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function extractFinding(run: RunView): string | null {
-  const finding = run.events.find((e) => e.type === "finding_recorded");
-  return (finding?.payload?.text as string) ?? null;
-}
-
-function buildTimelineEvents(run: RunView): TimelineEvent[] {
-  return run.events.map((e) => ({
-    id: e.id,
-    type: e.type,
-    summary: narrateEvent(e.type, e.payload),
-    timestamp: new Date(e.timestamp).getTime(),
-  }));
-}
-
-function extractToolNames(run: RunView): string[] {
-  const names = new Set<string>();
-  for (const e of run.events) {
-    if (e.type === "tool_called") {
-      const name = e.payload?.toolName as string | undefined;
-      if (name) names.add(name);
-    }
-  }
-  return Array.from(names);
-}
-
-function getActionableApprovals(run: RunView) {
-  return run.approvals.filter((approval) => approval.status === "pending" || approval.status === "expired");
-}
-
-function findLatestStopEvent(run: RunView) {
-  return [...run.events].reverse().find((event) => event.type === "run_stopped") ?? null;
-}
-
-function findWorkItemForApproval(run: RunView, approval: RunView["approvals"][number]) {
-  return approval.workItemId ? (run.workItems.find((item) => item.id === approval.workItemId) ?? null) : null;
 }
 
 // ---------------------------------------------------------------------------
