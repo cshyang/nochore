@@ -127,9 +127,16 @@ export function RunDetail({
     actionableApprovals.find((approval) => approval.workItemId) ?? actionableApprovals[0] ?? null;
   const blockingWorkItem = blockingApproval ? findWorkItemForApproval(run, blockingApproval) : null;
   const stopEvent = findLatestStopEvent(run);
-  const approvalArtifacts = (
-    <ApprovalArtifacts run={run} onRunNow={onRunNow} onApprove={onApprove} onReject={onReject} onAskChat={onAskChat} />
+  const pendingApprovalArtifacts = (
+    <PendingApprovalArtifacts
+      run={run}
+      onRunNow={onRunNow}
+      onApprove={onApprove}
+      onReject={onReject}
+      onAskChat={onAskChat}
+    />
   );
+  const resolvedApprovalArtifacts = <ResolvedApprovalArtifacts run={run} />;
 
   // ── Coordinating children ──────────────────────────────────────────────
   if (status === "waiting_for_children") {
@@ -144,7 +151,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -187,6 +194,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -234,7 +242,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -278,6 +286,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -296,7 +305,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -340,6 +349,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -349,7 +359,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -393,6 +403,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -403,8 +414,9 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <NarrativeCard run={run} summary={run.summary} timelineEvents={timelineEvents} />
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -415,7 +427,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -459,6 +471,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -469,7 +482,7 @@ export function RunDetail({
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
         <WorkItemsSection workItems={run.workItems} />
-        {approvalArtifacts}
+        {pendingApprovalArtifacts}
         <div
           style={{
             display: "flex",
@@ -513,6 +526,7 @@ export function RunDetail({
             <EventTimeline events={timelineEvents} timestampFormat="absolute" />
           </div>
         )}
+        {resolvedApprovalArtifacts}
       </div>
     );
   }
@@ -522,7 +536,7 @@ export function RunDetail({
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
       <WorkItemsSection workItems={run.workItems} />
-      {approvalArtifacts}
+      {pendingApprovalArtifacts}
 
       <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
 
@@ -536,11 +550,14 @@ export function RunDetail({
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{finding}</ReactMarkdown>
         </div>
       )}
+      {resolvedApprovalArtifacts}
     </div>
   );
 }
 
-function ApprovalArtifacts({
+// Pending + expired approvals demand attention — render prominently above
+// narrative/status card with full action affordances.
+function PendingApprovalArtifacts({
   run,
   onRunNow,
   onApprove,
@@ -553,13 +570,12 @@ function ApprovalArtifacts({
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
 }) {
-  if (run.approvals.length === 0) {
-    return null;
-  }
+  const actionable = run.approvals.filter((a) => a.status === "pending" || a.status === "expired");
+  if (actionable.length === 0) return null;
 
   return (
-    <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-      {run.approvals.map((approval) => {
+    <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+      {actionable.map((approval) => {
         const workItem = findWorkItemForApproval(run, approval);
         const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
 
@@ -576,5 +592,40 @@ function ApprovalArtifacts({
         );
       })}
     </div>
+  );
+}
+
+// Resolved approvals are receipts — collapsed by default, single-line rows
+// when expanded. Tucked at the bottom so they don't compete with the finding.
+function ResolvedApprovalArtifacts({ run }: { run: RunView }) {
+  const resolved = run.approvals.filter(
+    (a) => a.status === "approved" || a.status === "rejected" || a.status === "blocked",
+  );
+  if (resolved.length === 0) return null;
+
+  return (
+    <details style={{ marginTop: 20 }}>
+      <summary
+        style={{
+          fontSize: TYPE.scale.xs,
+          color: COLORS.textDim,
+          cursor: "pointer",
+          letterSpacing: TYPE.tracking.wide,
+          textTransform: "uppercase",
+          fontWeight: TYPE.weight.semibold,
+          userSelect: "none",
+          padding: "4px 0",
+        }}
+      >
+        Completed actions ({resolved.length})
+      </summary>
+      <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+        {resolved.map((approval) => {
+          const workItem = findWorkItemForApproval(run, approval);
+          const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
+          return <ApprovalCard key={approval.id} approval={approval} title={title} />;
+        })}
+      </div>
+    </details>
   );
 }
