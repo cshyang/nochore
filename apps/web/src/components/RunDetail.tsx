@@ -9,6 +9,7 @@ import { Button } from "~/components/Button";
 import { EventTimeline } from "~/components/EventTimeline";
 import { NarrativeCard } from "~/components/run/NarrativeCard";
 import { RunHeader } from "~/components/run/RunHeader";
+import { RunOutOfRangeNote, RunStatsStrip } from "~/components/run/RunStatsStrip";
 import { markdownStyles, timelineContainerStyle } from "~/components/run/styles";
 import { ViewEventsToggle } from "~/components/run/ViewEventsToggle";
 import { WorkItemsSection } from "~/components/run/WorkItemsSection";
@@ -20,6 +21,7 @@ import {
   findWorkItemForApproval,
   getActionableApprovals,
 } from "~/lib/run-events";
+import { isOutOfRange, summarizeRun } from "~/lib/run-stats";
 import { humanize } from "~/lib/text-format";
 import type { RunView } from "~/lib/types";
 
@@ -33,6 +35,9 @@ interface RunDetailProps {
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
   onAskChat?: (approval: RunView["approvals"][number]) => void | Promise<void>;
+  // Full run history for this agent; used as baseline for out-of-range stats.
+  // isOutOfRange filters internally (excludes non-completed + target).
+  priorRuns?: RunView[];
 }
 
 // ---------------------------------------------------------------------------
@@ -49,11 +54,17 @@ export function RunDetail({
   onApprove,
   onReject,
   onAskChat,
+  priorRuns,
 }: RunDetailProps) {
   const [showEvents, setShowEvents] = useState(false);
   const hasDraftChecklist = checklistItems && checklistItems.length > 0;
 
   const timelineEvents = useMemo(() => (run ? buildTimelineEvents(run) : []), [run]);
+  const stats = useMemo(() => (run ? summarizeRun(run) : null), [run]);
+  const outOfRange = useMemo(
+    () => (run ? isOutOfRange(run, priorRuns ?? [], "tokens") : undefined),
+    [run, priorRuns],
+  );
 
   // ── Empty state: no runs at all ────────────────────────────────────────
   if (!hasRuns || !run) {
@@ -150,6 +161,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -241,6 +254,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -304,6 +319,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -358,6 +375,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -413,6 +432,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <NarrativeCard run={run} summary={run.summary} timelineEvents={timelineEvents} />
@@ -426,6 +447,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -481,6 +504,8 @@ export function RunDetail({
     return (
       <div style={{ flex: 1, padding: "24px 20px" }}>
         <RunHeader run={run} />
+        {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+        <RunOutOfRangeNote outOfRange={outOfRange} />
         <WorkItemsSection workItems={run.workItems} />
         {pendingApprovalArtifacts}
         <div
@@ -535,6 +560,8 @@ export function RunDetail({
   return (
     <div style={{ flex: 1, padding: "24px 20px", minWidth: 0 }}>
       <RunHeader run={run} />
+      {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
+      <RunOutOfRangeNote outOfRange={outOfRange} />
       <WorkItemsSection workItems={run.workItems} />
       {pendingApprovalArtifacts}
 

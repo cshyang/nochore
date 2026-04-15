@@ -172,6 +172,7 @@ export function AgentWorkspaceActivityPane({
             onApprove={onApprove}
             onReject={onReject}
             onAskChat={onAskChat}
+            priorRuns={displayRuns}
           />
         </div>
       </div>
