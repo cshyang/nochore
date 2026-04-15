@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  estimateCost,
-  formatCost,
-  formatTokens,
-  isOutOfRange,
-  summarizeRun,
-  summarizeRuns,
-} from "./run-stats";
-import type { PendingActionView, RunEventView, RunView, WorkItemView } from "./types";
+import { estimateCost, formatCost, formatTokens, isOutOfRange, summarizeRun } from "./run-stats";
+import type { RunEventView, RunView, WorkItemView } from "./types";
 
 function makeRun(overrides: Partial<RunView> = {}): RunView {
   return {
@@ -45,18 +38,6 @@ function makeEvent(type: string, overrides: Partial<RunEventView> = {}): RunEven
     type,
     timestamp: "2026-04-15T00:01:00Z",
     payload: {},
-    ...overrides,
-  };
-}
-
-function makeApproval(overrides: Partial<PendingActionView> = {}): PendingActionView {
-  return {
-    id: "appr-1",
-    runId: "run-1",
-    agentId: "agent-1",
-    proposal: { id: "prop-1", toolName: "X", toolInput: {}, reason: "" },
-    status: "pending",
-    createdAt: "2026-04-15T00:00:30Z",
     ...overrides,
   };
 }
@@ -142,50 +123,6 @@ describe("summarizeRun", () => {
     });
     const running: RunView = runningBase as RunView;
     expect(summarizeRun(running).durationMs).toBe(0);
-  });
-});
-
-describe("summarizeRuns", () => {
-  it("filters by time window and counts pending approvals + failures", () => {
-    const now = Date.now();
-    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
-
-    const runs: RunView[] = [
-      makeRun({
-        id: "r-recent-ok",
-        startedAt: iso(2 * 24 * 60 * 60 * 1000), // 2 days ago
-        status: "completed",
-        workItems: [makeWorkItem({ inputTokens: 1000, outputTokens: 100 })],
-      }),
-      makeRun({
-        id: "r-recent-failed",
-        startedAt: iso(3 * 24 * 60 * 60 * 1000),
-        status: "failed",
-        workItems: [makeWorkItem({ inputTokens: 500, outputTokens: 50 })],
-      }),
-      makeRun({
-        id: "r-recent-pending",
-        startedAt: iso(1 * 24 * 60 * 60 * 1000),
-        status: "waiting_for_approval",
-        approvals: [makeApproval({ status: "pending" }), makeApproval({ id: "a2", status: "approved" })],
-      }),
-      makeRun({
-        id: "r-old",
-        startedAt: iso(30 * 24 * 60 * 60 * 1000), // outside 7d window
-        workItems: [makeWorkItem({ inputTokens: 9999, outputTokens: 999 })],
-      }),
-    ];
-
-    const agg = summarizeRuns(runs, 7);
-    expect(agg.runCount).toBe(3); // old run excluded
-    expect(agg.failedCount).toBe(1);
-    expect(agg.pendingApprovals).toBe(1); // only the pending one
-    expect(agg.totalTokens).toBe(1000 + 100 + 500 + 50); // pending run has no workItems
-  });
-
-  it("returns zeros when no runs are in the window", () => {
-    const agg = summarizeRuns([], 7);
-    expect(agg).toEqual({ runCount: 0, totalCost: 0, totalTokens: 0, pendingApprovals: 0, failedCount: 0 });
   });
 });
 

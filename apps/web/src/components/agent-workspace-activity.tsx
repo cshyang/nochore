@@ -1,5 +1,5 @@
 import { WarningCircle } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
 import { Button } from "~/components/Button";
 import { RunDetail } from "~/components/RunDetail";
@@ -24,6 +24,9 @@ interface AgentWorkspaceActivityPaneProps {
   onAcceptLearnedRule?: (ruleId: string) => void | Promise<void>;
   onDismissLearnedRule?: (ruleId: string) => void | Promise<void>;
   onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
+  // Empty-state context propagated down to RunDetail.
+  agentName?: string;
+  nextRunAt?: number | null;
 }
 
 export function AgentWorkspaceActivityPane({
@@ -43,6 +46,8 @@ export function AgentWorkspaceActivityPane({
   onAcceptLearnedRule,
   onDismissLearnedRule,
   onSuppressLearnedRule,
+  agentName,
+  nextRunAt,
 }: AgentWorkspaceActivityPaneProps) {
   const displayRuns = useMemo(() => {
     if (!selectedRunId || runs.some((run) => run.id === selectedRunId)) {
@@ -66,6 +71,34 @@ export function AgentWorkspaceActivityPane({
 
   const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
   const hasJumpToLive = Boolean(activeRunId) && selectedRun?.id !== activeRunId && displayRuns.some((run) => run.id === activeRunId);
+
+  // Arrow-key navigation between runs. Scoped to window because the effect
+  // only mounts while the Runs tab is active — switching to Chat/Settings
+  // unmounts this component and removes the listener. Inputs/textareas are
+  // ignored so arrow keys in the chat composer keep working.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      if (displayRuns.length === 0) return;
+      const idx = displayRuns.findIndex((r) => r.id === selectedRunId);
+      const current = idx === -1 ? 0 : idx;
+      const nextIdx =
+        e.key === "ArrowUp"
+          ? Math.max(0, current - 1)
+          : Math.min(displayRuns.length - 1, current + 1);
+      if (nextIdx !== current) {
+        e.preventDefault();
+        onSelectRun(displayRuns[nextIdx].id);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [displayRuns, selectedRunId, onSelectRun]);
 
   return (
     <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
@@ -173,6 +206,8 @@ export function AgentWorkspaceActivityPane({
             onReject={onReject}
             onAskChat={onAskChat}
             priorRuns={displayRuns}
+            agentName={agentName}
+            nextRunAt={nextRunAt}
           />
         </div>
       </div>

@@ -59,38 +59,6 @@ export function summarizeRun(run: RunView): RunStats {
   };
 }
 
-export interface RunsAggregate {
-  runCount: number;
-  totalCost: number;
-  totalTokens: number;
-  pendingApprovals: number;
-  failedCount: number;
-}
-
-// Sum across runs that started within the last `windowDays`.
-// Caller owns the time window; this is a pure fold.
-export function summarizeRuns(runs: RunView[], windowDays = 7): RunsAggregate {
-  const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
-
-  let runCount = 0;
-  let totalCost = 0;
-  let totalTokens = 0;
-  let pendingApprovals = 0;
-  let failedCount = 0;
-
-  for (const run of runs) {
-    if (new Date(run.startedAt).getTime() < cutoff) continue;
-    runCount += 1;
-    if (run.status === "failed") failedCount += 1;
-    pendingApprovals += (run.approvals ?? []).filter((a) => a.status === "pending").length;
-    const stats = summarizeRun(run);
-    totalCost += stats.costEstimate;
-    totalTokens += stats.totalTokens;
-  }
-
-  return { runCount, totalCost, totalTokens, pendingApprovals, failedCount };
-}
-
 export interface OutOfRangeResult {
   flagged: boolean;
   observed: number;

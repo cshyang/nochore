@@ -38,6 +38,9 @@ interface RunDetailProps {
   // Full run history for this agent; used as baseline for out-of-range stats.
   // isOutOfRange filters internally (excludes non-completed + target).
   priorRuns?: RunView[];
+  // Empty-state context: shown only when no runs exist yet.
+  agentName?: string;
+  nextRunAt?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +58,8 @@ export function RunDetail({
   onReject,
   onAskChat,
   priorRuns,
+  agentName,
+  nextRunAt,
 }: RunDetailProps) {
   const [showEvents, setShowEvents] = useState(false);
   const hasDraftChecklist = checklistItems && checklistItems.length > 0;
@@ -107,7 +112,7 @@ export function RunDetail({
               marginBottom: 6,
             }}
           >
-            No runs yet
+            {agentName ? `${agentName} hasn't run yet` : "No runs yet"}
           </div>
           <div
             style={{
@@ -118,12 +123,14 @@ export function RunDetail({
               marginBottom: 20,
             }}
           >
-            Your agent hasn&apos;t run yet. Click &quot;Run now&quot; to see it in action.
+            {nextRunAt
+              ? `Next scheduled run: ${formatScheduledTime(nextRunAt)}.`
+              : "Nothing has happened here yet — kick off a first run to see the agent work."}
           </div>
           {onRunNow && (
             <Button onClick={onRunNow}>
               <Play size={13} weight="bold" />
-              Start first run
+              {nextRunAt ? "Or run now" : "Start first run"}
             </Button>
           )}
         </div>
@@ -530,7 +537,7 @@ export function RunDetail({
                 marginBottom: 4,
               }}
             >
-              Run completed
+              All clean
             </div>
             <div
               style={{
@@ -539,7 +546,7 @@ export function RunDetail({
                 lineHeight: TYPE.leading.normal,
               }}
             >
-              Run completed with no findings to report.
+              Nothing to act on — the agent checked its workspace and didn&apos;t find anything worth changing.
             </div>
           </div>
         </div>
@@ -655,4 +662,22 @@ function ResolvedApprovalArtifacts({ run }: { run: RunView }) {
       </div>
     </details>
   );
+}
+
+// Human-friendly scheduled-run label. Uses the browser locale so we don't
+// ship a lookup table for day names.
+function formatScheduledTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const runDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysOut = Math.round((runDay.getTime() - today.getTime()) / 86_400_000);
+
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (daysOut === 0) return `today at ${time}`;
+  if (daysOut === 1) return `tomorrow at ${time}`;
+  if (daysOut > 1 && daysOut < 7) {
+    return `${date.toLocaleDateString(undefined, { weekday: "long" })} at ${time}`;
+  }
+  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} at ${time}`;
 }

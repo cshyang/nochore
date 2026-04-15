@@ -332,6 +332,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onAcceptLearnedRule={onAcceptLearnedRule}
               onDismissLearnedRule={onDismissLearnedRule}
               onSuppressLearnedRule={onSuppressLearnedRule}
+              agentName={agent.name}
+              nextRunAt={agent.nextRunAt}
             />
           </div>
         ) : null}
