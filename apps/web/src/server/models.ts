@@ -42,7 +42,15 @@ export interface SerializedRun {
   id: string;
   agentId: string;
   triggerType: string;
-  status: "queued" | "running" | "waiting_for_approval" | "waiting_for_children" | "stopped" | "completed" | "failed" | "cancelled";
+  status:
+    | "queued"
+    | "running"
+    | "waiting_for_approval"
+    | "waiting_for_children"
+    | "stopped"
+    | "completed"
+    | "failed"
+    | "cancelled";
   hasActionableApprovals: boolean;
   startedAt: string;
   completedAt?: string;
@@ -104,7 +112,11 @@ export function buildAgentView(params: {
 }): AgentView {
   const latestRun = params.runs[0] ?? null;
   const activeRunCount = params.runs.filter(
-    (run) => run.status === "queued" || run.status === "running" || run.status === "waiting_for_approval" || run.status === "waiting_for_children",
+    (run) =>
+      run.status === "queued" ||
+      run.status === "running" ||
+      run.status === "waiting_for_approval" ||
+      run.status === "waiting_for_children",
   ).length;
   const pendingCount = params.approvals.filter(
     (approval) => approval.status === "pending" || approval.status === "expired",
@@ -186,6 +198,7 @@ export function buildConnectionView(row: typeof connections.$inferSelect): Conne
     createdAt: row.createdAt,
     connectedAccountId: row.composioEntityId ?? null,
     config: parsedConfig,
+    authorizedByUserId: row.authorizedByUserId ?? null,
   };
 }
 
@@ -253,7 +266,9 @@ export function buildSerializedRun(
     agentId: run.agentId,
     triggerType: run.triggerType,
     status: mapRunStatus(run.status),
-    hasActionableApprovals: approvals.some((approval) => approval.status === "pending" || approval.status === "expired"),
+    hasActionableApprovals: approvals.some(
+      (approval) => approval.status === "pending" || approval.status === "expired",
+    ),
     startedAt: run.startedAt.toISOString(),
     completedAt: run.completedAt?.toISOString(),
     error: run.error,

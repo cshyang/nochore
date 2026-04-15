@@ -1,8 +1,8 @@
 import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
+import { useOnboardingChatFlow } from "~/components/onboarding-chat-flow";
+import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
-import { ConversationMessage } from "~/components/onboarding-chat-messages";
-import { useOnboardingChatFlow } from "~/components/onboarding-chat-flow";
 
 interface OnboardingChatProps {
   projectId: string;
@@ -12,7 +12,12 @@ interface OnboardingChatProps {
   onBack: () => void;
 }
 
-const EXAMPLE_PROMPTS = ["Reduce ad waste", "Grow qualified leads", "Monitor funnel health", "Track competitor pricing"];
+const EXAMPLE_PROMPTS = [
+  "Reduce ad waste",
+  "Grow qualified leads",
+  "Monitor funnel health",
+  "Track competitor pricing",
+];
 
 export function OnboardingChat({
   projectId,
@@ -227,26 +232,20 @@ export function OnboardingChat({
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                 {conversationMessages.map((message, index) => {
                   const isLastAssistant =
-                    index === conversationMessages.length - 1 &&
-                    message.role === "assistant" &&
-                    !redirecting;
+                    index === conversationMessages.length - 1 && message.role === "assistant" && !redirecting;
 
                   return (
-                    <div
-                      key={message.id}
-                      ref={isLastAssistant ? latestAssistantRef : undefined}
-                    >
+                    <div key={message.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
                       <ConversationMessage
                         message={message as { role: string; parts: Array<Record<string, unknown>> }}
                         onOptionClick={isLastAssistant ? handleOptionClick : undefined}
+                        existingConnections={existingConnections}
                       />
                     </div>
                   );
                 })}
 
-                {isLoading ? (
-                  <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Working…</div>
-                ) : null}
+                {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Working…</div> : null}
               </div>
 
               <div style={{ height: "35vh" }} />

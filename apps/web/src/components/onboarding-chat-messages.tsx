@@ -5,7 +5,53 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { OptionCards, PaginatedCard, parseOptions } from "~/components/onboarding-chat-options";
 import type { OnboardingMessage, RequestInputToolInput } from "~/components/onboarding-chat-types";
-import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE } from "~/lib/colors";
+import { CONNECTABLE_PROVIDER_SLUGS, getProviderName } from "~/lib/provider-metadata";
+
+function buildProviderNameIndex(): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const slug of CONNECTABLE_PROVIDER_SLUGS) {
+    const name = getProviderName(slug);
+    if (name) index.set(name.toLowerCase(), slug);
+  }
+  return index;
+}
+
+const PROVIDER_NAME_INDEX = buildProviderNameIndex();
+
+function StrongWithStatus({ children, connectedSet }: { children?: ReactNode; connectedSet: Set<string> }) {
+  const text = extractText(children);
+  const slug = text ? PROVIDER_NAME_INDEX.get(text.toLowerCase()) : undefined;
+  if (!slug) {
+    return <strong>{children}</strong>;
+  }
+  const isConnected = connectedSet.has(slug);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "1px 8px",
+        borderRadius: RADIUS.pill,
+        background: COLORS.surface,
+        border: `1px solid ${COLORS.border}`,
+        fontWeight: TYPE.weight.semibold,
+        verticalAlign: "baseline",
+      }}
+    >
+      <span style={{ color: isConnected ? COLORS.green : COLORS.textDim, fontSize: 9 }}>●</span>
+      {children}
+    </span>
+  );
+}
+
+function extractText(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  return "";
+}
 
 export function isRequestInputPart(part: Record<string, unknown>): boolean {
   return part.type === "tool-request_input" || (part.type === "dynamic-tool" && part.toolName === "request_input");
@@ -95,14 +141,24 @@ function ReasoningBlock({ text, state }: { text: string; state: string }) {
   );
 }
 
-function ToolActivityRow({ toolName, state, output }: { toolName: string; state: string; output: unknown }) {
+function ToolActivityRow({
+  toolName,
+  state,
+  input,
+  output,
+}: {
+  toolName: string;
+  state: string;
+  input: unknown;
+  output: unknown;
+}) {
   const label = TOOL_LABELS[toolName];
   if (!label) return null;
 
   const Icon = label.icon === "search" ? MagnifyingGlass : Lightning;
   const summary =
-    toolName === "search_tools" && Array.isArray(output)
-      ? `${label.done} (${output.length})`
+    toolName === "search_tools"
+      ? searchToolsSummary({ state, input, output })
       : state === "output-available"
         ? label.done
         : label.verb;
@@ -128,6 +184,36 @@ function ToolActivityRow({ toolName, state, output }: { toolName: string; state:
   );
 }
 
+function searchToolsSummary({ state, input, output }: { state: string; input: unknown; output: unknown }): string {
+  const provider = resolveSearchProvider(input, output);
+  const providerLabel = provider ? getProviderName(provider) : null;
+
+  if (state !== "output-available") {
+    return providerLabel ? `Checking ${providerLabel}…` : "Searching for tools…";
+  }
+
+  if (!Array.isArray(output) || output.length === 0) {
+    return providerLabel ? `Checked ${providerLabel}` : "Checked available tools";
+  }
+
+  return providerLabel ? `Found ${providerLabel} capabilities` : "Found capabilities";
+}
+
+function resolveSearchProvider(input: unknown, output: unknown): string | null {
+  const inputObj = input as { toolkits?: unknown } | undefined;
+  if (inputObj && Array.isArray(inputObj.toolkits) && inputObj.toolkits.length > 0) {
+    const first = inputObj.toolkits[0];
+    if (typeof first === "string" && first.length > 0) return first.toLowerCase();
+  }
+  if (Array.isArray(output) && output.length > 0) {
+    const firstSlug = (output[0] as { slug?: string })?.slug;
+    if (typeof firstSlug === "string" && firstSlug.includes("_")) {
+      return firstSlug.split("_")[0]!.toLowerCase();
+    }
+  }
+  return null;
+}
+
 function resolveSelectedLabel(selected: string, options: Array<{ key: string; label: string }>): string {
   const labelByKey = new Map(options.map((option) => [option.key, option.label]));
   if (labelByKey.has(selected)) return labelByKey.get(selected)!;
@@ -139,7 +225,9 @@ function resolveSelectedLabel(selected: string, options: Array<{ key: string; la
     .join(", ");
 }
 
-function renderPart(part: Record<string, unknown>, index: number): ReactNode {
+type RenderOptions = { markdownComponents?: Record<string, (props: { children?: ReactNode }) => ReactNode> };
+
+function renderPart(part: Record<string, unknown>, index: number, options: RenderOptions = {}): ReactNode {
   if (part.type === "reasoning") {
     const text = (part.text as string) ?? (part.reasoning as string) ?? "";
     const state = (part.state as string) ?? "done";
@@ -147,7 +235,9 @@ function renderPart(part: Record<string, unknown>, index: number): ReactNode {
   }
 
   if (part.type === "step-start") {
-    return <div key={`step-${index}`} style={{ height: 1, background: COLORS.border, margin: "8px 0", opacity: 0.5 }} />;
+    return (
+      <div key={`step-${index}`} style={{ height: 1, background: COLORS.border, margin: "8px 0", opacity: 0.5 }} />
+    );
   }
 
   if (part.type === "text") {
@@ -164,14 +254,24 @@ function renderPart(part: Record<string, unknown>, index: number): ReactNode {
           fontFamily: TYPE.body,
         }}
       >
-        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]} components={options.markdownComponents as never}>
+          {text}
+        </Markdown>
       </div>
     );
   }
 
   const toolName = getPartToolName(part);
   if (toolName && TOOL_LABELS[toolName]) {
-    return <ToolActivityRow key={`tool-${index}`} toolName={toolName} state={part.state as string} output={part.output} />;
+    return (
+      <ToolActivityRow
+        key={`tool-${index}`}
+        toolName={toolName}
+        state={part.state as string}
+        input={part.input}
+        output={part.output}
+      />
+    );
   }
 
   return null;
@@ -180,10 +280,18 @@ function renderPart(part: Record<string, unknown>, index: number): ReactNode {
 export function ConversationMessage({
   message,
   onOptionClick,
+  existingConnections = [],
 }: {
   message: OnboardingMessage;
   onOptionClick?: (value: string) => void;
+  existingConnections?: string[];
 }) {
+  const connectedSet = new Set(existingConnections.map((provider) => provider.toLowerCase()));
+  const markdownComponents = {
+    strong: ({ children }: { children?: ReactNode }) => (
+      <StrongWithStatus connectedSet={connectedSet}>{children}</StrongWithStatus>
+    ),
+  };
   const isUser = message.role === "user";
   const parts = message.parts;
 
@@ -226,7 +334,7 @@ export function ConversationMessage({
 
     return (
       <div>
-        {nonRequestParts.map((part, index) => renderPart(part, index))}
+        {nonRequestParts.map((part, index) => renderPart(part, index, { markdownComponents }))}
         {requestInputParts.map((part) => {
           const input = part.input as RequestInputToolInput | undefined;
           const output = part.output as { selectedKeys?: string[]; customText?: string; skipped?: boolean } | undefined;
@@ -278,7 +386,7 @@ export function ConversationMessage({
           fontFamily: TYPE.body,
         }}
       >
-        <Markdown>{textBuffer.trim()}</Markdown>
+        <Markdown components={markdownComponents as never}>{textBuffer.trim()}</Markdown>
         {isStreaming ? (
           <span
             style={{
@@ -309,7 +417,7 @@ export function ConversationMessage({
     flushText();
 
     if (part.type === "reasoning" || part.type === "step-start") {
-      renderedParts.push(renderPart(part, renderedParts.length));
+      renderedParts.push(renderPart(part, renderedParts.length, { markdownComponents }));
       continue;
     }
 
@@ -343,7 +451,7 @@ export function ConversationMessage({
     if (!isRequestInputPart(part)) {
       const toolName = getPartToolName(part);
       if (toolName && TOOL_LABELS[toolName]) {
-        renderedParts.push(renderPart(part, renderedParts.length));
+        renderedParts.push(renderPart(part, renderedParts.length, { markdownComponents }));
       }
     }
   }
@@ -363,7 +471,10 @@ export function ConversationMessage({
       .filter((part) => part.type === "text")
       .map((part) => part.text as string)
       .join("");
-    const fallback = input.options.length > 0 ? { options: input.options, isMultiSelect: input.multiSelect } : parseOptions(textContent);
+    const fallback =
+      input.options.length > 0
+        ? { options: input.options, isMultiSelect: input.multiSelect }
+        : parseOptions(textContent);
     const finalOptions = input.options.length > 0 ? input.options : fallback.options;
     const finalMultiSelect = input.options.length > 0 ? input.multiSelect : fallback.isMultiSelect;
     const isTextOnly = finalOptions.length === 0 && input.allowCustom;
@@ -380,7 +491,7 @@ export function ConversationMessage({
             fontFamily: TYPE.body,
           }}
         >
-          <Markdown>{input.question}</Markdown>
+          <Markdown components={markdownComponents as never}>{input.question}</Markdown>
         </div>,
       );
     }

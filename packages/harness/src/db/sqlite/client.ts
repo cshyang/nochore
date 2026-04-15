@@ -192,6 +192,7 @@ const CREATE_DDL = `
     composio_entity_id TEXT,
     status TEXT NOT NULL,
     config TEXT,
+    authorized_by_user_id TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -266,7 +267,9 @@ function migrateAddColumns(sqlite: Database.Database) {
     sqlite.exec("ALTER TABLE runs ADD COLUMN trigger_run_id TEXT");
   }
 
-  const conversationThreadCols = sqlite.prepare("PRAGMA table_info(conversation_threads)").all() as Array<{ name: string }>;
+  const conversationThreadCols = sqlite.prepare("PRAGMA table_info(conversation_threads)").all() as Array<{
+    name: string;
+  }>;
   if (conversationThreadCols.length > 0 && !conversationThreadCols.some((c) => c.name === "last_input_tokens")) {
     sqlite.exec("ALTER TABLE conversation_threads ADD COLUMN last_input_tokens INTEGER");
   }
@@ -288,7 +291,9 @@ function migrateAddColumns(sqlite: Database.Database) {
     );
   }
 
-  const conversationEventCols = sqlite.prepare("PRAGMA table_info(conversation_events)").all() as Array<{ name: string }>;
+  const conversationEventCols = sqlite.prepare("PRAGMA table_info(conversation_events)").all() as Array<{
+    name: string;
+  }>;
   if (conversationEventCols.length > 0 && !conversationEventCols.some((c) => c.name === "event_key")) {
     sqlite.exec("ALTER TABLE conversation_events ADD COLUMN event_key TEXT");
   }
@@ -296,7 +301,9 @@ function migrateAddColumns(sqlite: Database.Database) {
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_events_thread_event_key ON conversation_events (thread_id, event_key)",
   );
 
-  const conversationCheckpointCols = sqlite.prepare("PRAGMA table_info(conversation_checkpoints)").all() as Array<{ name: string }>;
+  const conversationCheckpointCols = sqlite.prepare("PRAGMA table_info(conversation_checkpoints)").all() as Array<{
+    name: string;
+  }>;
   if (conversationCheckpointCols.length > 0 && !conversationCheckpointCols.some((c) => c.name === "estimated_tokens")) {
     sqlite.exec("ALTER TABLE conversation_checkpoints ADD COLUMN estimated_tokens INTEGER");
   }
@@ -321,6 +328,11 @@ function migrateAddColumns(sqlite: Database.Database) {
   const agentCols = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
   if (agentCols.length > 0 && !agentCols.some((c) => c.name === "primary_metric")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN primary_metric TEXT");
+  }
+
+  const connectionCols = sqlite.prepare("PRAGMA table_info(connections)").all() as Array<{ name: string }>;
+  if (connectionCols.length > 0 && !connectionCols.some((c) => c.name === "authorized_by_user_id")) {
+    sqlite.exec("ALTER TABLE connections ADD COLUMN authorized_by_user_id TEXT");
   }
 }
 

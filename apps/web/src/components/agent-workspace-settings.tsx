@@ -4,17 +4,17 @@ import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { Button } from "~/components/Button";
 import { fieldStyle } from "~/components/SettingsComponents";
 import { SettingsAccessPanel } from "~/components/settings/settings-access-panel";
-import { SettingsAutonomyPanel } from "~/components/settings/settings-autonomy-panel";
 import { SettingsBasicsPanel } from "~/components/settings/settings-basics-panel";
+import { SettingsNotificationsPanel } from "~/components/settings/settings-notifications-panel";
 import { COLORS, MOTION, RADIUS, SHADOW, TYPE } from "~/lib/colors";
 import type { LearnedRuleView, NotificationConfigView, ToolConfigEntryView, ToolConfigView } from "~/lib/types";
 
-type SettingsLocalTab = "basics" | "access" | "autonomy";
+type SettingsLocalTab = "basics" | "access" | "notifications";
 
 const SETTINGS_TAB_OPTIONS: Array<{ value: SettingsLocalTab; label: string }> = [
   { value: "basics", label: "Basics" },
-  { value: "access", label: "Access" },
-  { value: "autonomy", label: "Autonomy" },
+  { value: "access", label: "Connections" },
+  { value: "notifications", label: "Notifications" },
 ];
 
 function getNotificationConfig(notificationConfig: NotificationConfigView | undefined): NotificationConfigView {
@@ -156,33 +156,32 @@ export function AgentWorkspaceSettingsPanel({
           skills={skills}
           selectedSkills={selectedSkills}
           policyTools={policyTools}
+          currentToolConfig={currentToolConfig}
           connections={connections}
           missingRequiredProviders={missingRequiredProviders}
+          learnedRules={learnedRules}
+          learnedRuleSuggestions={learnedRuleSuggestions}
           showProviderPicker={showProviderPicker}
           projectId={projectId}
           providerLogos={providerLogos}
           onSetSelectedSkills={setSelectedSkills}
           onCommitSkills={(next) => void persist({ skills: next })}
           onShowProviderPicker={setShowProviderPicker}
+          onPersistToolConfig={persistToolConfig}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
-        />
-      ) : null}
-
-      {localTab === "autonomy" ? (
-        <SettingsAutonomyPanel
-          currentToolConfig={currentToolConfig}
-          policyTools={policyTools}
-          learnedRules={learnedRules}
-          learnedRuleSuggestions={learnedRuleSuggestions}
-          notificationConfig={notificationConfig}
-          onPersistToolConfig={persistToolConfig}
-          onSetNotificationConfig={setNotificationConfig}
-          onCommitNotifications={(next) => void persist({ notificationConfig: next })}
           onAcceptLearnedRule={onAcceptLearnedRule}
           onDismissLearnedRule={onDismissLearnedRule}
           onSuppressLearnedRule={onSuppressLearnedRule}
           onRevokeLearnedRule={onRevokeLearnedRule}
+        />
+      ) : null}
+
+      {localTab === "notifications" ? (
+        <SettingsNotificationsPanel
+          notificationConfig={notificationConfig}
+          onSetNotificationConfig={setNotificationConfig}
+          onCommitNotifications={(next) => void persist({ notificationConfig: next })}
         />
       ) : null}
 

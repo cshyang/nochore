@@ -67,6 +67,11 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     icon: "📋",
     defaultReason: "Track and update work items when required",
   },
+  builtin: {
+    name: "Nochore built-ins",
+    icon: "✦",
+    defaultReason: "Always-on capabilities provided by Nochore",
+  },
 };
 
 export const CONNECTABLE_PROVIDER_SLUGS = [
@@ -88,10 +93,12 @@ export const CONNECTABLE_PROVIDER_SLUGS = [
 export const TOOLKIT_CATALOG_PROVIDER_SLUGS = CONNECTABLE_PROVIDER_SLUGS;
 
 export function getProviderMetadata(provider: string): ProviderMetadata {
-  return PROVIDER_METADATA[provider] ?? {
-    name: humanizeProvider(provider),
-    icon: "🔌",
-  };
+  return (
+    PROVIDER_METADATA[provider] ?? {
+      name: humanizeProvider(provider),
+      icon: "🔌",
+    }
+  );
 }
 
 export function getProviderName(provider: string): string {

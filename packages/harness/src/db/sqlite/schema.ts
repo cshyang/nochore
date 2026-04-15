@@ -236,6 +236,7 @@ export const connections = sqliteTable(
     composioEntityId: text("composio_entity_id"),
     status: text("status").notNull(),
     config: text("config"),
+    authorizedByUserId: text("authorized_by_user_id"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

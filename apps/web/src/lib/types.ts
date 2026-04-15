@@ -240,6 +240,7 @@ export interface ConnectionView {
   createdAt: number;
   connectedAccountId?: string | null;
   config?: Record<string, unknown>;
+  authorizedByUserId?: string | null;
 }
 
 export interface AgentView {
