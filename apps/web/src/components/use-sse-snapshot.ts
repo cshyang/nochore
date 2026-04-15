@@ -4,15 +4,14 @@ export function useSseSnapshot<T>(url: string | null, initialSnapshot: T) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [connected, setConnected] = useState(false);
   const retryDelayRef = useRef(1000);
-
-  useEffect(() => {
-    setSnapshot(initialSnapshot);
-  }, [initialSnapshot]);
+  const latestInitialRef = useRef(initialSnapshot);
+  latestInitialRef.current = initialSnapshot;
 
   useEffect(() => {
     if (!url) {
       return;
     }
+    setSnapshot(latestInitialRef.current);
 
     let closed = false;
     let source: EventSource | null = null;

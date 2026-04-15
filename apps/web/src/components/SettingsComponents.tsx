@@ -43,6 +43,49 @@ export function smallActionStyle(color: string) {
 }
 
 // ---------------------------------------------------------------------------
+// SmallAction — pill button with hover feedback (border + background lift)
+// ---------------------------------------------------------------------------
+
+export function SmallAction({
+  color,
+  onClick,
+  children,
+  type = "button",
+  disabled,
+}: {
+  color: string;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+  type?: "button" | "submit" | "reset";
+  disabled?: boolean;
+}) {
+  const base = smallActionStyle(color);
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...base,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.background = COLORS.surfaceHover;
+        e.currentTarget.style.borderColor = color;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.borderColor = COLORS.border;
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Toggle — minimal pill switch
 // ---------------------------------------------------------------------------
 

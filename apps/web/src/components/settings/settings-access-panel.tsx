@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentWorkspaceProps } from "~/components/agent-workspace.types";
 import { Button } from "~/components/Button";
 import { ProviderIcon, SectionHeading, SettingsCard, SettingsRow, Toggle } from "~/components/SettingsComponents";
@@ -58,36 +58,110 @@ export function SettingsAccessPanel({
   onRevokeLearnedRule,
 }: SettingsAccessPanelProps) {
   const [pendingConsent, setPendingConsent] = useState<{ provider: string; isReconnect: boolean } | null>(null);
-  const activeConnections = connections.filter((connection) => connection.status === "active");
-  const builtinTools = policyTools.filter((tool) => tool.provider === "builtin");
-  const builtinConnection: ConnectionView | null =
-    builtinTools.length > 0
-      ? {
-          id: "builtin",
-          provider: "builtin",
-          status: "active",
-          createdAt: 0,
-          authorizedByUserId: null,
+  const [optimisticToolConfig, setOptimisticToolConfig] = useState<ToolConfigView>(currentToolConfig);
+  const optimisticRef = useRef(optimisticToolConfig);
+  optimisticRef.current = optimisticToolConfig;
+
+  const currentToolConfigRef = useRef(currentToolConfig);
+  currentToolConfigRef.current = currentToolConfig;
+
+  const lastDispatchedToolsRef = useRef(currentToolConfig.tools);
+  const lastDispatchedGlobalRef = useRef(currentToolConfig.globalApprovalRequired);
+  const inFlightRef = useRef<Promise<unknown> | null>(null);
+  const queuedRef = useRef<ToolConfigView | null>(null);
+
+  // Sync: always take server's authoritative fields (requiredProviders).
+  // Preserve optimistic tools / globalApprovalRequired only while server hasn't
+  // caught up to what we last dispatched.
+  useEffect(() => {
+    const current = currentToolConfig;
+    const optimistic = optimisticRef.current;
+    const useServerTools = toolsDictEqual(current.tools, lastDispatchedToolsRef.current);
+    const useServerGlobal = current.globalApprovalRequired === lastDispatchedGlobalRef.current;
+
+    const merged: ToolConfigView = {
+      ...current,
+      tools: useServerTools ? current.tools : optimistic.tools,
+      globalApprovalRequired: useServerGlobal ? current.globalApprovalRequired : optimistic.globalApprovalRequired,
+    };
+
+    if (!toolConfigsEqual(merged, optimistic)) {
+      setOptimisticToolConfig(merged);
+    }
+  }, [currentToolConfig]);
+
+  const firePersist = (config: ToolConfigView) => {
+    inFlightRef.current = onPersistToolConfig(config)
+      .catch(() => {
+        // Rollback to last known server state so UI doesn't pretend a failed
+        // persist succeeded. Reset dispatched refs so future server updates flow.
+        const latestServer = currentToolConfigRef.current;
+        setOptimisticToolConfig(latestServer);
+        lastDispatchedToolsRef.current = latestServer.tools;
+        lastDispatchedGlobalRef.current = latestServer.globalApprovalRequired;
+        queuedRef.current = null;
+      })
+      .finally(() => {
+        inFlightRef.current = null;
+        const queued = queuedRef.current;
+        if (queued) {
+          queuedRef.current = null;
+          lastDispatchedToolsRef.current = queued.tools;
+          lastDispatchedGlobalRef.current = queued.globalApprovalRequired;
+          firePersist(queued);
         }
-      : null;
-  const renderableConnections = builtinConnection ? [builtinConnection, ...activeConnections] : activeConnections;
+      });
+  };
+
+  const persistOptimistic = (next: ToolConfigView) => {
+    setOptimisticToolConfig(next);
+    if (inFlightRef.current) {
+      // Latest click wins — collapse pending queue.
+      queuedRef.current = next;
+      return;
+    }
+    lastDispatchedToolsRef.current = next.tools;
+    lastDispatchedGlobalRef.current = next.globalApprovalRequired;
+    firePersist(next);
+  };
+
+  const effectiveToolConfig = optimisticToolConfig;
+  const optimisticPolicyTools = useMemo(
+    () =>
+      policyTools.map((tool) => {
+        const override = effectiveToolConfig.tools[tool.toolName];
+        return override ? { ...tool, ...override } : tool;
+      }),
+    [policyTools, effectiveToolConfig],
+  );
+
+  const activeConnections = connections.filter((connection) => connection.status === "active");
+  const builtinConnection: ConnectionView = {
+    id: "builtin",
+    provider: "builtin",
+    status: "active",
+    createdAt: 0,
+    authorizedByUserId: null,
+  };
+  const renderableConnections = [builtinConnection, ...activeConnections];
   const connectedProviders = new Set(activeConnections.map((connection) => connection.provider));
 
   const toolsByProvider = useMemo(() => {
     const map = new Map<string, ToolConfigEntryView[]>();
-    for (const tool of policyTools) {
+    for (const tool of optimisticPolicyTools) {
       const list = map.get(tool.provider) ?? [];
       list.push(tool);
       map.set(tool.provider, list);
     }
+    map.set("builtin", BUILTIN_CAPABILITIES);
     return map;
-  }, [policyTools]);
+  }, [optimisticPolicyTools]);
 
   const toolProviderByName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const tool of policyTools) map.set(tool.toolName, tool.provider);
+    for (const tool of optimisticPolicyTools) map.set(tool.toolName, tool.provider);
     return map;
-  }, [policyTools]);
+  }, [optimisticPolicyTools]);
 
   const rulesByProvider = useMemo(
     () => groupRulesByProvider(learnedRules, toolProviderByName),
@@ -102,12 +176,12 @@ export function SettingsAccessPanel({
   const orphanSuggestions = suggestionsByProvider.get(ORPHAN_KEY) ?? [];
 
   const setToolApproval = (toolName: string, mode: ApprovalMode) => {
-    const existing = currentToolConfig.tools[toolName] ?? policyTools.find((t) => t.toolName === toolName);
+    const existing = effectiveToolConfig.tools[toolName] ?? optimisticPolicyTools.find((t) => t.toolName === toolName);
     if (!existing) return;
-    void onPersistToolConfig({
-      ...currentToolConfig,
+    persistOptimistic({
+      ...effectiveToolConfig,
       tools: {
-        ...currentToolConfig.tools,
+        ...effectiveToolConfig.tools,
         [toolName]: { ...existing, approvalMode: mode },
       },
     });
@@ -116,11 +190,11 @@ export function SettingsAccessPanel({
   const setConnectionApproval = (provider: string, mode: ApprovalMode) => {
     const providerTools = toolsByProvider.get(provider) ?? [];
     if (providerTools.length === 0) return;
-    const nextTools = { ...currentToolConfig.tools };
+    const nextTools = { ...effectiveToolConfig.tools };
     for (const tool of providerTools) {
-      nextTools[tool.toolName] = { ...tool, ...currentToolConfig.tools[tool.toolName], approvalMode: mode };
+      nextTools[tool.toolName] = { ...tool, ...effectiveToolConfig.tools[tool.toolName], approvalMode: mode };
     }
-    void onPersistToolConfig({ ...currentToolConfig, tools: nextTools });
+    persistOptimistic({ ...effectiveToolConfig, tools: nextTools });
   };
 
   const requestConnect = (provider: string, isReconnect: boolean) => {
@@ -340,10 +414,10 @@ export function SettingsAccessPanel({
           isLast={orphanRules.length === 0 && orphanSuggestions.length === 0}
           trailing={
             <Toggle
-              checked={currentToolConfig.globalApprovalRequired}
-              onChange={(checked) =>
-                void onPersistToolConfig({ ...currentToolConfig, globalApprovalRequired: checked })
-              }
+              checked={effectiveToolConfig.globalApprovalRequired}
+              onChange={(checked) => {
+                persistOptimistic({ ...effectiveToolConfig, globalApprovalRequired: checked });
+              }}
             />
           }
         />
@@ -364,6 +438,117 @@ export function SettingsAccessPanel({
 }
 
 const ORPHAN_KEY = "__orphan__";
+
+function toolConfigsEqual(a: ToolConfigView, b: ToolConfigView): boolean {
+  if (a === b) return true;
+  if (a.globalApprovalRequired !== b.globalApprovalRequired) return false;
+  if (!toolsDictEqual(a.tools, b.tools)) return false;
+  return requiredProvidersEqual(a.requiredProviders, b.requiredProviders);
+}
+
+function toolsDictEqual(a: ToolConfigView["tools"], b: ToolConfigView["tools"]): boolean {
+  if (a === b) return true;
+  const aNames = Object.keys(a);
+  const bNames = Object.keys(b);
+  if (aNames.length !== bNames.length) return false;
+  for (const name of aNames) {
+    const aTool = a[name];
+    const bTool = b[name];
+    if (!bTool) return false;
+    if (aTool.approvalMode !== bTool.approvalMode || aTool.enabled !== bTool.enabled) return false;
+  }
+  return true;
+}
+
+function requiredProvidersEqual(
+  a: ToolConfigView["requiredProviders"],
+  b: ToolConfigView["requiredProviders"],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  const aKeys = new Set(a.map((r) => r.provider));
+  for (const r of b) {
+    if (!aKeys.has(r.provider)) return false;
+  }
+  return true;
+}
+
+// Baseline runtime tools exposed to every agent. Names match INTERNAL_TOOL_MODES
+// in services/worker/src/lib/policy-helpers.ts. The runtime defaults these to
+// auto-approval when no explicit per-tool config exists (see worker
+// tool-config.ts#getToolConfigForCall), so this card is presented read-only.
+const BUILTIN_CAPABILITIES: ToolConfigEntryView[] = [
+  {
+    toolName: "bash",
+    slug: "bash",
+    provider: "builtin",
+    title: "Run shell commands",
+    description: "Execute shell scripts inside the agent's sandbox.",
+    mode: "write",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "edit",
+    slug: "edit",
+    provider: "builtin",
+    title: "Edit files",
+    description: "Make targeted edits to files in the agent workspace.",
+    mode: "write",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "read",
+    slug: "read",
+    provider: "builtin",
+    title: "Read workspace files",
+    description: "Access KNOWLEDGE.md, POLICY.md, scratchpad, and previous reports.",
+    mode: "read",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "write",
+    slug: "write",
+    provider: "builtin",
+    title: "Write files",
+    description: "Create or overwrite files in the agent's scratchpad and reports.",
+    mode: "write",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "spawn_sub_run",
+    slug: "spawn_sub_run",
+    provider: "builtin",
+    title: "Spawn sub-agents",
+    description: "Delegate work to a child agent via the coordinated runtime.",
+    mode: "write",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "submit_report",
+    slug: "submit_report",
+    provider: "builtin",
+    title: "Submit reports",
+    description: "Emit structured reports for downstream observability.",
+    mode: "read",
+    enabled: true,
+    approvalMode: "auto",
+  },
+  {
+    toolName: "record_metric",
+    slug: "record_metric",
+    provider: "builtin",
+    title: "Record metrics",
+    description: "Observe and track the agent's primary success metric across runs.",
+    mode: "read",
+    enabled: true,
+    approvalMode: "auto",
+  },
+];
 
 function groupRulesByProvider(
   rules: LearnedRuleView[],

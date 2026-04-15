@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Button } from "~/components/Button";
-import { ProviderIcon, SettingsCard, smallActionStyle } from "~/components/SettingsComponents";
+import { ProviderIcon, SettingsCard, SmallAction } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { getProviderMetadata } from "~/lib/provider-metadata";
 import { humanize } from "~/lib/text-format";
@@ -53,9 +53,11 @@ export function SettingsConnectionCard({
   const [configValue, setConfigValue] = useState(existingValue);
   const [expanded, setExpanded] = useState(false);
 
+  const isBuiltin = connection.provider === "builtin";
   const connectionMode = deriveConnectionMode(tools);
   const ruleCount = scopedRules.length + scopedSuggestions.length;
   const hasBody = Boolean(configField) || tools.length > 0 || ruleCount > 0;
+  const canBulkSet = !isBuiltin && tools.length > 1;
 
   const saveConfig = async () => {
     if (!configField || configValue === existingValue) return;
@@ -101,21 +103,30 @@ export function SettingsConnectionCard({
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <ApprovalSegmented value={connectionMode} onChange={(mode) => onSetConnectionApproval(mode)} compact />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            {isBuiltin || tools.length === 0 ? null : <ConnectionStatusPill mode={connectionMode} />}
             {hasBody ? (
-              <span
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={COLORS.textSecondary}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                role="presentation"
+                aria-hidden="true"
                 style={{
-                  color: COLORS.textDim,
-                  fontSize: TYPE.scale.sm,
                   transition: `transform ${MOTION.duration} ${MOTION.ease}`,
                   transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                  display: "inline-block",
+                  display: "block",
+                  flexShrink: 0,
                 }}
-                aria-hidden
               >
-                ▾
-              </span>
+                <title>{expanded ? "Collapse" : "Expand"}</title>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
             ) : null}
           </div>
         </div>
@@ -153,12 +164,31 @@ export function SettingsConnectionCard({
           ) : null}
 
           {tools.length > 0 ? (
-            <div style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
-              <SectionLabel>Tools</SectionLabel>
-              {tools.map((tool) => (
+            <div style={{ display: "grid" }}>
+              <div
+                style={{
+                  padding: "12px 16px 6px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <SectionLabel>{isBuiltin ? "Capabilities" : "Tools"}</SectionLabel>
+                {canBulkSet ? (
+                  <BulkApprovalControl
+                    onApply={(mode) => onSetConnectionApproval(mode)}
+                    currentMode={connectionMode}
+                    toolCount={tools.length}
+                  />
+                ) : null}
+              </div>
+              {tools.map((tool, index) => (
                 <ToolApprovalRow
                   key={tool.toolName}
                   tool={tool}
+                  readOnly={isBuiltin}
+                  isLast={index === tools.length - 1}
                   onChange={(mode) => onSetToolApproval(tool.toolName, mode)}
                 />
               ))}
@@ -220,21 +250,16 @@ export function SettingsConnectionCard({
                 borderTop: `1px solid ${COLORS.border}`,
               }}
             >
-              <button
-                type="button"
-                onClick={() => onConnect?.(connection.provider)}
-                style={smallActionStyle(COLORS.textSecondary)}
-              >
+              <SmallAction color={COLORS.textSecondary} onClick={() => onConnect?.(connection.provider)}>
                 Reconnect
-              </button>
+              </SmallAction>
               {connection.connectedAccountId ? (
-                <button
-                  type="button"
+                <SmallAction
+                  color={COLORS.red}
                   onClick={() => onDisconnect?.(connection.provider, connection.connectedAccountId!)}
-                  style={smallActionStyle(COLORS.red)}
                 >
                   Disconnect
-                </button>
+                </SmallAction>
               ) : null}
             </div>
           ) : null}
@@ -253,6 +278,129 @@ function deriveConnectionMode(tools: ToolConfigEntryView[]): ApprovalMode | "mix
   return "mixed";
 }
 
+function ConnectionStatusPill({ mode }: { mode: ApprovalMode | "mixed" }) {
+  const { label, color } = describeMode(mode);
+  return (
+    <span
+      style={{
+        fontFamily: TYPE.body,
+        fontSize: TYPE.scale.xs,
+        fontWeight: TYPE.weight.medium,
+        color,
+        padding: "3px 10px",
+        borderRadius: RADIUS.pill,
+        border: `1px solid ${COLORS.border}`,
+        background: COLORS.surface,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function BulkApprovalControl({
+  onApply,
+  currentMode,
+  toolCount,
+}: {
+  onApply: (mode: ApprovalMode) => void;
+  currentMode: ApprovalMode | "mixed";
+  toolCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<ApprovalMode | null>(null);
+
+  const request = (mode: ApprovalMode) => {
+    if (currentMode === "mixed") {
+      setPending(mode);
+      return;
+    }
+    onApply(mode);
+  };
+
+  if (!open) {
+    return (
+      <SmallAction
+        color={COLORS.textSecondary}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+      >
+        Set all…
+      </SmallAction>
+    );
+  }
+
+  if (pending) {
+    return (
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: TYPE.scale.xs,
+          color: COLORS.textSecondary,
+          fontFamily: TYPE.body,
+        }}
+      >
+        <span>
+          Set all {toolCount} tools to <strong style={{ color: COLORS.text }}>{describeMode(pending).label}</strong>?
+        </span>
+        <SmallAction
+          color={COLORS.accent}
+          onClick={(e) => {
+            e.stopPropagation();
+            onApply(pending);
+            setPending(null);
+            setOpen(false);
+          }}
+        >
+          Apply
+        </SmallAction>
+        <SmallAction
+          color={COLORS.textDim}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPending(null);
+          }}
+        >
+          Cancel
+        </SmallAction>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <ApprovalSegmented value={currentMode} onChange={(mode) => request(mode)} compact />
+      <SmallAction
+        color={COLORS.textDim}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(false);
+        }}
+      >
+        Done
+      </SmallAction>
+    </div>
+  );
+}
+
+function describeMode(mode: ApprovalMode | "mixed"): { label: string; color: string } {
+  switch (mode) {
+    case "auto":
+      return { label: "All auto", color: COLORS.green };
+    case "approval":
+      return { label: "Approval required", color: COLORS.orange };
+    case "blocked":
+      return { label: "Blocked", color: COLORS.red };
+    default:
+      return { label: "Mixed", color: COLORS.textSecondary };
+  }
+}
+
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div
@@ -269,14 +417,22 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-function ToolApprovalRow({ tool, onChange }: { tool: ToolConfigEntryView; onChange: (mode: ApprovalMode) => void }) {
+function ToolApprovalRow({
+  tool,
+  readOnly = false,
+  isLast = false,
+  onChange,
+}: {
+  tool: ToolConfigEntryView;
+  readOnly?: boolean;
+  isLast?: boolean;
+  onChange: (mode: ApprovalMode) => void;
+}) {
   return (
     <div
       style={{
-        padding: "10px 12px",
-        borderRadius: RADIUS.md,
-        border: `1px solid ${COLORS.border}`,
-        background: COLORS.bg,
+        padding: "10px 16px",
+        borderBottom: isLast ? "none" : `1px solid ${COLORS.border}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -289,7 +445,7 @@ function ToolApprovalRow({ tool, onChange }: { tool: ToolConfigEntryView; onChan
           <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 2 }}>{tool.description}</div>
         ) : null}
       </div>
-      <ApprovalSegmented value={tool.approvalMode} onChange={onChange} compact />
+      {readOnly ? null : <ApprovalSegmented value={tool.approvalMode} onChange={onChange} compact />}
     </div>
   );
 }
@@ -320,33 +476,66 @@ function ApprovalSegmented({
         background: COLORS.surface,
       }}
     >
-      {options.map((option) => {
-        const isActive = value === option.value;
-        return (
-          <button
-            type="button"
-            key={option.value}
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(option.value);
-            }}
-            style={{
-              border: "none",
-              borderRadius: RADIUS.pill,
-              padding: compact ? "4px 10px" : "6px 12px",
-              background: isActive ? COLORS.accentDim : "transparent",
-              color: isActive ? COLORS.accent : COLORS.textSecondary,
-              fontFamily: TYPE.body,
-              fontSize: TYPE.scale.xs,
-              fontWeight: TYPE.weight.medium,
-              cursor: "pointer",
-            }}
-          >
-            {option.label}
-          </button>
-        );
-      })}
+      {options.map((option) => (
+        <SegmentedOption
+          key={option.value}
+          label={option.label}
+          isActive={value === option.value}
+          compact={compact}
+          onClick={() => onChange(option.value)}
+        />
+      ))}
     </div>
+  );
+}
+
+function SegmentedOption({
+  label,
+  isActive,
+  compact,
+  onClick,
+}: {
+  label: string;
+  isActive: boolean;
+  compact: boolean;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const background = isActive ? COLORS.accentDim : hovered ? COLORS.surfaceHover : "transparent";
+  const textColor = isActive ? COLORS.accent : hovered ? COLORS.text : COLORS.textSecondary;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setPressed(false);
+      }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      style={{
+        border: "none",
+        borderRadius: RADIUS.pill,
+        padding: compact ? "4px 10px" : "6px 12px",
+        background,
+        color: textColor,
+        fontFamily: TYPE.body,
+        fontSize: TYPE.scale.xs,
+        fontWeight: TYPE.weight.medium,
+        cursor: "pointer",
+        transition: "background 120ms ease, color 120ms ease, transform 80ms ease",
+        transform: pressed ? "scale(0.94)" : "scale(1)",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
