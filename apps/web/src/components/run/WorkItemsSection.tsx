@@ -39,6 +39,10 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
             background: COLORS.surface,
             border: `1px solid ${COLORS.border}`,
             borderRadius: RADIUS.sm,
+            // Without minWidth: 0 the row's min-content width is the sum of its
+            // children's min-content widths — which for a long unbreakable
+            // title defeats the inner ellipsis and pushes the pane wider.
+            minWidth: 0,
           }}
         >
           <Badge color={workItemStatusColor(wi.status)}>{humanize(wi.role)}</Badge>
@@ -47,10 +51,13 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
               fontSize: TYPE.scale.sm,
               color: COLORS.textSecondary,
               flex: 1,
+              minWidth: 0,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              // Hover/title gives the full text to curious readers.
             }}
+            title={wi.title}
           >
             {wi.title}
           </span>

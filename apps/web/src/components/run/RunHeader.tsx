@@ -1,14 +1,13 @@
 import { Badge } from "~/components/Badge";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import { humanize } from "~/lib/text-format";
-import { formatDuration } from "~/lib/time-format";
 import type { RunView } from "~/lib/types";
 
+// Purpose: the "run identity" strip. Answers "which run am I looking at?"
+// — status, when it started, and how it was triggered. Everything else
+// (tokens, cost, duration, tool calls, subagents) lives in RunStatsStrip
+// immediately below, so this stays minimal by design.
 export function RunHeader({ run }: { run: RunView }) {
-  const duration = formatDuration(run.startedAt, run.completedAt);
-  const toolCount = run.events.filter((e) => e.type === "tool_called").length;
-  const findingCount = run.events.filter((e) => e.type === "finding_recorded").length;
-
   const statusBadge =
     run.status === "completed" ? (
       <Badge color="green">Completed</Badge>
@@ -37,29 +36,33 @@ export function RunHeader({ run }: { run: RunView }) {
         alignItems: "center",
         flexWrap: "wrap",
         gap: 10,
-        padding: "14px 20px",
+        padding: "12px 16px",
         background: COLORS.surface,
         border: `1px solid ${COLORS.border}`,
         borderRadius: RADIUS.sm,
-        marginBottom: 16,
+        marginBottom: 12,
+        minWidth: 0,
       }}
     >
       {statusBadge}
-      {duration && <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{duration}</span>}
-      <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>{"\u00b7"}</span>
+      <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{formatStartedAt(run.startedAt)}</span>
+      <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim, opacity: 0.5 }}>{"\u00b7"}</span>
       <Badge color="gray">{humanize(run.triggerType ?? "manual")}</Badge>
-
-      <span
-        style={{
-          fontSize: TYPE.scale.xs,
-          color: COLORS.textDim,
-          marginLeft: "auto",
-        }}
-      >
-        {toolCount > 0 && `${toolCount} tool call${toolCount === 1 ? "" : "s"}`}
-        {toolCount > 0 && findingCount > 0 && " \u00b7 "}
-        {findingCount > 0 && `${findingCount} finding${findingCount === 1 ? "" : "s"}`}
-      </span>
     </div>
   );
+}
+
+// Humanized "started at" — today shows only the time; older runs include
+// the date so the user can locate historical runs without clicking into
+// the row. Locale-aware for free via toLocale* helpers.
+function formatStartedAt(startedAt: string): string {
+  const start = new Date(startedAt);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const runDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const time = start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (runDay.getTime() === today.getTime()) return time;
+  const dayDelta = Math.round((today.getTime() - runDay.getTime()) / 86_400_000);
+  if (dayDelta === 1) return `Yesterday at ${time}`;
+  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} at ${time}`;
 }

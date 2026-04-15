@@ -166,7 +166,7 @@ export function RunDetail({
       : "Specialist work is still in progress.";
 
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
@@ -259,7 +259,7 @@ export function RunDetail({
 
   if (status === "waiting_for_approval") {
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
@@ -324,7 +324,7 @@ export function RunDetail({
         : "This run stopped after an approval was declined.");
 
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
@@ -380,7 +380,7 @@ export function RunDetail({
 
   if (status === "cancelled") {
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
@@ -452,7 +452,7 @@ export function RunDetail({
   // ── Failed with no finding ─────────────────────────────────────────────
   if (status === "failed" && !finding) {
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
@@ -509,7 +509,7 @@ export function RunDetail({
   // ── Completed with no finding ──────────────────────────────────────────
   if (status === "completed" && !finding) {
     return (
-      <div style={{ flex: 1, padding: "24px 20px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />

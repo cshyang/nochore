@@ -172,7 +172,7 @@ export function AgentWorkspaceActivityPane({
           onSelect={onSelectRun}
           activeRunId={activeRunId}
         />
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowX: "hidden", overflowY: "auto" }}>
           {hasJumpToLive ? (
             <div
               style={{
