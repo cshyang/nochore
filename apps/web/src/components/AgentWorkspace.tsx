@@ -59,11 +59,24 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const [chatApprovalContext, setChatApprovalContext] = useState<PendingActionView | null>(null);
   const [chatTriggeredRunId, setChatTriggeredRunId] = useState<string | null>(null);
 
+  // User-initiated run selection: update local state AND propagate to the
+  // route so the URL's ?runId= stays in sync (reloadable, shareable, back/forward).
+  // Do NOT use this from effects that sync state *from* props.initialRunId —
+  // that would round-trip and write the URL over itself.
+  const onSelectRunProp = props.onSelectRun;
+  const selectRun = useCallback(
+    (runId: string | null) => {
+      setSelectedRunId(runId);
+      onSelectRunProp?.(runId);
+    },
+    [onSelectRunProp],
+  );
+
   useEffect(() => {
     if (!selectedRunId && runs.length > 0) {
-      setSelectedRunId(runs[0].id);
+      selectRun(runs[0].id);
     }
-  }, [runs, selectedRunId]);
+  }, [runs, selectedRunId, selectRun]);
 
   useEffect(() => {
     if (previousAgentIdRef.current !== agent.id) {
@@ -208,18 +221,21 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     setShowFirstRunPrompt(false);
     const result = await onRunNow?.();
     if (result?.runId) {
-      setSelectedRunId(result.runId);
+      selectRun(result.runId);
     }
   };
 
   const wrappedOnRunNow = onRunNow ? handleRunNowWithConfirm : undefined;
   const viewportHeight = "calc(100dvh - 64px)";
 
-  const handleAskChat = useCallback((approval: PendingActionView) => {
-    setSelectedRunId(approval.runId);
-    setChatApprovalContext(approval);
-    setTab("chat");
-  }, []);
+  const handleAskChat = useCallback(
+    (approval: PendingActionView) => {
+      selectRun(approval.runId);
+      setChatApprovalContext(approval);
+      setTab("chat");
+    },
+    [selectRun],
+  );
 
   return (
     <div style={{ position: "relative", height: viewportHeight, minHeight: 0 }}>
@@ -290,7 +306,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               void (async () => {
                 const result = await onRunNow?.();
                 if (result?.runId) {
-                  setSelectedRunId(result.runId);
+                  selectRun(result.runId);
                 }
               })();
             }}
@@ -302,7 +318,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             <AgentWorkspaceActivityPane
               runs={runs}
               selectedRunId={selectedRunId}
-              onSelectRun={setSelectedRunId}
+              onSelectRun={selectRun}
               activeRunId={activeRunId}
               runError={runError}
               onRunNow={wrappedOnRunNow}
@@ -350,7 +366,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               runs={runs}
               conversation={conversation}
               onRunTriggered={(runId, triggerRunId) => {
-                setSelectedRunId(runId);
+                selectRun(runId);
                 setChatTriggeredRunId(runId);
                 notifiedChatRunRef.current = null;
                 onRunTriggered?.(runId, triggerRunId);

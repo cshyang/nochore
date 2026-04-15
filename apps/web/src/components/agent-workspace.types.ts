@@ -44,6 +44,7 @@ export interface AgentWorkspaceProps {
   initialTab?: WorkspaceTab;
   initialRunId?: string | null;
   initialPendingActionId?: string | null;
+  onSelectRun?: (runId: string | null) => void;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   activeRunId?: string | null;

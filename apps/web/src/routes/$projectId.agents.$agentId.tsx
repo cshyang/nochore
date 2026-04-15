@@ -173,6 +173,18 @@ function AgentDetailPage() {
   const [cancelling, setCancelling] = useState(false);
   const activeRun = activity.activeRunId ? runs.find((run) => run.id === activity.activeRunId) ?? null : null;
 
+  const handleSelectRun = useCallback(
+    (runId: string | null) => {
+      void navigate({
+        to: "/$projectId/agents/$agentId",
+        params: { projectId, agentId },
+        search: (prev) => ({ ...prev, runId: runId ?? undefined }),
+        replace: true,
+      });
+    },
+    [agentId, navigate, projectId],
+  );
+
   const handleCancelRun = useCallback(async () => {
     if (!activeRun || cancelling) return;
     if (!activeRun.triggerRunId) {
@@ -230,6 +242,7 @@ function AgentDetailPage() {
       initialTab={search.tab}
       initialRunId={search.runId ?? null}
       initialPendingActionId={search.pendingActionId ?? null}
+      onSelectRun={handleSelectRun}
       activeRunId={activity.activeRunId}
       onCancelRun={handleCancelRun}
       cancelling={cancelling}
