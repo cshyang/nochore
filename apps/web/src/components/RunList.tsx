@@ -1,7 +1,8 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useState } from "react";
+import { StatusPill } from "~/components/StatusPill";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
-import { statusColor, statusLabel } from "~/lib/status-format";
+import { statusColor } from "~/lib/status-format";
 import { formatDuration, formatTime } from "~/lib/time-format";
 import type { RunView } from "~/lib/types";
 
@@ -310,16 +311,12 @@ function ExpandedList({
             {group.runs.map((run) => {
               const isSelected = run.id === selectedRunId;
               const isHovered = run.id === hoveredId;
-              const isRunning = run.status === "running" || run.id === activeRunId;
-              const color = statusColor(run);
 
               const duration = formatDuration(run.startedAt, run.completedAt);
               const trigger = run.triggerType ?? "manual";
-              const label = statusLabel(run);
-
-              const bottomParts = [label, trigger];
-              if (duration) bottomParts.push(duration);
-              const bottomLine = bottomParts.join(" \u00b7 ");
+              const metaParts = [trigger];
+              if (duration) metaParts.push(duration);
+              const metaLine = metaParts.join(" \u00b7 ");
 
               return (
                 <button
@@ -330,10 +327,10 @@ function ExpandedList({
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     gap: 10,
                     width: "100%",
-                    padding: "7px 16px",
+                    padding: "8px 16px",
                     cursor: "pointer",
                     borderRadius: RADIUS.sm,
                     border: "none",
@@ -345,29 +342,31 @@ function ExpandedList({
                     fontFamily: TYPE.body,
                   }}
                 >
-                  {/* Status dot */}
-                  <div
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: RADIUS.pill,
-                      background: color,
-                      flexShrink: 0,
-                      animation: isRunning ? "railPulse 2s ease-in-out infinite" : "none",
-                    }}
-                  />
-
-                  {/* Main content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: TYPE.scale.sm,
-                        color: COLORS.text,
-                        fontWeight: TYPE.weight.medium,
-                        lineHeight: TYPE.leading.snug,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 2,
+                        minWidth: 0,
                       }}
                     >
-                      {formatTime(run.startedAt)}
+                      <StatusPill run={run} size="compact" />
+                      <span
+                        style={{
+                          fontSize: TYPE.scale.sm,
+                          color: COLORS.text,
+                          fontWeight: TYPE.weight.medium,
+                          lineHeight: TYPE.leading.snug,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          minWidth: 0,
+                        }}
+                      >
+                        {formatTime(run.startedAt)}
+                      </span>
                     </div>
                     <div
                       style={{
@@ -379,7 +378,7 @@ function ExpandedList({
                         textOverflow: "ellipsis",
                       }}
                     >
-                      {bottomLine}
+                      {metaLine}
                     </div>
                     {run.summary?.headline && (
                       <div

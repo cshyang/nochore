@@ -1,34 +1,14 @@
 import { Badge } from "~/components/Badge";
+import { StatusPill } from "~/components/StatusPill";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import { humanize } from "~/lib/text-format";
 import type { RunView } from "~/lib/types";
 
-// Purpose: the "run identity" strip. Answers "which run am I looking at?"
-// — status, when it started, and how it was triggered. Everything else
-// (tokens, cost, duration, tool calls, subagents) lives in RunStatsStrip
-// immediately below, so this stays minimal by design.
+// The "run identity" strip. Status is the hero — it answers "how is this
+// run doing?" in one glance, so it earns the hero-size StatusPill.
+// Everything else on this row stays quiet by design (gray trigger badge,
+// muted timestamp).
 export function RunHeader({ run }: { run: RunView }) {
-  const statusBadge =
-    run.status === "completed" ? (
-      <Badge color="green">Completed</Badge>
-    ) : run.status === "failed" ? (
-      <Badge color="red">Failed</Badge>
-    ) : run.status === "stopped" ? (
-      <Badge color="yellow">Stopped</Badge>
-    ) : run.status === "cancelled" ? (
-      <Badge color="yellow">Cancelled</Badge>
-    ) : run.status === "waiting_for_approval" ? (
-      <Badge color="yellow">Waiting</Badge>
-    ) : run.status === "waiting_for_children" ? (
-      <Badge color={run.hasActionableApprovals ? "yellow" : "blue"}>
-        {run.hasActionableApprovals ? "Needs input" : "Coordinating"}
-      </Badge>
-    ) : run.status === "queued" ? (
-      <Badge color="gray">Queued</Badge>
-    ) : (
-      <Badge color="blue">Running</Badge>
-    );
-
   return (
     <div
       style={{
@@ -44,7 +24,7 @@ export function RunHeader({ run }: { run: RunView }) {
         minWidth: 0,
       }}
     >
-      {statusBadge}
+      <StatusPill run={run} size="hero" />
       <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{formatStartedAt(run.startedAt)}</span>
       <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim, opacity: 0.5 }}>{"\u00b7"}</span>
       <Badge color="gray">{humanize(run.triggerType ?? "manual")}</Badge>

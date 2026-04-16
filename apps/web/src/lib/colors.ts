@@ -55,7 +55,7 @@ export const COLORS = {
   // Text
   text: "#ECEAF2",
   textSecondary: "#9B97AB",
-  textDim: "#6B6780",
+  textDim: "#8A86A0",
 
   // Utility
   white: "#FFFFFF",
