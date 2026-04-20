@@ -74,7 +74,7 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
               aria-controls={bodyId}
               style={{
                 display: "flex",
-                alignItems: "center",
+                alignItems: isOpen ? "flex-start" : "center",
                 gap: 10,
                 padding: "10px 14px",
                 width: "100%",
@@ -99,27 +99,34 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                 style={{
                   display: "inline-flex",
                   color: COLORS.textDim,
+                  marginTop: isOpen ? 4 : 0,
                   transition: `transform ${MOTION.duration} ${MOTION.ease}`,
                 }}
               >
                 {isOpen ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
               </span>
-              <Badge color={workItemStatusColor(wi.status)}>{humanize(wi.role)}</Badge>
+              <span style={{ marginTop: isOpen ? 1 : 0 }}>
+                <Badge color={workItemStatusColor(wi.status)}>{humanize(wi.role)}</Badge>
+              </span>
               <span
                 style={{
                   fontSize: TYPE.scale.sm,
                   color: COLORS.textSecondary,
                   flex: 1,
                   minWidth: 0,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  overflow: isOpen ? "visible" : "hidden",
+                  textOverflow: isOpen ? "clip" : "ellipsis",
+                  whiteSpace: isOpen ? "pre-wrap" : "nowrap",
+                  wordBreak: isOpen ? "break-word" : "normal",
+                  lineHeight: isOpen ? TYPE.leading.normal : undefined,
                 }}
               >
                 {wi.title}
               </span>
-              {duration && <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{duration}</span>}
-              {wi.error && !isOpen && (
+              {!isOpen && duration && (
+                <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{duration}</span>
+              )}
+              {!isOpen && wi.error && (
                 <span style={{ fontSize: TYPE.scale.xs, color: errorColor }}>
                   {wi.status === "stopped" ? "Stopped" : "Error"}
                 </span>
@@ -130,25 +137,12 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
               <div
                 id={bodyId}
                 style={{
-                  padding: "4px 14px 14px 36px",
+                  padding: "12px 14px 14px 36px",
                   display: "grid",
                   gap: 10,
                   borderTop: `1px solid ${COLORS.border}`,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: TYPE.scale.sm,
-                    color: COLORS.textSecondary,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    lineHeight: TYPE.leading.normal,
-                    paddingTop: 10,
-                  }}
-                >
-                  {wi.title}
-                </div>
-
                 <div
                   style={{
                     display: "flex",
