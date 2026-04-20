@@ -346,6 +346,11 @@
       "sourceType": "github",
       "computedHash": "e94439a0e2704d3802c2c5b393444a65afd2a5e0f2b0809e5ec9189452f4734b"
     },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "9d1e82c5c409d2b0247245a005bc0f7e4447c0999b78dcea60f568c1ba4a6694"
+    },
     "distill": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",
@@ -476,6 +481,11 @@
       "sourceType": "github",
       "computedHash": "8ee93ac0e6cf1eaf606a5a1755b34fe10af42732066b64be9fbbb08d9b81418b"
     },
+    "full-output-enforcement": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "26bd29ce4c5e02c7666b2d503609bf466bd32290822e91f0e984147048dbb924"
+    },
     "gan-style-harness": {
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
@@ -510,6 +520,11 @@
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
       "computedHash": "bfd2c0fb3baac4fa06e07851234356033b700dd76719fab0f8cd2db7a2f0a7a6"
+    },
+    "gpt-taste": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "cc8f0c601d8240a124e1d11634351a2be7b8a72fd807c75e5b6bf7afcd5ddee0"
     },
     "gsd": {
       "source": "ctsstc/get-shit-done-skills",
@@ -546,6 +561,11 @@
       "sourceType": "github",
       "computedHash": "079f825ab203e42b8a5acbefb2ba50536718e1ec31d100b9521660ba0af749dd"
     },
+    "high-end-visual-design": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "7db385e4c5370e5a7fca9704a1361b056e4504ea6a03924bb86f33a4f00b5c73"
+    },
     "hipaa-compliance": {
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
@@ -560,6 +580,11 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "computedHash": "a26b3dd377c4572b1c34c68f82ab9a1cb806f21c7157060327fe60e9b6d2e277"
+    },
+    "industrial-brutalist-ui": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "8fc355c4aadb7d29c53ca28bc41be3cd6eea765d121e3737c4dc2d0f90a8effa"
     },
     "inventory-demand-planning": {
       "source": "affaan-m/everything-claude-code",
@@ -695,6 +720,11 @@
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
       "computedHash": "b3661fcd86ef7154016b55260579d73af9bb4197287294a5e5f7a43fabd8335a"
+    },
+    "minimalist-ui": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "08873a3131d3be27bef9bf3304b310b16b44ca6e3561aebe532797be3443f6bd"
     },
     "nanoclaw-repl": {
       "source": "affaan-m/everything-claude-code",
@@ -841,6 +871,11 @@
       "sourceType": "github",
       "computedHash": "b82022c5c16105c476940409a9970b4c012621592775b8230929d442dfa9d458"
     },
+    "redesign-existing-projects": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
+    },
     "regex-vs-llm-structured-text": {
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
@@ -955,6 +990,11 @@
       "source": "affaan-m/everything-claude-code",
       "sourceType": "github",
       "computedHash": "88a2604dca610c7bf230affe5b2006d8c847ae29ca68cef3c0b9052ee736734d"
+    },
+    "stitch-design-taste": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "computedHash": "3aa58992f0fd9673b975cd48cd4f8ae4b4976fd5cdd9f20e26d3d447aee317fb"
     },
     "strategic-compact": {
       "source": "affaan-m/everything-claude-code",
