@@ -20,6 +20,7 @@ import {
 } from "~/server/chat-memory";
 import { getAgentRow, getProjectDeps, listProjectConnections } from "~/server/deps";
 import { startAgentRun } from "~/server/orchestration";
+import { buildPersistentUIMessageStreamOptions } from "~/server/ui-message-stream";
 
 type IncomingMessage = {
   id?: string;
@@ -72,9 +73,7 @@ export const Route = createFileRoute("/api/agent-chat")({
         });
 
         const projectConnections = listProjectConnections(projectId);
-        const connectedProviders = projectConnections
-          .filter((c) => c.status === "active")
-          .map((c) => c.provider);
+        const connectedProviders = projectConnections.filter((c) => c.status === "active").map((c) => c.provider);
 
         const system = [
           buildAgentChatSystemPrompt({
@@ -314,27 +313,29 @@ export const Route = createFileRoute("/api/agent-chat")({
           },
         });
 
-        return result.toUIMessageStreamResponse({
-          originalMessages: rawMessages as UIMessage[],
-          onFinish: async ({ messages, responseMessage }) => {
-            await persistConversationAfterResponse({
-              deps,
-              agent,
-              thread,
-              messages,
-              responseMessage,
-              model,
-              totalUsage: totalUsage
-                ? {
-                    inputTokens: totalUsage.inputTokens,
-                    outputTokens: totalUsage.outputTokens,
-                    totalTokens: totalUsage.totalTokens,
-                  }
-                : undefined,
-              latestUserText,
-            });
-          },
-        });
+        return result.toUIMessageStreamResponse(
+          buildPersistentUIMessageStreamOptions({
+            originalMessages: rawMessages as UIMessage[],
+            onFinish: async ({ messages, responseMessage }) => {
+              await persistConversationAfterResponse({
+                deps,
+                agent,
+                thread,
+                messages,
+                responseMessage,
+                model,
+                totalUsage: totalUsage
+                  ? {
+                      inputTokens: totalUsage.inputTokens,
+                      outputTokens: totalUsage.outputTokens,
+                      totalTokens: totalUsage.totalTokens,
+                    }
+                  : undefined,
+                latestUserText,
+              });
+            },
+          }),
+        );
       },
     },
   },
