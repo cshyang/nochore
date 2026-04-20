@@ -10,7 +10,7 @@ const SCOPE_CATEGORIES = [
   { key: "preferences", label: "Preferences", scopes: ["memory:preference"] },
   { key: "corrections", label: "Corrections", scopes: ["memory:correction"] },
   { key: "decisions", label: "Decisions", scopes: ["memory:decision"] },
-  { key: "run-insights", label: "Run insights", scopes: ["memory:run-summary"] },
+  { key: "run-insights", label: "Run insights", scopes: ["memory:insight"] },
 ] as const;
 
 type CategoryKey = (typeof SCOPE_CATEGORIES)[number]["key"];

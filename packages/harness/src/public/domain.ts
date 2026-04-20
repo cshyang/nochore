@@ -20,9 +20,10 @@ export type {
 export {
   buildConversationTranscript,
   CHECKPOINT_KEEP_RECENT_TOKENS,
-  classifyRunLessonWrites,
+  classifyEpisodicLesson,
   estimateConversationStateTokens,
   estimateTextTokens,
+  extractRunInsights,
   extractStructuredConversationEvents,
   findCompactionBoundary,
   INLINE_COMPACTION_KEEP_RECENT_TOKENS,

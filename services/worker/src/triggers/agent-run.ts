@@ -1,7 +1,9 @@
 import type { RunSummary, RunTrigger } from "@nochore/harness";
 import {
   type AgentRecord,
-  classifyRunLessonWrites,
+  classifyEpisodicLesson,
+  createAiSdkModel,
+  extractRunInsights,
   getAgentWorkspacePath,
   MetricObservationSchema,
   type PiToolDefinition,
@@ -334,13 +336,35 @@ export const agentRunTask = task({
 
       await recordRunResultInConversation(runtime, agent.id, summary);
 
-      const lessonWrites = classifyRunLessonWrites({
-        headline: summary.headline,
-        finalText: summary.finalText,
-        details: summary.details,
-        findingCount: 0,
-        toolCallCount: piResult.toolCalls.length,
-      });
+      const durableLessons = await runtime.lessonRepository.listDurableByAgent(agent.id);
+      const existingInsights = durableLessons
+        .filter((lesson) => lesson.scope === "memory:insight")
+        .map((lesson) => lesson.content);
+
+      const combinedContent = [summary.headline, summary.finalText, ...(summary.details ?? [])]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      let lessonWrites = combinedContent
+        ? await extractRunInsights({
+            model: createAiSdkModel(),
+            headline: summary.headline,
+            finalText: summary.finalText,
+            details: summary.details,
+            existingInsights,
+          })
+        : [];
+
+      if (lessonWrites.length === 0) {
+        lessonWrites = classifyEpisodicLesson({
+          headline: summary.headline,
+          finalText: summary.finalText,
+          details: summary.details,
+          toolCallCount: piResult.toolCalls.length,
+        });
+      }
+
       for (const lessonWrite of lessonWrites) {
         const lessonId = await runtime.lessonRepository.create({
           agentId: agent.id,

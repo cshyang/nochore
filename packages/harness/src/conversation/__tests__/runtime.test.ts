@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { UIMessage } from "ai";
+import type { LanguageModel, UIMessage } from "ai";
 import {
-  classifyRunLessonWrites,
+  classifyEpisodicLesson,
+  extractRunInsights,
   extractStructuredConversationEvents,
   findCompactionBoundary,
   rehydrateConversationMessages,
@@ -90,25 +91,75 @@ describe("conversation runtime helpers", () => {
     expect(boundary.turnStartIndex).toBe(0);
   });
 
-  it("classifies durable and episodic run lessons", () => {
-    const durable = classifyRunLessonWrites({
-      headline: "Found wasted spend",
-      finalText: "Paused 3 wasteful search terms.",
+  it("classifies content-bearing episodic runs as no-finding", () => {
+    const result = classifyEpisodicLesson({
+      headline: "run-headline",
+      finalText: "run-output",
       details: [],
-      findingCount: 1,
       toolCallCount: 2,
     });
-    const episodic = classifyRunLessonWrites({
-      headline: "Routine audit",
-      finalText: "No significant issues found.",
+    expect(result[0]?.scope).toBe("episode:no-finding");
+    expect(result[0]?.expiresInMs).toBeDefined();
+  });
+
+  it("classifies empty-content episodic runs as attempted", () => {
+    const result = classifyEpisodicLesson({
+      headline: "",
+      finalText: "",
       details: [],
-      findingCount: 0,
       toolCallCount: 2,
+    });
+    expect(result[0]?.scope).toBe("episode:attempted");
+    expect(result[0]?.expiresInMs).toBeDefined();
+  });
+
+  it("returns no episodic lesson when no tool calls occurred", () => {
+    const result = classifyEpisodicLesson({
+      headline: "run-headline",
+      finalText: "run-output",
+      details: [],
+      toolCallCount: 0,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("extractRunInsights returns [] when run has no content", async () => {
+    const mockModel = {} as unknown as LanguageModel;
+    const result = await extractRunInsights({
+      model: mockModel,
+      headline: "",
+      finalText: "",
+      details: [],
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("extractRunInsights returns [] when the model call fails", async () => {
+    const failingModel = {
+      specificationVersion: "v3" as const,
+      provider: "mock",
+      modelId: "mock",
+      defaultObjectGenerationMode: "json" as const,
+      async doGenerate() {
+        throw new Error("simulated model failure");
+      },
+      async doStream() {
+        throw new Error("not used");
+      },
+    } as unknown as LanguageModel;
+
+    // Content is non-empty (to pass the combined-length guard) but
+    // deliberately agent-agnostic — this function is domain-neutral.
+    const result = await extractRunInsights({
+      model: failingModel,
+      headline: "run-headline",
+      finalText: "run-output-content",
+      details: [],
     });
 
-    expect(durable[0]?.scope).toBe("memory:run-summary");
-    expect(episodic[0]?.scope).toBe("episode:no-finding");
-    expect(episodic[0]?.expiresInMs).toBeDefined();
+    // Any failure path — thrown error, schema mismatch, rate limit — should
+    // surface as an empty write list rather than propagate.
+    expect(result).toEqual([]);
   });
 
   it("gates chat memory extraction to stable signals", () => {

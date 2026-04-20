@@ -306,6 +306,13 @@ export async function persistConversationAfterResponse(params: {
   });
 }
 
+const ALLOWED_DURABLE_SCOPES = new Set([
+  "memory:preference",
+  "memory:correction",
+  "memory:decision",
+  "memory:insight",
+]);
+
 function buildChatMemoryContext(params: {
   checkpointSummary?: string;
   durableLessons: LessonRecord[];
@@ -318,9 +325,10 @@ function buildChatMemoryContext(params: {
     sections.push(`Relationship checkpoint:\n${params.checkpointSummary.trim()}`);
   }
 
-  if (params.durableLessons.length > 0) {
+  const relevantDurable = params.durableLessons.filter((lesson) => ALLOWED_DURABLE_SCOPES.has(lesson.scope));
+  if (relevantDurable.length > 0) {
     sections.push(
-      `Durable memory:\n${params.durableLessons
+      `Durable memory:\n${relevantDurable
         .slice(0, 8)
         .map((lesson) => `- [${lesson.scope}] (${lesson.confidence}) ${lesson.content}`)
         .join("\n")}`,
