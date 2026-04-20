@@ -229,11 +229,23 @@ export interface LessonView {
 
 export interface ConversationStateView {
   threadId: string;
+  threadTitle: string;
+  isPrimary: boolean;
   checkpointSummary?: string;
   checkpointMessageCount: number;
   messages: ChatMessageView[];
   lessons: LessonView[];
   episodicLessons: LessonView[];
+}
+
+export interface ConversationThreadSummaryView {
+  id: string;
+  title: string;
+  scope: "primary" | "manual" | "channel" | "investigation";
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string;
 }
 
 export interface ConnectionView {

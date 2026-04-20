@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ConversationThreadScopeSchema = z.enum(["primary", "channel", "investigation"]);
+export const ConversationThreadScopeSchema = z.enum(["primary", "manual", "channel", "investigation"]);
 export type ConversationThreadScope = z.infer<typeof ConversationThreadScopeSchema>;
 
 export const ConversationChannelKindSchema = z.enum([

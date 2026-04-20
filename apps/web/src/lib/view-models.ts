@@ -5,6 +5,7 @@ import type {
   ProjectActivityStateView,
   ConnectionView,
   ConversationStateView,
+  ConversationThreadSummaryView,
   ProjectView,
   RunActivityStateView,
   RunView,
@@ -141,7 +142,16 @@ const RunViewSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   triggerType: z.string(),
-  status: z.enum(["queued", "running", "waiting_for_approval", "waiting_for_children", "stopped", "completed", "failed", "cancelled"]),
+  status: z.enum([
+    "queued",
+    "running",
+    "waiting_for_approval",
+    "waiting_for_children",
+    "stopped",
+    "completed",
+    "failed",
+    "cancelled",
+  ]),
   hasActionableApprovals: z.boolean().default(false),
   startedAt: z.string(),
   completedAt: z.string().optional(),
@@ -188,11 +198,23 @@ const LessonViewSchema = z.object({
 
 const ConversationStateViewSchema = z.object({
   threadId: z.string(),
+  threadTitle: z.string(),
+  isPrimary: z.boolean(),
   checkpointSummary: z.string().optional(),
   checkpointMessageCount: z.number().int().nonnegative(),
   messages: z.array(ChatMessageViewSchema),
   lessons: z.array(LessonViewSchema),
   episodicLessons: z.array(LessonViewSchema).default([]),
+});
+
+const ConversationThreadSummaryViewSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  scope: z.enum(["primary", "manual", "channel", "investigation"]),
+  isPrimary: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastMessageAt: z.string().optional(),
 });
 
 const AgentViewSchema = z.object({
@@ -306,6 +328,10 @@ export function parseConnectionViews(value: unknown): ConnectionView[] {
 
 export function parseConversationStateView(value: unknown): ConversationStateView | null {
   return parseNullableSchema(ConversationStateViewSchema, value);
+}
+
+export function parseConversationThreadSummaryViews(value: unknown): ConversationThreadSummaryView[] {
+  return parseArraySchema(ConversationThreadSummaryViewSchema, value);
 }
 
 export function parseRunViews(value: unknown): RunView[] {

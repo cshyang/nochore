@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
@@ -63,7 +64,8 @@ export const conversationThreads = sqliteTable(
     consecutiveCompactionFailures: integer("consecutive_compaction_failures").notNull().default(0),
   },
   (table) => [
-    uniqueIndex("idx_conversation_threads_agent_scope").on(table.agentId, table.scope),
+    index("idx_conversation_threads_agent_scope").on(table.agentId, table.scope),
+    uniqueIndex("idx_conversation_threads_agent_primary").on(table.agentId).where(sql`${table.scope} = 'primary'`),
     index("idx_conversation_threads_agent_updated").on(table.agentId, table.updatedAt),
   ],
 );

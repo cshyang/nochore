@@ -45,33 +45,36 @@ export const getChatHistory = createServerFn({ method: "GET" })
             ? (run.error ?? "The run failed.")
             : run.status === "stopped"
               ? (run.error ?? "The run was stopped.")
-            : run.status === "cancelled"
-              ? (run.error ?? "The run was cancelled.")
-              : `Run ${run.status} via ${run.triggerType}.`,
+              : run.status === "cancelled"
+                ? (run.error ?? "The run was cancelled.")
+                : `Run ${run.status} via ${run.triggerType}.`,
         createdAt: run.completedAt?.toISOString() ?? run.startedAt.toISOString(),
       })),
     );
   });
 
-export const getPrimaryConversationState = createServerFn({ method: "GET" })
-  .inputValidator((input: { agentId: string; projectId: string; limit?: number }) => input)
-  .handler(async ({ data: { agentId, projectId, limit } }) => {
+export const getConversationState = createServerFn({ method: "GET" })
+  .inputValidator((input: { agentId: string; projectId: string; threadId?: string; limit?: number }) => input)
+  .handler(async ({ data: { agentId, projectId, threadId, limit } }) => {
     const state = await loadConversationLoaderState({
       deps: getProjectDeps(projectId),
       agentId,
+      requestedThreadId: threadId,
       limit,
     });
 
     return jsonSafe({
       threadId: state.thread.id,
+      threadTitle: state.thread.title,
+      isPrimary: state.thread.scope === "primary",
       checkpointSummary: state.checkpoint?.summary,
       checkpointMessageCount: state.checkpoint?.messageCount ?? 0,
       checkpointSummaryVersion: state.checkpoint?.summaryVersion ?? 0,
       messages: state.messages.map((message) => ({
-          id: message.id,
-          role: message.role,
-          parts: message.parts as Array<Record<string, unknown>>,
-        })),
+        id: message.id,
+        role: message.role,
+        parts: message.parts as Array<Record<string, unknown>>,
+      })),
       lessons: state.durableLessons.map((lesson) => ({
         id: lesson.id,
         content: lesson.content,
@@ -88,5 +91,43 @@ export const getPrimaryConversationState = createServerFn({ method: "GET" })
         createdAt: lesson.createdAt.toISOString(),
         expiresAt: lesson.expiresAt?.toISOString(),
       })),
+    });
+  });
+
+export const listConversationThreads = createServerFn({ method: "GET" })
+  .inputValidator((input: { agentId: string; projectId: string }) => input)
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const threads = await getProjectDeps(projectId).conversationThreadRepository.listByAgent(agentId);
+
+    return jsonSafe(
+      threads.map((thread) => ({
+        id: thread.id,
+        title: thread.title,
+        scope: thread.scope,
+        isPrimary: thread.scope === "primary",
+        createdAt: thread.createdAt.toISOString(),
+        updatedAt: thread.updatedAt.toISOString(),
+        lastMessageAt: thread.lastMessageAt?.toISOString(),
+      })),
+    );
+  });
+
+export const createConversationThread = createServerFn({ method: "POST" })
+  .inputValidator((input: { agentId: string; projectId: string }) => input)
+  .handler(async ({ data: { agentId, projectId } }) => {
+    const agent = await getAgentRow(projectId, agentId);
+    if (!agent) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    const thread = await getProjectDeps(projectId).conversationThreadRepository.createManualWebThread(agentId);
+    return jsonSafe({
+      id: thread.id,
+      title: thread.title,
+      scope: thread.scope,
+      isPrimary: false,
+      createdAt: thread.createdAt.toISOString(),
+      updatedAt: thread.updatedAt.toISOString(),
+      lastMessageAt: thread.lastMessageAt?.toISOString(),
     });
   });

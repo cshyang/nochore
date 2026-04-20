@@ -47,6 +47,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const policyToolCatalog = props.policyToolCatalog ?? [];
   const runs = props.runs ?? [];
   const conversation = props.conversation;
+  const conversationThreads = props.conversationThreads ?? [];
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
   const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "runs");
@@ -65,12 +66,20 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   // Do NOT use this from effects that sync state *from* props.initialRunId —
   // that would round-trip and write the URL over itself.
   const onSelectRunProp = props.onSelectRun;
+  const onTabChangeProp = props.onTabChange;
   const selectRun = useCallback(
     (runId: string | null) => {
       setSelectedRunId(runId);
       onSelectRunProp?.(runId);
     },
     [onSelectRunProp],
+  );
+  const changeTab = useCallback(
+    (nextTab: WorkspaceTab) => {
+      setTab(nextTab);
+      onTabChangeProp?.(nextTab);
+    },
+    [onTabChangeProp],
   );
 
   useEffect(() => {
@@ -175,13 +184,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           label: "Name your agent",
           done: hasName,
           hint: "Give it a memorable name",
-          action: !hasName ? { label: "Edit", onClick: () => setTab("settings") } : undefined,
+          action: !hasName ? { label: "Edit", onClick: () => changeTab("settings") } : undefined,
         },
         {
           label: "Write instructions",
           done: hasInstructions,
           hint: "Tell it what to monitor and optimize",
-          action: !hasInstructions ? { label: "Edit", onClick: () => setTab("settings") } : undefined,
+          action: !hasInstructions ? { label: "Edit", onClick: () => changeTab("settings") } : undefined,
         },
         {
           label: "Connect required tools",
@@ -190,13 +199,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
             missingProviders.length > 0
               ? `${missingProviders.map((provider) => humanize(provider.provider)).join(", ")} not connected`
               : undefined,
-          action: !hasToolsConnected ? { label: "Connect", onClick: () => setTab("settings") } : undefined,
+          action: !hasToolsConnected ? { label: "Connect", onClick: () => changeTab("settings") } : undefined,
         },
         {
           label: "Set a run schedule",
           done: hasSchedule,
           hint: "Or keep manual if you prefer",
-          action: !hasSchedule ? { label: "Set", onClick: () => setTab("settings") } : undefined,
+          action: !hasSchedule ? { label: "Set", onClick: () => changeTab("settings") } : undefined,
         },
       ]
     : [];
@@ -233,9 +242,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     (approval: PendingActionView) => {
       selectRun(approval.runId);
       setChatApprovalContext(approval);
-      setTab("chat");
+      changeTab("chat");
     },
-    [selectRun],
+    [changeTab, selectRun],
   );
 
   return (
@@ -293,7 +302,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
         <WorkspaceTabs
           tab={tab}
-          onChange={setTab}
+          onChange={changeTab}
           activeConnections={activeConnections.length}
           requiredProviders={mergedRequiredProviders.length}
         />
@@ -368,6 +377,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               projectId={project.id}
               runs={runs}
               conversation={conversation}
+              threads={conversationThreads}
+              onSelectThread={props.onSelectThread}
+              onCreateThread={props.onCreateThread}
               onRunTriggered={(runId, triggerRunId) => {
                 selectRun(runId);
                 setChatTriggeredRunId(runId);

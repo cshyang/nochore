@@ -12,6 +12,8 @@ import {
 
 type Db = HarnessDb;
 
+export const DEFAULT_MANUAL_CONVERSATION_THREAD_TITLE = "New thread";
+
 export interface CreateConversationThreadInput {
   id?: string;
   agentId: string;
@@ -38,6 +40,29 @@ export class ConversationThreadRepository {
       .orderBy(desc(conversationThreads.updatedAt))
       .get();
     return row ? toConversationThread(row) : null;
+  }
+
+  async listByAgent(agentId: string): Promise<ConversationThread[]> {
+    const rows = this.db
+      .select()
+      .from(conversationThreads)
+      .where(eq(conversationThreads.agentId, agentId))
+      .orderBy(desc(conversationThreads.updatedAt))
+      .all()
+      .map(toConversationThread);
+
+    return rows.sort((left: ConversationThread, right: ConversationThread) => {
+      if (left.scope === "primary" && right.scope !== "primary") {
+        return -1;
+      }
+      if (left.scope !== "primary" && right.scope === "primary") {
+        return 1;
+      }
+
+      const leftTime = left.lastMessageAt?.getTime() ?? left.updatedAt.getTime() ?? left.createdAt.getTime();
+      const rightTime = right.lastMessageAt?.getTime() ?? right.updatedAt.getTime() ?? right.createdAt.getTime();
+      return rightTime - leftTime;
+    });
   }
 
   async create(input: CreateConversationThreadInput): Promise<string> {
@@ -78,12 +103,34 @@ export class ConversationThreadRepository {
     return (await this.getById(id))!;
   }
 
+  async createManualWebThread(agentId: string): Promise<ConversationThread> {
+    const id = await this.create({
+      agentId,
+      scope: "manual",
+      channelKind: "web",
+      title: DEFAULT_MANUAL_CONVERSATION_THREAD_TITLE,
+    });
+
+    return (await this.getById(id))!;
+  }
+
   async touch(id: string, messageAt: Date): Promise<void> {
     this.db
       .update(conversationThreads)
       .set({
         updatedAt: Date.now(),
         lastMessageAt: messageAt.getTime(),
+      })
+      .where(eq(conversationThreads.id, id))
+      .run();
+  }
+
+  async updateTitle(id: string, title: string): Promise<void> {
+    this.db
+      .update(conversationThreads)
+      .set({
+        title,
+        updatedAt: Date.now(),
       })
       .where(eq(conversationThreads.id, id))
       .run();

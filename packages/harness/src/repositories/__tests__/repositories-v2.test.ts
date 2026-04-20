@@ -288,6 +288,37 @@ describe("simplified repositories", () => {
     expect(second.channelKind).toBe("web");
   });
 
+  it("creates and lists manual conversation threads alongside the primary thread", async () => {
+    const db = createTestDb();
+    const repo = new ConversationThreadRepository(db);
+
+    const primary = await repo.getOrCreatePrimary("agent_001");
+    const firstManual = await repo.createManualWebThread("agent_001");
+    const secondManual = await repo.createManualWebThread("agent_001");
+
+    await repo.touch(firstManual.id, new Date("2026-04-01T10:03:00Z"));
+    await repo.touch(secondManual.id, new Date("2026-04-01T10:05:00Z"));
+
+    const threads = await repo.listByAgent("agent_001");
+
+    expect(primary.scope).toBe("primary");
+    expect(firstManual.scope).toBe("manual");
+    expect(firstManual.title).toBe("New thread");
+    expect(secondManual.scope).toBe("manual");
+    expect(threads.map((thread) => thread.id)).toEqual([primary.id, secondManual.id, firstManual.id]);
+  });
+
+  it("updates conversation thread titles", async () => {
+    const db = createTestDb();
+    const repo = new ConversationThreadRepository(db);
+    const thread = await repo.createManualWebThread("agent_001");
+
+    await repo.updateTitle(thread.id, "Check AI Max performance");
+
+    const updated = await repo.getById(thread.id);
+    expect(updated?.title).toBe("Check AI Max performance");
+  });
+
   it("upserts conversation messages and rolling checkpoints", async () => {
     const db = createTestDb();
     const threadRepo = new ConversationThreadRepository(db);

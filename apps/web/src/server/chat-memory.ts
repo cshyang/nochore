@@ -60,6 +60,9 @@ Rules:
 - Keep each memory self-contained and factual
 - Do not restate tool outputs unless they change future behavior`;
 
+const NEW_THREAD_TITLE = "New thread";
+const MAX_THREAD_TITLE_LENGTH = 58;
+
 type MessagePartRecord = Record<string, unknown>;
 
 export interface ConversationLoaderState {
@@ -99,9 +102,14 @@ export async function resolveConversationThread(params: {
 export async function loadConversationLoaderState(params: {
   deps: ProjectDeps;
   agentId: string;
+  requestedThreadId?: string;
   limit?: number;
 }): Promise<ConversationLoaderState> {
-  const thread = await params.deps.conversationThreadRepository.getOrCreatePrimary(params.agentId);
+  const thread = await resolveConversationThread({
+    deps: params.deps,
+    agentId: params.agentId,
+    requestedThreadId: params.requestedThreadId,
+  });
   const checkpoint = await params.deps.conversationCheckpointRepository.getByThread(thread.id);
   const messages = await listRehydratedMessages(params.deps, thread.id, params.limit ?? RECENT_VISIBLE_MESSAGE_LIMIT);
   const durableLessons = await params.deps.lessonRepository.listDurableByAgent(params.agentId);
@@ -167,6 +175,8 @@ export async function persistConversationMessages(params: {
   if (latestEvent) {
     await params.deps.conversationThreadRepository.touch(params.threadId, latestEvent.createdAt);
   }
+
+  await maybeAutoTitleManualThread(params.deps, params.threadId, persistedMessages);
 
   return { messageEvents, structuredEvents };
 }
@@ -285,6 +295,7 @@ export async function persistConversationAfterResponse(params: {
   await distillChatMemory({
     deps: params.deps,
     agentId: params.agent.id,
+    threadId: params.thread.id,
     model: params.model,
     latestUserText: params.latestUserText,
     responseMessage: params.responseMessage,
@@ -486,6 +497,7 @@ async function generateSplitTurnSummary(params: { model: LanguageModel; messages
 async function distillChatMemory(params: {
   deps: ProjectDeps;
   agentId: string;
+  threadId: string;
   model: LanguageModel;
   latestUserText: string;
   responseMessage: UIMessage;
@@ -530,7 +542,7 @@ async function distillChatMemory(params: {
       createdAt: new Date(),
     });
     await params.deps.conversationEventRepository.append({
-      threadId: (await params.deps.conversationThreadRepository.getOrCreatePrimary(params.agentId)).id,
+      threadId: params.threadId,
       agentId: params.agentId,
       source: "system",
       role: "system",
@@ -586,4 +598,37 @@ function extractVisibleText(message: UIMessage): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+async function maybeAutoTitleManualThread(deps: ProjectDeps, threadId: string, messages: UIMessage[]): Promise<void> {
+  const thread = await deps.conversationThreadRepository.getById(threadId);
+  if (!thread || thread.scope !== "manual" || thread.title !== NEW_THREAD_TITLE) {
+    return;
+  }
+
+  const title = deriveThreadTitle(messages);
+  if (!title) {
+    return;
+  }
+
+  await deps.conversationThreadRepository.updateTitle(threadId, title);
+}
+
+function deriveThreadTitle(messages: UIMessage[]): string | null {
+  const firstUserText = messages
+    .filter((message) => message.role === "user")
+    .map(extractVisibleText)
+    .map((text) => text.split("\n")[0]?.trim() ?? "")
+    .find(Boolean);
+
+  if (!firstUserText) {
+    return null;
+  }
+
+  const normalized = firstUserText.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_THREAD_TITLE_LENGTH) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, MAX_THREAD_TITLE_LENGTH - 3).trimEnd()}...`;
 }

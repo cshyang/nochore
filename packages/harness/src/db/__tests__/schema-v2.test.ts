@@ -218,4 +218,68 @@ describe("simplified schema", () => {
     expect(checkpointRow?.estimatedTokens).toBe(42);
     expect(checkpointRow?.summaryVersion).toBe(2);
   });
+
+  it("allows multiple manual conversation threads while keeping one primary thread per agent", () => {
+    const db = createTestDb();
+    const now = Date.now();
+
+    db.insert(conversationThreads)
+      .values({
+        id: "thread_primary",
+        agentId: "agent_001",
+        scope: "primary",
+        channelKind: "web",
+        title: "Main chat",
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      })
+      .run();
+
+    db.insert(conversationThreads)
+      .values([
+        {
+          id: "thread_manual_001",
+          agentId: "agent_001",
+          scope: "manual",
+          channelKind: "web",
+          title: "New thread",
+          createdAt: now + 1,
+          updatedAt: now + 1,
+          lastMessageAt: null,
+        },
+        {
+          id: "thread_manual_002",
+          agentId: "agent_001",
+          scope: "manual",
+          channelKind: "web",
+          title: "Second thread",
+          createdAt: now + 2,
+          updatedAt: now + 2,
+          lastMessageAt: null,
+        },
+      ])
+      .run();
+
+    expect(() =>
+      db
+        .insert(conversationThreads)
+        .values({
+          id: "thread_primary_duplicate",
+          agentId: "agent_001",
+          scope: "primary",
+          channelKind: "web",
+          title: "Duplicate main chat",
+          createdAt: now + 3,
+          updatedAt: now + 3,
+          lastMessageAt: null,
+        })
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/);
+
+    const rows = db.select().from(conversationThreads).where(eq(conversationThreads.agentId, "agent_001")).all();
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((row) => row.scope === "manual")).toHaveLength(2);
+    expect(rows.filter((row) => row.scope === "primary")).toHaveLength(1);
+  });
 });

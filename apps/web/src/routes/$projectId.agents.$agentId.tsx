@@ -10,13 +10,14 @@ import {
   parseAgentActivityStateView,
   parseConnectionViews,
   parseConversationStateView,
+  parseConversationThreadSummaryViews,
   parseSkillViews,
   parseToolConfigEntryViews,
 } from "~/lib/view-models";
 import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { getAgentActivityState } from "~/server/activity";
 import { approveAction, rejectAction } from "~/server/approvals";
-import { getPrimaryConversationState } from "~/server/chat";
+import { createConversationThread, getConversationState, listConversationThreads } from "~/server/chat";
 import {
   createDirectConnection,
   disconnectProvider,
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   ): {
     tab?: "runs" | "chat" | "learned" | "settings";
     runId?: string;
+    threadId?: string;
     pendingActionId?: string;
   } => ({
     tab:
@@ -46,25 +48,37 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         ? search.tab
         : undefined,
     runId: typeof search.runId === "string" ? search.runId : undefined,
+    threadId: typeof search.threadId === "string" ? search.threadId : undefined,
     pendingActionId: typeof search.pendingActionId === "string" ? search.pendingActionId : undefined,
   }),
-  loader: async ({ params }) => {
+  loader: async ({ params, search }) => {
     const { projectId, agentId } = params;
+    const requestedThreadId = search?.threadId;
     try {
-      const [agent, activity, conversation, skills, projectConnections, toolkitSummaries, policyToolCatalog] =
-        await Promise.all([
-          getAgent({ data: { agentId, projectId } }),
-          getAgentActivityState({ data: { agentId, projectId } }),
-          getPrimaryConversationState({ data: { agentId, projectId, limit: 12 } }),
-          listAvailableSkills(),
-          listConnections({ data: { projectId } }),
-          fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
-          getPolicyToolCatalog({ data: { projectId } }).catch(() => []),
-        ]);
+      const [
+        agent,
+        activity,
+        conversation,
+        conversationThreads,
+        skills,
+        projectConnections,
+        toolkitSummaries,
+        policyToolCatalog,
+      ] = await Promise.all([
+        getAgent({ data: { agentId, projectId } }),
+        getAgentActivityState({ data: { agentId, projectId } }),
+        getConversationState({ data: { agentId, projectId, threadId: requestedThreadId, limit: 12 } }),
+        listConversationThreads({ data: { agentId, projectId } }),
+        listAvailableSkills(),
+        listConnections({ data: { projectId } }),
+        fetchToolkitSummaries({ data: { projectId } }).catch(() => []),
+        getPolicyToolCatalog({ data: { projectId } }).catch(() => []),
+      ]);
       return {
         agent,
         activity,
         conversation,
+        conversationThreads,
         skills: skills ?? [],
         projectConnections: projectConnections ?? [],
         toolkitSummaries: toolkitSummaries ?? [],
@@ -75,6 +89,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         agent: null,
         activity: null,
         conversation: null,
+        conversationThreads: [],
         skills: [],
         projectConnections: [],
         toolkitSummaries: [],
@@ -100,6 +115,7 @@ function AgentDetailPage() {
   const skills = parseSkillViews(loaderData.skills);
   const projectConnections = parseConnectionViews(loaderData.projectConnections);
   const conversation = parseConversationStateView(loaderData.conversation);
+  const conversationThreads = parseConversationThreadSummaryViews(loaderData.conversationThreads);
   const policyToolCatalog = parseToolConfigEntryViews(loaderData.policyToolCatalog);
   const { snapshot: activity } = useAgentActivityState({
     projectId,
@@ -114,7 +130,10 @@ function AgentDetailPage() {
       runs: [],
     },
   });
-  const agent = useMemo(() => (staticAgent ? mergeAgentViewWithActivity(staticAgent, activity) : null), [activity, staticAgent]);
+  const agent = useMemo(
+    () => (staticAgent ? mergeAgentViewWithActivity(staticAgent, activity) : null),
+    [activity, staticAgent],
+  );
   const runs = activity.runs;
 
   // Build provider logo map from Composio toolkit summaries
@@ -169,9 +188,26 @@ function AgentDetailPage() {
     return () => window.removeEventListener("message", handler);
   }, [router]);
 
+  useEffect(() => {
+    if (search.tab !== "chat" || !conversation?.threadId) {
+      return;
+    }
+
+    if (search.threadId === conversation.threadId) {
+      return;
+    }
+
+    void navigate({
+      to: "/$projectId/agents/$agentId",
+      params: { projectId, agentId },
+      search: (prev) => ({ ...prev, tab: "chat", threadId: conversation.threadId }),
+      replace: true,
+    });
+  }, [agentId, conversation?.threadId, navigate, projectId, search.tab, search.threadId]);
+
   const [runError, setRunError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const activeRun = activity.activeRunId ? runs.find((run) => run.id === activity.activeRunId) ?? null : null;
+  const activeRun = activity.activeRunId ? (runs.find((run) => run.id === activity.activeRunId) ?? null) : null;
 
   const handleSelectRun = useCallback(
     (runId: string | null) => {
@@ -184,6 +220,30 @@ function AgentDetailPage() {
     },
     [agentId, navigate, projectId],
   );
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      void navigate({
+        to: "/$projectId/agents/$agentId",
+        params: { projectId, agentId },
+        search: (prev) => ({ ...prev, tab: "chat", threadId }),
+      });
+    },
+    [agentId, navigate, projectId],
+  );
+
+  const handleCreateThread = useCallback(async () => {
+    const created = (await createConversationThread({ data: { agentId, projectId } })) as { id?: string };
+    if (!created.id) {
+      return;
+    }
+
+    void navigate({
+      to: "/$projectId/agents/$agentId",
+      params: { projectId, agentId },
+      search: (prev) => ({ ...prev, tab: "chat", threadId: created.id }),
+    });
+  }, [agentId, navigate, projectId]);
 
   const handleCancelRun = useCallback(async () => {
     if (!activeRun || cancelling) return;
@@ -239,10 +299,25 @@ function AgentDetailPage() {
       availableSkills={skills}
       projectConnections={projectConnections}
       policyToolCatalog={policyToolCatalog}
+      conversationThreads={conversationThreads}
       initialTab={search.tab}
       initialRunId={search.runId ?? null}
       initialPendingActionId={search.pendingActionId ?? null}
+      onTabChange={(tab) => {
+        void navigate({
+          to: "/$projectId/agents/$agentId",
+          params: { projectId, agentId },
+          search: (prev) => ({
+            ...prev,
+            tab,
+            threadId: tab === "chat" ? (prev.threadId ?? conversation?.threadId) : prev.threadId,
+          }),
+          replace: true,
+        });
+      }}
       onSelectRun={handleSelectRun}
+      onSelectThread={handleSelectThread}
+      onCreateThread={handleCreateThread}
       activeRunId={activity.activeRunId}
       onCancelRun={handleCancelRun}
       cancelling={cancelling}

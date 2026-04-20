@@ -80,7 +80,8 @@ const CREATE_DDL = `
     last_compacted_at INTEGER,
     consecutive_compaction_failures INTEGER NOT NULL DEFAULT 0
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_threads_agent_scope ON conversation_threads (agent_id, scope);
+  CREATE INDEX IF NOT EXISTS idx_conversation_threads_agent_scope ON conversation_threads (agent_id, scope);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_threads_agent_primary ON conversation_threads (agent_id) WHERE scope = 'primary';
   CREATE INDEX IF NOT EXISTS idx_conversation_threads_agent_updated ON conversation_threads (agent_id, updated_at);
 
   CREATE TABLE IF NOT EXISTS conversation_events (
@@ -290,6 +291,22 @@ function migrateAddColumns(sqlite: Database.Database) {
       "ALTER TABLE conversation_threads ADD COLUMN consecutive_compaction_failures INTEGER NOT NULL DEFAULT 0",
     );
   }
+  const conversationThreadIndexes = sqlite.prepare("PRAGMA index_list(conversation_threads)").all() as Array<{
+    name: string;
+    unique: number;
+  }>;
+  const legacyScopeIndex = conversationThreadIndexes.find(
+    (index) => index.name === "idx_conversation_threads_agent_scope",
+  );
+  if (legacyScopeIndex?.unique) {
+    sqlite.exec("DROP INDEX IF EXISTS idx_conversation_threads_agent_scope");
+  }
+  sqlite.exec(
+    "CREATE INDEX IF NOT EXISTS idx_conversation_threads_agent_scope ON conversation_threads (agent_id, scope)",
+  );
+  sqlite.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_threads_agent_primary ON conversation_threads (agent_id) WHERE scope = 'primary'",
+  );
 
   const conversationEventCols = sqlite.prepare("PRAGMA table_info(conversation_events)").all() as Array<{
     name: string;

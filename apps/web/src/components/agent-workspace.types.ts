@@ -2,6 +2,7 @@ import type {
   AgentView,
   ConnectionView,
   ConversationStateView,
+  ConversationThreadSummaryView,
   NotificationConfigView,
   ProjectView,
   ProviderRequirementView,
@@ -40,11 +41,15 @@ export interface AgentWorkspaceProps {
   requiredProviders?: ProviderRequirementView[];
   runs?: RunView[];
   conversation?: ConversationStateView;
+  conversationThreads?: ConversationThreadSummaryView[];
   isDraft?: boolean;
   initialTab?: WorkspaceTab;
   initialRunId?: string | null;
   initialPendingActionId?: string | null;
+  onTabChange?: (tab: WorkspaceTab) => void;
   onSelectRun?: (runId: string | null) => void;
+  onSelectThread?: (threadId: string) => void;
+  onCreateThread?: () => Promise<void> | void;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   activeRunId?: string | null;
