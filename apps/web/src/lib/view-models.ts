@@ -134,6 +134,7 @@ const WorkItemViewSchema = z.object({
   outputTokens: z.number().optional(),
   blockingReason: z.string().optional(),
   error: z.string().optional(),
+  result: z.string().optional(),
 });
 
 const RunViewSchema = z.object({

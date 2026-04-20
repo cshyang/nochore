@@ -293,6 +293,7 @@ export function buildSerializedRun(
       outputTokens: wi.outputTokens,
       blockingReason: wi.blockingReason,
       error: wi.error,
+      result: wi.result,
     })),
     result: {
       runId: run.id,

@@ -166,6 +166,7 @@ export interface WorkItemView {
   outputTokens?: number;
   blockingReason?: string;
   error?: string;
+  result?: string;
 }
 
 export interface RunView {
