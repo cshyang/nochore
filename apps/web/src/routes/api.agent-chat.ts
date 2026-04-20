@@ -13,6 +13,7 @@ import { z } from "zod";
 import { buildAgentChatSystemPrompt } from "~/server/agent-chat-prompt";
 import {
   assembleConversation,
+  isSyntheticMessageId,
   persistConversationAfterResponse,
   persistConversationMessages,
   resolveConversationThread,
@@ -340,7 +341,9 @@ export const Route = createFileRoute("/api/agent-chat")({
 });
 
 function extractLatestUserText(messages: IncomingMessage[]): string {
-  const latestUser = [...messages].reverse().find((message) => message.role === "user");
+  const latestUser = [...messages]
+    .reverse()
+    .find((message) => message.role === "user" && !isSyntheticMessageId(message.id));
   if (!latestUser) {
     return "";
   }

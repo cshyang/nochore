@@ -125,7 +125,7 @@ export async function persistConversationMessages(params: {
 }> {
   const source = params.source ?? "web";
   const persistedMessages = params.messages
-    .filter((message) => message.id !== "greeting")
+    .filter((message) => !isSyntheticMessageId(message.id))
     .map((message) => sanitizeConversationMessage(message))
     .filter((message): message is UIMessage => message != null);
 
@@ -141,7 +141,7 @@ export async function persistConversationMessages(params: {
   );
 
   const structuredSpecs = params.messages
-    .filter((message) => message.id !== "greeting")
+    .filter((message) => !isSyntheticMessageId(message.id))
     .flatMap((message) => extractStructuredConversationEvents(message));
 
   const structuredEvents = await params.deps.conversationEventRepository.upsertStructuredEvents(
@@ -539,6 +539,11 @@ async function distillChatMemory(params: {
       createdAt: new Date(),
     });
   }
+}
+
+export function isSyntheticMessageId(id: string | undefined): boolean {
+  if (!id) return false;
+  return id === "greeting" || id.startsWith("system:");
 }
 
 function stripUnansweredToolParts(messages: UIMessage[]): UIMessage[] {

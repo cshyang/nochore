@@ -282,7 +282,6 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                               {humanizeToolName(item.approval.proposal.toolName)}
                             </div>
                             <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
-                              {item.approval.status === "expired" ? "Expired" : "Pending"} ·{" "}
                               {item.approval.proposal.reason}
                             </div>
                           </div>

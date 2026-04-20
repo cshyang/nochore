@@ -174,7 +174,10 @@ export function useAgentChatFlow(params: {
 
   const notifyRunCompleted = useCallback(() => {
     if (isLoading) return;
-    void sendMessage({ text: "The run just completed. Summarize what you found." });
+    void sendMessage({
+      text: "The run just completed. Summarize what you found.",
+      messageId: `system:run-completed:${Date.now()}`,
+    });
   }, [isLoading, sendMessage]);
 
   return {

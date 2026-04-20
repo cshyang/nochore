@@ -3,7 +3,7 @@ import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction, buildSerializedRun } from "./models";
 
 const ACTIVE_RUN_STATUSES = new Set<RunStatus>(["queued", "running", "waiting_for_approval", "waiting_for_children"]);
-const ACTIONABLE_APPROVAL_STATUSES = new Set<ApprovalRecord["status"]>(["pending", "expired"]);
+const ACTIONABLE_APPROVAL_STATUSES = new Set<ApprovalRecord["status"]>(["pending"]);
 
 export async function loadAgentActivityState(projectId: string, agentId: string) {
   const deps = getProjectDeps(projectId);
@@ -147,7 +147,7 @@ export function deriveActivityVersion(timestamps: number[]): number {
 
 export function isActionableApproval(
   approval: ApprovalRecord,
-): approval is ApprovalRecord & { status: "pending" | "expired" } {
+): approval is ApprovalRecord & { status: "pending" } {
   return ACTIONABLE_APPROVAL_STATUSES.has(approval.status);
 }
 
