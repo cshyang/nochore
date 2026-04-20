@@ -100,29 +100,23 @@ function SummaryStrip({
     return count > 0 ? `${count} ${category.label.toLowerCase()}` : null;
   }).filter((part): part is string => part != null);
 
-  if (parts.length === 0 && episodicCount === 0) return null;
+  if (episodicCount > 0) {
+    parts.push(`${episodicCount} recent ${episodicCount === 1 ? "entry" : "entries"}`);
+  }
+
+  if (parts.length === 0) return null;
 
   return (
     <div style={summaryStripStyle}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        {parts.map((part) => (
-          <span key={part} style={summaryPillStyle}>
-            {part}
-          </span>
-        ))}
-        {episodicCount > 0 ? (
-          <span style={{ ...summaryPillStyle, color: COLORS.textDim }}>
-            {episodicCount} recent {episodicCount === 1 ? "entry" : "entries"}
-          </span>
-        ) : null}
-      </div>
+      <span style={{ color: COLORS.textSecondary }}>{parts.join(" · ")}</span>
       {mostRecent ? (
-        <div style={mostRecentRowStyle}>
-          <span style={{ color: COLORS.textDim }}>Latest:</span>{" "}
+        <span style={{ color: COLORS.textDim }}>
+          {" · Latest: "}
           <span style={{ color: COLORS.textSecondary }}>
-            {extractTitle(mostRecent)} · {formatRelative(mostRecent.createdAt)}
+            {extractTitle(mostRecent)}
           </span>
-        </div>
+          {` · ${formatRelative(mostRecent.createdAt)}`}
+        </span>
       ) : null}
     </div>
   );
@@ -160,7 +154,6 @@ function LessonCard({ lesson, showExpiry = false }: { lesson: LessonView; showEx
         >
           {open ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
         </span>
-        <ConfidencePip confidence={lesson.confidence} />
         <span
           style={{
             fontSize: TYPE.scale.sm,
@@ -174,7 +167,7 @@ function LessonCard({ lesson, showExpiry = false }: { lesson: LessonView; showEx
             lineHeight: open ? TYPE.leading.normal : undefined,
           }}
         >
-          {open ? title : title}
+          {title}
         </span>
         {!open && <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{age}</span>}
         {!open && expiry ? <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{expiry}</span> : null}
@@ -226,23 +219,6 @@ function EpisodicSection({ lessons }: { lessons: LessonView[] }) {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function ConfidencePip({ confidence }: { confidence: LessonView["confidence"] }) {
-  const color = confidence === "high" ? COLORS.green : confidence === "medium" ? COLORS.orange : COLORS.textDim;
-  return (
-    <span
-      aria-label={`${confidence} confidence`}
-      title={`${confidence} confidence`}
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: color,
-        flexShrink: 0,
-      }}
-    />
   );
 }
 
@@ -354,27 +330,9 @@ const subtitleStyle = {
 };
 
 const summaryStripStyle = {
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 8,
-  padding: "12px 14px",
-  background: COLORS.accentSurface,
-  border: `1px solid ${COLORS.accentBorder}`,
-  borderRadius: RADIUS.sm,
-};
-
-const summaryPillStyle = {
-  fontSize: TYPE.scale.xs,
-  color: COLORS.textSecondary,
-  padding: "3px 8px",
-  background: COLORS.surface,
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: RADIUS.pill,
-};
-
-const mostRecentRowStyle = {
-  fontSize: TYPE.scale.xs,
+  fontSize: TYPE.scale.sm,
   lineHeight: TYPE.leading.normal,
+  color: COLORS.textSecondary,
 };
 
 const sectionStyle = {
