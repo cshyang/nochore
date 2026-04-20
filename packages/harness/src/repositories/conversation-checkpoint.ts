@@ -74,6 +74,10 @@ export class ConversationCheckpointRepository {
       .where(and(eq(conversationCheckpoints.threadId, threadId), eq(conversationCheckpoints.kind, kind)))
       .run();
   }
+
+  async deleteAllByThread(threadId: string): Promise<void> {
+    this.db.delete(conversationCheckpoints).where(eq(conversationCheckpoints.threadId, threadId)).run();
+  }
 }
 
 function toConversationCheckpoint(row: typeof conversationCheckpoints.$inferSelect): ConversationCheckpoint {

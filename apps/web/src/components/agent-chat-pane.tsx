@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { ArrowRight, Plus } from "@phosphor-icons/react";
+import { ArrowRight, Plus, X } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { ApprovalCard } from "~/components/ApprovalCard";
 import { useAgentChatFlow } from "~/components/agent-chat-flow";
@@ -19,9 +19,13 @@ interface AgentChatPaneProps {
   runs: RunView[];
   conversation?: ConversationStateView;
   threads?: ConversationThreadSummaryView[];
+  activeThreadId?: string;
+  draftThreadOpen?: boolean;
   onSelectThread?: (threadId: string) => void;
-  onCreateThread?: () => Promise<void> | void;
+  onCreateThread?: () => void;
+  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
   onRunTriggered?: (runId: string, triggerRunId: string) => void;
+  onThreadCreated?: (threadId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
   pendingApproval?: PendingActionView | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
@@ -29,15 +33,25 @@ interface AgentChatPaneProps {
   onClearPendingApproval?: () => void;
 }
 
+type DisplayThread = ConversationThreadSummaryView & {
+  isDraft?: boolean;
+};
+
+const DRAFT_THREAD_ID = "draft:new-thread";
+
 export function AgentChatPane({
   agent,
   projectId,
   runs,
   conversation,
   threads = [],
+  activeThreadId,
+  draftThreadOpen = false,
   onSelectThread,
   onCreateThread,
+  onDeleteThread,
   onRunTriggered,
+  onThreadCreated,
   registerRunCompleteHandler,
   pendingApproval,
   onApprove,
@@ -59,14 +73,16 @@ export function AgentChatPane({
   } = useAgentChatFlow({
     agentId: agent.id,
     projectId,
-    threadId: conversation?.threadId,
+    threadId: draftThreadOpen ? undefined : activeThreadId ?? conversation?.threadId,
+    draftThreadOpen,
     agent,
     runs,
-    initialMessages: conversation?.messages as UIMessage[] | undefined,
+    initialMessages: draftThreadOpen ? undefined : (conversation?.messages as UIMessage[] | undefined),
     onRunTriggered,
+    onThreadCreated,
   });
 
-  const availableThreads =
+  const availableThreads: DisplayThread[] =
     threads.length > 0
       ? threads
       : conversation
@@ -78,9 +94,28 @@ export function AgentChatPane({
               isPrimary: conversation.isPrimary,
               createdAt: "",
               updatedAt: "",
+              messageCount: conversation.messages.length,
+              hasMessages: conversation.messages.length > 0,
             } satisfies ConversationThreadSummaryView,
           ]
         : [];
+
+  const displayedThreads = draftThreadOpen
+    ? ([
+        {
+          id: DRAFT_THREAD_ID,
+          title: "New thread",
+          scope: "manual",
+          isPrimary: false,
+          createdAt: "",
+          updatedAt: "",
+          messageCount: 0,
+          hasMessages: false,
+          isDraft: true,
+        },
+        ...availableThreads,
+      ] satisfies DisplayThread[])
+    : availableThreads;
 
   useEffect(() => {
     registerRunCompleteHandler?.(() => notifyRunCompleted());
@@ -112,10 +147,10 @@ export function AgentChatPane({
           flex: 1;
           min-width: 0;
           min-height: 0;
-          gap: 16px;
+          gap: 20px;
         }
         .agent-chat-rail {
-          width: 220px;
+          width: 232px;
           flex-shrink: 0;
         }
         .agent-chat-topbar {
@@ -146,11 +181,12 @@ export function AgentChatPane({
       <div className="agent-chat-layout">
         <div className="agent-chat-rail">
           <ThreadSwitcher
-            threads={availableThreads}
-            activeThreadId={conversation?.threadId}
+            threads={displayedThreads}
+            activeThreadId={draftThreadOpen ? DRAFT_THREAD_ID : activeThreadId ?? conversation?.threadId}
             isLoading={isLoading}
             onSelectThread={onSelectThread}
             onCreateThread={onCreateThread}
+            onDeleteThread={onDeleteThread}
             variant="rail"
           />
         </div>
@@ -158,11 +194,12 @@ export function AgentChatPane({
         <div className="agent-chat-main">
           <div className="agent-chat-topbar">
             <ThreadSwitcher
-              threads={availableThreads}
-              activeThreadId={conversation?.threadId}
+              threads={displayedThreads}
+              activeThreadId={draftThreadOpen ? DRAFT_THREAD_ID : activeThreadId ?? conversation?.threadId}
               isLoading={isLoading}
               onSelectThread={onSelectThread}
               onCreateThread={onCreateThread}
+              onDeleteThread={onDeleteThread}
               variant="topbar"
             />
           </div>
@@ -187,7 +224,7 @@ export function AgentChatPane({
                       onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
                     />
                   ) : null}
-                  {conversation?.checkpointSummary ? (
+                  {!draftThreadOpen && conversation?.checkpointSummary ? (
                     <div
                       style={{
                         padding: "14px 16px",
@@ -220,6 +257,21 @@ export function AgentChatPane({
                       >
                         {conversation.checkpointSummary}
                       </div>
+                    </div>
+                  ) : null}
+                  {draftThreadOpen && messages.length === 1 ? (
+                    <div
+                      style={{
+                        padding: "18px 20px",
+                        borderRadius: RADIUS.lg,
+                        border: `1px dashed ${COLORS.borderStrong}`,
+                        background: COLORS.surface,
+                        color: COLORS.textSecondary,
+                        fontSize: TYPE.scale.sm,
+                        lineHeight: TYPE.leading.normal,
+                      }}
+                    >
+                      This thread is still a draft. It will only be saved after your first message.
                     </div>
                   ) : null}
                   {messages.map((message, index) => {
@@ -307,13 +359,15 @@ function ThreadSwitcher({
   isLoading,
   onSelectThread,
   onCreateThread,
+  onDeleteThread,
   variant,
 }: {
-  threads: ConversationThreadSummaryView[];
+  threads: DisplayThread[];
   activeThreadId?: string;
   isLoading: boolean;
   onSelectThread?: (threadId: string) => void;
-  onCreateThread?: () => Promise<void> | void;
+  onCreateThread?: () => void;
+  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
   variant: "rail" | "topbar";
 }) {
   if (threads.length === 0 && !onCreateThread) {
@@ -321,79 +375,116 @@ function ThreadSwitcher({
   }
 
   const isRail = variant === "rail";
+  const primaryThread = threads.find((thread) => thread.isPrimary);
+  const draftThread = threads.find((thread) => thread.isDraft);
+  const manualThreads = threads.filter((thread) => !thread.isPrimary && !thread.isDraft);
 
   return (
     <div
       style={{
         display: "flex",
         flexDirection: isRail ? "column" : "row",
-        gap: 10,
+        gap: isRail ? 14 : 10,
         minHeight: 0,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: isRail ? "column" : "row",
-          gap: 8,
-          minWidth: 0,
-          overflowX: isRail ? "visible" : "auto",
-          paddingBottom: isRail ? 0 : 2,
-        }}
-      >
-        {threads.map((thread) => {
-          const isActive = thread.id === activeThreadId;
-          const disabled = isLoading || isActive;
-          return (
-            <button
-              key={thread.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSelectThread?.(thread.id)}
+      {isRail ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            minHeight: 0,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                marginBottom: 8,
+                fontSize: TYPE.scale.xs,
+                fontWeight: TYPE.weight.medium,
+                letterSpacing: TYPE.tracking.wide,
+                textTransform: "uppercase",
+                color: COLORS.textDim,
+              }}
+            >
+              Threads
+            </div>
+            {primaryThread ? (
+              <ThreadPrimaryCard
+                thread={primaryThread}
+                activeThreadId={activeThreadId}
+                isLoading={isLoading}
+                onSelectThread={onSelectThread}
+              />
+            ) : null}
+          </div>
+
+          {draftThread || manualThreads.length > 0 ? (
+            <div
               style={{
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "flex-start",
-                gap: 4,
-                minWidth: isRail ? 0 : 180,
-                padding: isRail ? "12px 12px" : "10px 12px",
-                borderRadius: RADIUS.lg,
-                border: `1px solid ${isActive ? COLORS.accentBorder : COLORS.border}`,
-                background: isActive ? COLORS.accentSubtle : COLORS.surface,
-                color: COLORS.text,
-                cursor: disabled ? "default" : "pointer",
-                opacity: disabled && !isActive ? 0.65 : 1,
-                textAlign: "left",
-                flexShrink: 0,
+                gap: 8,
               }}
             >
-              <span
-                style={{
-                  fontSize: TYPE.scale.sm,
-                  fontWeight: TYPE.weight.medium,
-                  lineHeight: TYPE.leading.snug,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  width: "100%",
-                }}
-              >
-                {thread.title}
-              </span>
-              <span
-                style={{
-                  fontSize: TYPE.scale.xs,
-                  color: isActive ? COLORS.accentBright : COLORS.textDim,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.8,
-                }}
-              >
-                {thread.isPrimary ? "Primary" : "Thread"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              {draftThread ? (
+                <ThreadListRow
+                  thread={draftThread}
+                  activeThreadId={activeThreadId}
+                  isLoading={isLoading}
+                  onSelectThread={onSelectThread}
+                />
+              ) : null}
+              {manualThreads.length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    padding: "6px",
+                    borderRadius: RADIUS.lg,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.bgRaised,
+                  }}
+                >
+                  {manualThreads.map((thread) => (
+                    <ThreadListRow
+                      key={thread.id}
+                      thread={thread}
+                      activeThreadId={activeThreadId}
+                      isLoading={isLoading}
+                      onSelectThread={onSelectThread}
+                      onDeleteThread={onDeleteThread}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            minWidth: 0,
+            overflowX: "auto",
+            paddingBottom: 2,
+          }}
+        >
+          {threads.map((thread) => (
+            <ThreadChip
+              key={thread.id}
+              thread={thread}
+              activeThreadId={activeThreadId}
+              isLoading={isLoading}
+              onSelectThread={onSelectThread}
+              onDeleteThread={onDeleteThread}
+            />
+          ))}
+        </div>
+      )}
 
       {onCreateThread ? (
         <button
@@ -405,19 +496,309 @@ function ThreadSwitcher({
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            padding: isRail ? "12px 12px" : "10px 12px",
+            padding: isRail ? "14px 14px" : "10px 12px",
             borderRadius: RADIUS.lg,
             border: `1px dashed ${COLORS.borderStrong}`,
-            background: "transparent",
+            background: isRail ? COLORS.bgRaised : "transparent",
             color: COLORS.textSecondary,
             cursor: isLoading ? "default" : "pointer",
             opacity: isLoading ? 0.65 : 1,
             whiteSpace: "nowrap",
             flexShrink: 0,
+            width: isRail ? "100%" : undefined,
           }}
         >
           <Plus size={14} weight="bold" />
           <span style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium }}>New thread</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ThreadPrimaryCard({
+  thread,
+  activeThreadId,
+  isLoading,
+  onSelectThread,
+}: {
+  thread: DisplayThread;
+  activeThreadId?: string;
+  isLoading: boolean;
+  onSelectThread?: (threadId: string) => void;
+}) {
+  const isActive = thread.id === activeThreadId;
+  const disabled = isLoading || isActive;
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onSelectThread?.(thread.id)}
+      style={{
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: "16px 16px 14px",
+        borderRadius: RADIUS.lg,
+        border: `1px solid ${isActive ? COLORS.accentBorder : COLORS.border}`,
+        background: isActive
+          ? `linear-gradient(180deg, ${COLORS.accentSubtle} 0%, ${COLORS.surface} 100%)`
+          : COLORS.surface,
+        color: COLORS.text,
+        cursor: disabled ? "default" : "pointer",
+        textAlign: "left",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: TYPE.scale.base,
+              fontWeight: TYPE.weight.medium,
+              lineHeight: TYPE.leading.snug,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {thread.title}
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: TYPE.scale.sm,
+              color: COLORS.textSecondary,
+              lineHeight: TYPE.leading.normal,
+            }}
+          >
+            Default conversation for this agent
+          </div>
+        </div>
+        <div
+          style={{
+            flexShrink: 0,
+            width: 8,
+            height: 8,
+            marginTop: 4,
+            borderRadius: RADIUS.pill,
+            background: isActive ? COLORS.accentBright : COLORS.borderStrong,
+          }}
+        />
+      </div>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: TYPE.scale.xs,
+          fontWeight: TYPE.weight.medium,
+          letterSpacing: TYPE.tracking.wide,
+          textTransform: "uppercase",
+          color: isActive ? COLORS.accentBright : COLORS.textDim,
+        }}
+      >
+        <span>Primary</span>
+        <span style={{ opacity: 0.45 }}>•</span>
+        <span>{thread.hasMessages ? "Active history" : "Empty"}</span>
+      </div>
+    </button>
+  );
+}
+
+function ThreadListRow({
+  thread,
+  activeThreadId,
+  isLoading,
+  onSelectThread,
+  onDeleteThread,
+}: {
+  thread: DisplayThread;
+  activeThreadId?: string;
+  isLoading: boolean;
+  onSelectThread?: (threadId: string) => void;
+  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
+}) {
+  const isActive = thread.id === activeThreadId;
+  const disabled = isLoading || isActive || thread.isDraft;
+  const canDelete = !thread.isDraft && !thread.isPrimary && thread.scope === "manual" && onDeleteThread;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "stretch",
+        gap: 8,
+      }}
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !thread.isDraft && onSelectThread?.(thread.id)}
+        style={{
+          display: "flex",
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          minWidth: 0,
+          padding: "11px 12px",
+          borderRadius: RADIUS.md,
+          border: `1px solid ${isActive ? COLORS.accentBorder : "transparent"}`,
+          background: isActive ? COLORS.accentSubtle : thread.isDraft ? COLORS.draftBg : "transparent",
+          color: COLORS.text,
+          cursor: disabled ? "default" : "pointer",
+          textAlign: "left",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: TYPE.scale.sm,
+              fontWeight: TYPE.weight.medium,
+              lineHeight: TYPE.leading.snug,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {thread.title}
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: TYPE.scale.xs,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: isActive ? COLORS.accentBright : COLORS.textDim,
+            }}
+          >
+            {thread.isDraft ? "Draft" : thread.hasMessages ? `${thread.messageCount} messages` : "Empty"}
+          </div>
+        </div>
+        <div
+          style={{
+            flexShrink: 0,
+            width: 6,
+            height: 6,
+            borderRadius: RADIUS.pill,
+            background: isActive ? COLORS.accentBright : thread.isDraft ? COLORS.orange : COLORS.borderStrong,
+          }}
+        />
+      </button>
+      {canDelete ? (
+        <button
+          type="button"
+          aria-label={`Delete ${thread.title}`}
+          disabled={isLoading}
+          onClick={() => void onDeleteThread?.(thread)}
+          style={{
+            width: 34,
+            height: 34,
+            alignSelf: "center",
+            borderRadius: RADIUS.md,
+            border: `1px solid ${COLORS.border}`,
+            background: COLORS.surface,
+            color: COLORS.textDim,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: isLoading ? "default" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <X size={13} weight="bold" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ThreadChip({
+  thread,
+  activeThreadId,
+  isLoading,
+  onSelectThread,
+  onDeleteThread,
+}: {
+  thread: DisplayThread;
+  activeThreadId?: string;
+  isLoading: boolean;
+  onSelectThread?: (threadId: string) => void;
+  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
+}) {
+  const isActive = thread.id === activeThreadId;
+  const disabled = isLoading || isActive || thread.isDraft;
+  const canDelete = !thread.isDraft && !thread.isPrimary && thread.scope === "manual" && onDeleteThread;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        flexShrink: 0,
+      }}
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !thread.isDraft && onSelectThread?.(thread.id)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 12px",
+          borderRadius: RADIUS.lg,
+          border: `1px solid ${isActive ? COLORS.accentBorder : COLORS.border}`,
+          background: isActive ? COLORS.accentSubtle : COLORS.surface,
+          color: COLORS.text,
+          cursor: disabled ? "default" : "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: RADIUS.pill,
+            background: thread.isPrimary ? COLORS.accentBright : thread.isDraft ? COLORS.orange : COLORS.borderStrong,
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium }}>{thread.title}</span>
+      </button>
+      {canDelete ? (
+        <button
+          type="button"
+          aria-label={`Delete ${thread.title}`}
+          disabled={isLoading}
+          onClick={() => void onDeleteThread?.(thread)}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: RADIUS.md,
+            border: `1px solid ${COLORS.border}`,
+            background: COLORS.surface,
+            color: COLORS.textDim,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: isLoading ? "default" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <X size={12} weight="bold" />
         </button>
       ) : null}
     </div>

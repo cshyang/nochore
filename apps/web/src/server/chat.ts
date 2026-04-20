@@ -97,37 +97,53 @@ export const getConversationState = createServerFn({ method: "GET" })
 export const listConversationThreads = createServerFn({ method: "GET" })
   .inputValidator((input: { agentId: string; projectId: string }) => input)
   .handler(async ({ data: { agentId, projectId } }) => {
-    const threads = await getProjectDeps(projectId).conversationThreadRepository.listByAgent(agentId);
+    const deps = getProjectDeps(projectId);
+    const threads = await deps.conversationThreadRepository.listByAgent(agentId);
 
     return jsonSafe(
-      threads.map((thread) => ({
-        id: thread.id,
-        title: thread.title,
-        scope: thread.scope,
-        isPrimary: thread.scope === "primary",
-        createdAt: thread.createdAt.toISOString(),
-        updatedAt: thread.updatedAt.toISOString(),
-        lastMessageAt: thread.lastMessageAt?.toISOString(),
-      })),
+      await Promise.all(
+        threads.map(async (thread) => {
+          const messageCount = await deps.conversationEventRepository.countMessagesByThread(thread.id);
+          return {
+            id: thread.id,
+            title: thread.title,
+            scope: thread.scope,
+            isPrimary: thread.scope === "primary",
+            createdAt: thread.createdAt.toISOString(),
+            updatedAt: thread.updatedAt.toISOString(),
+            lastMessageAt: thread.lastMessageAt?.toISOString(),
+            messageCount,
+            hasMessages: messageCount > 0,
+          };
+        }),
+      ),
     );
   });
 
-export const createConversationThread = createServerFn({ method: "POST" })
-  .inputValidator((input: { agentId: string; projectId: string }) => input)
-  .handler(async ({ data: { agentId, projectId } }) => {
+export const deleteConversationThread = createServerFn({ method: "POST" })
+  .inputValidator((input: { agentId: string; projectId: string; threadId: string }) => input)
+  .handler(async ({ data: { agentId, projectId, threadId } }) => {
+    const deps = getProjectDeps(projectId);
     const agent = await getAgentRow(projectId, agentId);
     if (!agent) {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    const thread = await getProjectDeps(projectId).conversationThreadRepository.createManualWebThread(agentId);
+    const thread = await deps.conversationThreadRepository.getById(threadId);
+    if (!thread || thread.agentId !== agentId) {
+      throw new Error(`Conversation thread "${threadId}" not found`);
+    }
+    if (thread.scope === "primary") {
+      throw new Error("Primary thread cannot be deleted");
+    }
+
+    await deps.conversationCheckpointRepository.deleteAllByThread(thread.id);
+    await deps.conversationEventRepository.deleteByThread(thread.id);
+    await deps.conversationThreadRepository.deleteById(thread.id);
+
+    const primaryThread = await deps.conversationThreadRepository.getOrCreatePrimary(agentId);
     return jsonSafe({
-      id: thread.id,
-      title: thread.title,
-      scope: thread.scope,
-      isPrimary: false,
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-      lastMessageAt: thread.lastMessageAt?.toISOString(),
+      deleted: true,
+      fallbackThreadId: primaryThread.id,
     });
   });

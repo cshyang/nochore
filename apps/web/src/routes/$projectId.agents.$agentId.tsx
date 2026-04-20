@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useParams, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentWorkspace } from "~/components/AgentWorkspace";
 import { useProjectLiveContext } from "~/components/project-live-context";
 import { useAgentActivityState } from "~/components/use-activity-state";
@@ -17,7 +17,7 @@ import {
 import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { getAgentActivityState } from "~/server/activity";
 import { approveAction, rejectAction } from "~/server/approvals";
-import { createConversationThread, getConversationState, listConversationThreads } from "~/server/chat";
+import { deleteConversationThread, getConversationState, listConversationThreads } from "~/server/chat";
 import {
   createDirectConnection,
   disconnectProvider,
@@ -33,6 +33,8 @@ import {
 } from "~/server/learned-rules";
 import { getPolicyToolCatalog } from "~/server/policy-tools";
 import { listAvailableSkills } from "~/server/skills";
+
+const DRAFT_THREAD_ID = "draft:new-thread";
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
   validateSearch: (
@@ -117,6 +119,9 @@ function AgentDetailPage() {
   const conversation = parseConversationStateView(loaderData.conversation);
   const conversationThreads = parseConversationThreadSummaryViews(loaderData.conversationThreads);
   const policyToolCatalog = parseToolConfigEntryViews(loaderData.policyToolCatalog);
+  const [draftThreadOpen, setDraftThreadOpen] = useState(false);
+  const [pendingThreadNavigationId, setPendingThreadNavigationId] = useState<string | null>(null);
+  const previousSearchThreadIdRef = useRef(search.threadId);
   const { snapshot: activity } = useAgentActivityState({
     projectId,
     agentId,
@@ -189,7 +194,7 @@ function AgentDetailPage() {
   }, [router]);
 
   useEffect(() => {
-    if (search.tab !== "chat" || !conversation?.threadId) {
+    if (draftThreadOpen || pendingThreadNavigationId || search.tab !== "chat" || !conversation?.threadId) {
       return;
     }
 
@@ -203,7 +208,45 @@ function AgentDetailPage() {
       search: (prev) => ({ ...prev, tab: "chat", threadId: conversation.threadId }),
       replace: true,
     });
-  }, [agentId, conversation?.threadId, navigate, projectId, search.tab, search.threadId]);
+  }, [
+    agentId,
+    conversation?.threadId,
+    draftThreadOpen,
+    navigate,
+    pendingThreadNavigationId,
+    projectId,
+    search.tab,
+    search.threadId,
+  ]);
+
+  useEffect(() => {
+    setDraftThreadOpen(false);
+    setPendingThreadNavigationId(null);
+  }, [agentId]);
+
+  useEffect(() => {
+    const previousSearchThreadId = previousSearchThreadIdRef.current;
+    previousSearchThreadIdRef.current = search.threadId;
+
+    if (draftThreadOpen && !previousSearchThreadId && search.threadId) {
+      setDraftThreadOpen(false);
+    }
+  }, [draftThreadOpen, search.threadId]);
+
+  useEffect(() => {
+    if (!pendingThreadNavigationId) {
+      return;
+    }
+
+    if (search.tab !== "chat") {
+      setPendingThreadNavigationId(null);
+      return;
+    }
+
+    if (conversation?.threadId === pendingThreadNavigationId && search.threadId === pendingThreadNavigationId) {
+      setPendingThreadNavigationId(null);
+    }
+  }, [conversation?.threadId, pendingThreadNavigationId, search.tab, search.threadId]);
 
   const [runError, setRunError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -223,6 +266,8 @@ function AgentDetailPage() {
 
   const handleSelectThread = useCallback(
     (threadId: string) => {
+      setDraftThreadOpen(false);
+      setPendingThreadNavigationId(threadId);
       void navigate({
         to: "/$projectId/agents/$agentId",
         params: { projectId, agentId },
@@ -232,18 +277,62 @@ function AgentDetailPage() {
     [agentId, navigate, projectId],
   );
 
-  const handleCreateThread = useCallback(async () => {
-    const created = (await createConversationThread({ data: { agentId, projectId } })) as { id?: string };
-    if (!created.id) {
-      return;
-    }
-
+  const handleCreateThread = useCallback(() => {
+    setDraftThreadOpen(true);
     void navigate({
       to: "/$projectId/agents/$agentId",
       params: { projectId, agentId },
-      search: (prev) => ({ ...prev, tab: "chat", threadId: created.id }),
+      search: (prev) => ({ ...prev, tab: "chat", threadId: undefined }),
     });
   }, [agentId, navigate, projectId]);
+
+  const handleDraftThreadCreated = useCallback(
+    (threadId: string) => {
+      setDraftThreadOpen(false);
+      setPendingThreadNavigationId(threadId);
+      void navigate({
+        to: "/$projectId/agents/$agentId",
+        params: { projectId, agentId },
+        search: (prev) => ({ ...prev, tab: "chat", threadId }),
+        replace: true,
+      });
+    },
+    [agentId, navigate, projectId],
+  );
+
+  const handleDeleteThread = useCallback(
+    async (thread: (typeof conversationThreads)[number]) => {
+      if (thread.isPrimary) {
+        return;
+      }
+      if (thread.hasMessages && !window.confirm(`Delete "${thread.title}"? This will remove the full chat transcript.`)) {
+        return;
+      }
+
+      const result = (await deleteConversationThread({
+        data: { agentId, projectId, threadId: thread.id },
+      })) as { fallbackThreadId?: string };
+
+      if (!result.fallbackThreadId) {
+        void router.invalidate();
+        return;
+      }
+
+      const isActivePersistedThread = !draftThreadOpen && conversation?.threadId === thread.id;
+      if (isActivePersistedThread) {
+        void navigate({
+          to: "/$projectId/agents/$agentId",
+          params: { projectId, agentId },
+          search: (prev) => ({ ...prev, tab: "chat", threadId: result.fallbackThreadId }),
+          replace: true,
+        });
+        return;
+      }
+
+      void router.invalidate();
+    },
+    [agentId, conversation?.threadId, conversationThreads, draftThreadOpen, navigate, projectId, router],
+  );
 
   const handleCancelRun = useCallback(async () => {
     if (!activeRun || cancelling) return;
@@ -267,6 +356,8 @@ function AgentDetailPage() {
   if (!project || !agent) {
     return <div>Agent not found.</div>;
   }
+
+  const activeThreadId = draftThreadOpen ? DRAFT_THREAD_ID : conversation?.threadId;
 
   const handleRunNow = async () => {
     setRunError(null);
@@ -300,6 +391,8 @@ function AgentDetailPage() {
       projectConnections={projectConnections}
       policyToolCatalog={policyToolCatalog}
       conversationThreads={conversationThreads}
+      activeThreadId={activeThreadId}
+      draftThreadOpen={draftThreadOpen}
       initialTab={search.tab}
       initialRunId={search.runId ?? null}
       initialPendingActionId={search.pendingActionId ?? null}
@@ -310,7 +403,8 @@ function AgentDetailPage() {
           search: (prev) => ({
             ...prev,
             tab,
-            threadId: tab === "chat" ? (prev.threadId ?? conversation?.threadId) : prev.threadId,
+            threadId:
+              tab === "chat" ? (draftThreadOpen ? undefined : (prev.threadId ?? conversation?.threadId)) : prev.threadId,
           }),
           replace: true,
         });
@@ -318,6 +412,7 @@ function AgentDetailPage() {
       onSelectRun={handleSelectRun}
       onSelectThread={handleSelectThread}
       onCreateThread={handleCreateThread}
+      onDeleteThread={handleDeleteThread}
       activeRunId={activity.activeRunId}
       onCancelRun={handleCancelRun}
       cancelling={cancelling}
@@ -355,6 +450,7 @@ function AgentDetailPage() {
       onRunTriggered={async (_runId, _triggerRunId) => {
         void router.invalidate();
       }}
+      onThreadCreated={handleDraftThreadCreated}
       onApprove={async (actionId, reason) => {
         await approveAction({ data: { actionId, projectId, reason } });
         void router.invalidate();

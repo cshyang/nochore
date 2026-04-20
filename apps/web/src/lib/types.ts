@@ -246,6 +246,8 @@ export interface ConversationThreadSummaryView {
   createdAt: string;
   updatedAt: string;
   lastMessageAt?: string;
+  messageCount: number;
+  hasMessages: boolean;
 }
 
 export interface ConnectionView {

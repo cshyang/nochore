@@ -319,6 +319,54 @@ describe("simplified repositories", () => {
     expect(updated?.title).toBe("Check AI Max performance");
   });
 
+  it("counts and deletes conversation messages by thread", async () => {
+    const db = createTestDb();
+    const threadRepo = new ConversationThreadRepository(db);
+    const eventRepo = new ConversationEventRepository(db);
+    const thread = await threadRepo.createManualWebThread("agent_001");
+
+    await eventRepo.upsertMessages([
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        createdAt: new Date("2026-04-01T10:00:00Z"),
+        message: {
+          id: "msg_001",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      },
+      {
+        threadId: thread.id,
+        agentId: "agent_001",
+        source: "web",
+        createdAt: new Date("2026-04-01T10:01:00Z"),
+        message: {
+          id: "msg_002",
+          role: "assistant",
+          parts: [{ type: "text", text: "Hi there" }],
+        },
+      },
+    ]);
+
+    expect(await eventRepo.countMessagesByThread(thread.id)).toBe(2);
+
+    await eventRepo.deleteByThread(thread.id);
+
+    expect(await eventRepo.countMessagesByThread(thread.id)).toBe(0);
+  });
+
+  it("deletes manual conversation threads", async () => {
+    const db = createTestDb();
+    const repo = new ConversationThreadRepository(db);
+    const thread = await repo.createManualWebThread("agent_001");
+
+    await repo.deleteById(thread.id);
+
+    expect(await repo.getById(thread.id)).toBeNull();
+  });
+
   it("upserts conversation messages and rolling checkpoints", async () => {
     const db = createTestDb();
     const threadRepo = new ConversationThreadRepository(db);

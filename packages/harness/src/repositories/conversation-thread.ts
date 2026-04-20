@@ -136,6 +136,10 @@ export class ConversationThreadRepository {
       .run();
   }
 
+  async deleteById(id: string): Promise<void> {
+    this.db.delete(conversationThreads).where(eq(conversationThreads.id, id)).run();
+  }
+
   async recordUsage(
     id: string,
     usage: {

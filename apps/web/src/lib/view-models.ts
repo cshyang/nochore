@@ -215,6 +215,8 @@ const ConversationThreadSummaryViewSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   lastMessageAt: z.string().optional(),
+  messageCount: z.number().int().nonnegative(),
+  hasMessages: z.boolean(),
 });
 
 const AgentViewSchema = z.object({

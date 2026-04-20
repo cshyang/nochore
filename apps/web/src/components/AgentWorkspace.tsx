@@ -48,6 +48,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const runs = props.runs ?? [];
   const conversation = props.conversation;
   const conversationThreads = props.conversationThreads ?? [];
+  const activeThreadId = props.activeThreadId ?? conversation?.threadId;
+  const draftThreadOpen = props.draftThreadOpen ?? false;
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
   const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "runs");
@@ -372,14 +374,18 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         {tab === "chat" ? (
           <div className="aw-panel-enter" style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
             <AgentChatPane
-              key={conversation?.threadId ?? agent.id}
+              key={activeThreadId ?? agent.id}
               agent={agent}
               projectId={project.id}
               runs={runs}
               conversation={conversation}
               threads={conversationThreads}
+              activeThreadId={activeThreadId}
+              draftThreadOpen={draftThreadOpen}
               onSelectThread={props.onSelectThread}
               onCreateThread={props.onCreateThread}
+              onDeleteThread={props.onDeleteThread}
+              onThreadCreated={props.onThreadCreated}
               onRunTriggered={(runId, triggerRunId) => {
                 selectRun(runId);
                 setChatTriggeredRunId(runId);

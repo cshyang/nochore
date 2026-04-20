@@ -184,6 +184,14 @@ export class ConversationEventRepository {
       .map(toConversationEvent);
   }
 
+  async countMessagesByThread(threadId: string): Promise<number> {
+    return this.db
+      .select()
+      .from(conversationEvents)
+      .where(and(eq(conversationEvents.threadId, threadId), eq(conversationEvents.eventType, "message")))
+      .all().length;
+  }
+
   async listMessageEventsByMessageIds(threadId: string, messageIds: string[]): Promise<ConversationEvent[]> {
     if (messageIds.length === 0) {
       return [];
@@ -250,6 +258,10 @@ export class ConversationEventRepository {
       .orderBy(asc(conversationEvents.createdAt))
       .all()
       .map(toConversationEvent);
+  }
+
+  async deleteByThread(threadId: string): Promise<void> {
+    this.db.delete(conversationEvents).where(eq(conversationEvents.threadId, threadId)).run();
   }
 
   toUIMessage(event: ConversationEvent): UIMessage | null {

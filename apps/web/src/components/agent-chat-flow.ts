@@ -2,8 +2,19 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 import type { AgentView, RunView } from "~/lib/types";
 import { isRequestInputPart } from "~/components/onboarding-chat-messages";
+
+type ChatMessageMetadata = {
+  threadId?: string;
+};
+
+type AgentChatMessage = UIMessage<ChatMessageMetadata>;
+
+const ChatMessageMetadataSchema = z.object({
+  threadId: z.string().optional(),
+});
 
 function computeGreeting(agent: AgentView, runs: RunView[]): string {
   if (agent.lifecycleStatus === "draft") {
@@ -20,10 +31,12 @@ export function useAgentChatFlow(params: {
   agentId: string;
   projectId: string;
   threadId?: string;
+  draftThreadOpen?: boolean;
   agent: AgentView;
   runs: RunView[];
   initialMessages?: UIMessage[];
   onRunTriggered?: (runId: string, triggerRunId: string) => void;
+  onThreadCreated?: (threadId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -45,21 +58,27 @@ export function useAgentChatFlow(params: {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-      api: "/api/agent-chat",
-      body: {
-        agentId: params.agentId,
-        projectId: params.projectId,
-        threadId: params.threadId,
-      },
-    }),
-    [params.agentId, params.projectId, params.threadId],
+        api: "/api/agent-chat",
+        body: {
+          agentId: params.agentId,
+          projectId: params.projectId,
+          threadId: params.threadId,
+          createThreadOnFirstMessage: params.draftThreadOpen,
+        },
+      }),
+    [params.agentId, params.projectId, params.threadId, params.draftThreadOpen],
   );
 
   const { messages, sendMessage, addToolOutput, status } = useChat({
     transport,
-    messages: initialMessages,
+    messages: initialMessages as AgentChatMessage[],
+    messageMetadataSchema: ChatMessageMetadataSchema,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onFinish: ({ message }) => {
+      if (params.draftThreadOpen && message.metadata?.threadId) {
+        params.onThreadCreated?.(message.metadata.threadId);
+      }
+
       for (const part of message.parts) {
         const record = part as Record<string, unknown>;
         const type = record.type as string | undefined;
@@ -173,12 +192,12 @@ export function useAgentChatFlow(params: {
   );
 
   const notifyRunCompleted = useCallback(() => {
-    if (isLoading) return;
+    if (isLoading || params.draftThreadOpen) return;
     void sendMessage({
       text: "The run just completed. Summarize what you found.",
       messageId: `system:run-completed:${Date.now()}`,
     });
-  }, [isLoading, sendMessage]);
+  }, [isLoading, params.draftThreadOpen, sendMessage]);
 
   return {
     scrollRef,
@@ -186,7 +205,7 @@ export function useAgentChatFlow(params: {
     latestAssistantRef,
     inputValue,
     setInputValue,
-    messages,
+    messages: messages as UIMessage[],
     isLoading,
     handleSubmit,
     handleKeyDown,

@@ -42,6 +42,8 @@ export interface AgentWorkspaceProps {
   runs?: RunView[];
   conversation?: ConversationStateView;
   conversationThreads?: ConversationThreadSummaryView[];
+  activeThreadId?: string;
+  draftThreadOpen?: boolean;
   isDraft?: boolean;
   initialTab?: WorkspaceTab;
   initialRunId?: string | null;
@@ -49,7 +51,9 @@ export interface AgentWorkspaceProps {
   onTabChange?: (tab: WorkspaceTab) => void;
   onSelectRun?: (runId: string | null) => void;
   onSelectThread?: (threadId: string) => void;
-  onCreateThread?: () => Promise<void> | void;
+  onCreateThread?: () => void;
+  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
+  onThreadCreated?: (threadId: string) => void;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   activeRunId?: string | null;

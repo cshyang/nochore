@@ -33,6 +33,7 @@ type AgentChatRequestBody = {
   agentId: string;
   projectId: string;
   threadId?: string;
+  createThreadOnFirstMessage?: boolean;
 };
 
 export const Route = createFileRoute("/api/agent-chat")({
@@ -40,7 +41,7 @@ export const Route = createFileRoute("/api/agent-chat")({
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as AgentChatRequestBody;
-        const { messages: rawMessages, agentId, projectId, threadId } = body;
+        const { messages: rawMessages, agentId, projectId, threadId, createThreadOnFirstMessage } = body;
 
         const agent = getAgentRow(projectId, agentId);
         if (!agent) {
@@ -52,11 +53,17 @@ export const Route = createFileRoute("/api/agent-chat")({
 
         const model = createAiSdkModel();
         const deps = getProjectDeps(projectId);
-        const thread = await resolveConversationThread({
-          deps,
-          agentId,
-          requestedThreadId: threadId,
-        });
+        const latestUserText = extractLatestUserText(rawMessages);
+        const shouldCreateThread = createThreadOnFirstMessage && !threadId && latestUserText.length > 0;
+        const thread =
+          shouldCreateThread
+            ? await deps.conversationThreadRepository.createManualWebThread(agentId)
+            : await resolveConversationThread({
+                deps,
+                agentId,
+                requestedThreadId: threadId,
+              });
+        const createdThreadId = shouldCreateThread ? thread.id : undefined;
 
         await persistConversationMessages({
           deps,
@@ -90,8 +97,6 @@ export const Route = createFileRoute("/api/agent-chat")({
           .join("\n\n");
 
         let totalUsage: LanguageModelUsage | undefined;
-        const latestUserText = extractLatestUserText(rawMessages);
-
         const result = streamText({
           model,
           system,
@@ -314,27 +319,30 @@ export const Route = createFileRoute("/api/agent-chat")({
         });
 
         return result.toUIMessageStreamResponse(
-          buildPersistentUIMessageStreamOptions({
-            originalMessages: rawMessages as UIMessage[],
-            onFinish: async ({ messages, responseMessage }) => {
-              await persistConversationAfterResponse({
-                deps,
-                agent,
-                thread,
-                messages,
-                responseMessage,
-                model,
-                totalUsage: totalUsage
-                  ? {
-                      inputTokens: totalUsage.inputTokens,
-                      outputTokens: totalUsage.outputTokens,
-                      totalTokens: totalUsage.totalTokens,
-                    }
-                  : undefined,
-                latestUserText,
-              });
-            },
-          }),
+          {
+            ...buildPersistentUIMessageStreamOptions({
+              originalMessages: rawMessages as UIMessage[],
+              onFinish: async ({ messages, responseMessage }) => {
+                await persistConversationAfterResponse({
+                  deps,
+                  agent,
+                  thread,
+                  messages,
+                  responseMessage,
+                  model,
+                  totalUsage: totalUsage
+                    ? {
+                        inputTokens: totalUsage.inputTokens,
+                        outputTokens: totalUsage.outputTokens,
+                        totalTokens: totalUsage.totalTokens,
+                      }
+                    : undefined,
+                  latestUserText,
+                });
+              },
+            }),
+            messageMetadata: () => (createdThreadId ? { threadId: createdThreadId } : undefined),
+          },
         );
       },
     },
