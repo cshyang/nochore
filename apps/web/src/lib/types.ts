@@ -224,6 +224,7 @@ export interface LessonView {
   scope: string;
   confidence: "high" | "medium" | "low";
   createdAt: string;
+  expiresAt?: string;
 }
 
 export interface ConversationStateView {
@@ -232,6 +233,7 @@ export interface ConversationStateView {
   checkpointMessageCount: number;
   messages: ChatMessageView[];
   lessons: LessonView[];
+  episodicLessons: LessonView[];
 }
 
 export interface ConnectionView {

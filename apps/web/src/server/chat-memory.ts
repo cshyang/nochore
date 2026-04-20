@@ -67,6 +67,7 @@ export interface ConversationLoaderState {
   checkpoint: ConversationCheckpoint | null;
   messages: UIMessage[];
   durableLessons: LessonRecord[];
+  episodicLessons: LessonRecord[];
 }
 
 export interface ConversationAssembly {
@@ -104,12 +105,14 @@ export async function loadConversationLoaderState(params: {
   const checkpoint = await params.deps.conversationCheckpointRepository.getByThread(thread.id);
   const messages = await listRehydratedMessages(params.deps, thread.id, params.limit ?? RECENT_VISIBLE_MESSAGE_LIMIT);
   const durableLessons = await params.deps.lessonRepository.listDurableByAgent(params.agentId);
+  const episodicLessons = await params.deps.lessonRepository.listEpisodicByAgent(params.agentId, 50);
 
   return {
     thread,
     checkpoint,
     messages,
     durableLessons,
+    episodicLessons,
   };
 }
 

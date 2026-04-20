@@ -1,4 +1,4 @@
-import { BookOpen, Play, Stop } from "@phosphor-icons/react";
+import { Play, Stop } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentChatPane } from "~/components/agent-chat-pane";
 import type { AgentWorkspaceProps, WorkspaceTab } from "~/components/agent-workspace.types";
@@ -12,6 +12,7 @@ import {
 } from "~/components/agent-workspace-chrome";
 import { AgentWorkspaceSettingsPanel } from "~/components/agent-workspace-settings";
 import { Button } from "~/components/Button";
+import { MemoryDossier } from "~/components/MemoryDossier";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { humanize } from "~/lib/text-format";
 import type { PendingActionView } from "~/lib/types";
@@ -385,52 +386,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
         ) : null}
 
         {tab === "learned" ? (
-          <div className="aw-panel-enter" style={{ ...memoryPanelStyle, flex: 1, minHeight: 0, overflowY: "auto" }}>
-            <div style={memoryHeaderStyle}>
-              <div style={placeholderIconStyle}>
-                <BookOpen size={20} weight="bold" color={COLORS.accent} />
-              </div>
-              <div>
-                <div style={placeholderTitleStyle}>Memory dossier</div>
-                <div style={memorySubtitleStyle}>
-                  Relationship summary, distilled run learnings, and context the agent can carry forward.
-                </div>
-              </div>
-            </div>
-
-            {conversation?.checkpointSummary ? (
-              <section style={memorySectionStyle}>
-                <div style={memorySectionLabelStyle}>Relationship summary</div>
-                <div style={memoryCardStyle}>
-                  <div style={memoryMetaStyle}>
-                    Covers {conversation.checkpointMessageCount} earlier
-                    {conversation.checkpointMessageCount === 1 ? " message" : " messages"}
-                  </div>
-                  <div style={memoryBodyStyle}>{conversation.checkpointSummary}</div>
-                </div>
-              </section>
-            ) : null}
-
-            <section style={memorySectionStyle}>
-              <div style={memorySectionLabelStyle}>Durable memory</div>
-              {conversation?.lessons.length ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {conversation.lessons.map((lesson) => (
-                    <div key={lesson.id} style={memoryCardStyle}>
-                      <div style={memoryMetaStyle}>
-                        {lesson.scope} · {lesson.confidence} confidence
-                      </div>
-                      <div style={memoryBodyStyle}>{lesson.content}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={placeholderBodyStyle}>
-                  No durable memory yet. As this agent completes runs and learns stable preferences, corrections, or
-                  decisions, they will show up here and feed future chat context.
-                </div>
-              )}
-            </section>
+          <div className="aw-panel-enter" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 0 24px" }}>
+            <MemoryDossier conversation={conversation} />
           </div>
         ) : null}
       </div>
@@ -455,94 +412,3 @@ function resolvePendingApproval(
 
   return null;
 }
-
-const placeholderPanelStyle = {
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "80px 24px",
-  textAlign: "center" as const,
-};
-
-const placeholderIconStyle = {
-  width: 48,
-  height: 48,
-  borderRadius: RADIUS.lg,
-  background: COLORS.accentDim,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  marginBottom: 16,
-};
-
-const placeholderTitleStyle = {
-  fontSize: TYPE.scale.md,
-  fontWeight: TYPE.weight.semibold,
-  color: COLORS.text,
-  fontFamily: TYPE.display,
-  marginBottom: 6,
-};
-
-const placeholderBodyStyle = {
-  fontSize: TYPE.scale.base,
-  color: COLORS.textSecondary,
-  maxWidth: 440,
-  lineHeight: TYPE.leading.normal,
-  marginBottom: 24,
-};
-
-const memoryPanelStyle = {
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 24,
-  padding: "8px 0 24px",
-  width: "100%",
-  maxWidth: 760,
-};
-
-const memoryHeaderStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-};
-
-const memorySubtitleStyle = {
-  fontSize: TYPE.scale.sm,
-  color: COLORS.textSecondary,
-  lineHeight: TYPE.leading.normal,
-  maxWidth: 560,
-};
-
-const memorySectionStyle = {
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 12,
-};
-
-const memorySectionLabelStyle = {
-  fontSize: TYPE.scale.xs,
-  letterSpacing: 0.8,
-  textTransform: "uppercase" as const,
-  color: COLORS.textDim,
-};
-
-const memoryCardStyle = {
-  borderRadius: RADIUS.lg,
-  border: `1px solid ${COLORS.border}`,
-  background: COLORS.surface,
-  padding: 16,
-};
-
-const memoryMetaStyle = {
-  fontSize: TYPE.scale.xs,
-  color: COLORS.textDim,
-  marginBottom: 8,
-};
-
-const memoryBodyStyle = {
-  fontSize: TYPE.scale.base,
-  color: COLORS.textSecondary,
-  lineHeight: TYPE.leading.normal,
-  whiteSpace: "pre-wrap" as const,
-};

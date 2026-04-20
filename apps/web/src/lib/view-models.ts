@@ -183,6 +183,7 @@ const LessonViewSchema = z.object({
   scope: z.string(),
   confidence: z.enum(["high", "medium", "low"]),
   createdAt: z.string(),
+  expiresAt: z.string().optional(),
 });
 
 const ConversationStateViewSchema = z.object({
@@ -191,6 +192,7 @@ const ConversationStateViewSchema = z.object({
   checkpointMessageCount: z.number().int().nonnegative(),
   messages: z.array(ChatMessageViewSchema),
   lessons: z.array(LessonViewSchema),
+  episodicLessons: z.array(LessonViewSchema).default([]),
 });
 
 const AgentViewSchema = z.object({

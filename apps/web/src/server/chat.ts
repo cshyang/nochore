@@ -78,6 +78,15 @@ export const getPrimaryConversationState = createServerFn({ method: "GET" })
         scope: lesson.scope,
         confidence: lesson.confidence,
         createdAt: lesson.createdAt.toISOString(),
+        expiresAt: lesson.expiresAt?.toISOString(),
+      })),
+      episodicLessons: state.episodicLessons.map((lesson) => ({
+        id: lesson.id,
+        content: lesson.content,
+        scope: lesson.scope,
+        confidence: lesson.confidence,
+        createdAt: lesson.createdAt.toISOString(),
+        expiresAt: lesson.expiresAt?.toISOString(),
       })),
     });
   });
