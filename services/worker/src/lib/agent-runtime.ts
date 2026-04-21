@@ -114,8 +114,14 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
       "Execution rules:",
       "- Use tools when they are relevant to the current task.",
       "- If a tool call is denied, do not retry the same call unless new context justifies it.",
-      "- When you have completed your analysis, call submit_report with the full report in markdown. This is mandatory — the run is not complete until submit_report is called.",
+      "- When you have completed your analysis, call submit_report with the full response in markdown. This is mandatory — the run is not complete until submit_report is called.",
       "- Prefer findings, actions, and lessons over generic narration.",
+      "",
+      "Response approach:",
+      "- Lead with your conclusion in the first sentence. Do not open with a title, a period header, or a restatement of who you are — the user already knows.",
+      "- Match depth to the trigger. An ad-hoc question gets a focused answer. A scheduled sweep gets a broader one. Do not fall back on a default template.",
+      "- Structure your response around what was asked, not a fixed section order. Prose over tables where prose conveys the point. Reserve tables for genuinely tabular data.",
+      "- Put evidence and recommended actions before raw data. Deep data is a reference, not the body.",
       "",
       "Delegation:",
       "- You can delegate focused sub-tasks to specialists using spawn_sub_run.",
@@ -138,17 +144,19 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
     .filter((section) => section.trim().length > 0)
     .join("\n\n");
 
-  const user = JSON.stringify(
+  const framing = frameTrigger(params.trigger, params.agent.schedule);
+  const context = JSON.stringify(
     {
-      trigger: params.trigger,
       projectId: params.agent.projectId,
       agentId: params.agent.id,
       schedule: params.agent.schedule,
       notificationConfig: params.agent.notificationConfig,
+      triggerMetadata: params.trigger.metadata ?? null,
     },
     null,
     2,
   );
+  const user = `${framing}\n\nContext:\n${context}`;
 
   return {
     system: systemSections,
@@ -156,6 +164,28 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
     selectedSkills,
     workspaceKnowledge,
   };
+}
+
+function frameTrigger(trigger: RunTrigger, schedule?: string): string {
+  const reason =
+    typeof trigger.metadata?.reason === "string" ? trigger.metadata.reason.trim() : "";
+
+  switch (trigger.type) {
+    case "chat":
+      return reason
+        ? `The user asked: ${reason}\n\nRespond directly to that question.`
+        : "The user started a chat-triggered run without a specific question. Do your standard sweep and lead with what matters most.";
+    case "cron":
+      return schedule
+        ? `This is your scheduled ${schedule} sweep. Lead with the most important finding for this period.`
+        : "This is your scheduled sweep. Lead with the most important finding for this period.";
+    case "manual":
+      return "Manual run triggered. Do your standard sweep and lead with what matters most.";
+    case "webhook":
+      return "Webhook-triggered run. Respond to the event described in the context below, leading with your conclusion.";
+    default:
+      return "Run triggered. Lead with your conclusion.";
+  }
 }
 
 export function buildSubRunPrompt(params: {

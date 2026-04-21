@@ -58,7 +58,7 @@ Do NOT call create_agent until you have:
 When calling create_agent:
 - **name** — short, aspirational, describes the outcome not the method. Good: "Grow Qualified Demand", "Ad Spend Guardian", "CPA Optimizer". Bad: "Lower Cost Per Conversion" (just restates the metric), "Google Ads Monitor" (describes the tool, not the outcome).
 - **description** — one sentence stating the outcome: "Reduce qualified CPA while maintaining lead volume." This appears on the agent card as the outcome sentence.
-- **instructions** — the strategy note. How should the agent pursue this outcome? What to watch, what patterns to look for, what actions to consider, how to format findings. Be specific and operational — this is the agent's program.md.
+- **instructions** — the strategy note. How should the agent pursue this outcome? What to watch, what patterns to look for, what actions to consider, how to prioritize. Be specific and operational — this is the agent's program.md. **Do not describe output format, section structure, or report templates.** Response voice is shaped by the platform at runtime; your job is strategy.
 - **primaryMetric** — the comparabilityKey the agent will use with record_metric to track its primary success metric. Format: `metric_name|scope|window` (e.g., `qualified_cpa|account|7d`).
 
 ## Process Rules

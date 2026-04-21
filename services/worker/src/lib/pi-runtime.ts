@@ -80,8 +80,10 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
     name: "submit_report",
     label: "Submit Report",
     description:
-      "Submit your final analysis report. You MUST call this tool exactly once before finishing. " +
-      "Pass the complete report as markdown in the 'report' parameter.",
+      "Submit your final response as markdown. Call this exactly once before finishing. " +
+      "Lead with your conclusion in the first sentence — no vanity titles, no restating who you are. " +
+      "Match depth to what was asked: a focused question gets a focused answer, a broad sweep gets a broader one. " +
+      "Structure the response around what was asked, not a fixed template.",
     parameters: {
       type: "object",
       properties: {
