@@ -291,6 +291,11 @@ export function ConversationMessage({
     strong: ({ children }: { children?: ReactNode }) => (
       <StrongWithStatus connectedSet={connectedSet}>{children}</StrongWithStatus>
     ),
+    table: ({ children }: { children?: ReactNode }) => (
+      <div style={{ overflowX: "auto", maxWidth: "100%", margin: "0.6em 0" }}>
+        <table style={{ margin: 0, width: "auto", minWidth: "100%" }}>{children}</table>
+      </div>
+    ),
   };
   const isUser = message.role === "user";
   const parts = message.parts;
@@ -386,7 +391,9 @@ export function ConversationMessage({
           fontFamily: TYPE.body,
         }}
       >
-        <Markdown components={markdownComponents as never}>{textBuffer.trim()}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents as never}>
+          {textBuffer.trim()}
+        </Markdown>
         {isStreaming ? (
           <span
             style={{
@@ -491,7 +498,9 @@ export function ConversationMessage({
             fontFamily: TYPE.body,
           }}
         >
-          <Markdown components={markdownComponents as never}>{input.question}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents as never}>
+            {input.question}
+          </Markdown>
         </div>,
       );
     }
