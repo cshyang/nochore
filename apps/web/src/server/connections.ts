@@ -183,26 +183,40 @@ export const fetchComposioToolCatalog = createServerFn({ method: "GET" })
     return listComposioToolCatalogForProject(projectId);
   });
 
-export const fetchToolkitSummaries = createServerFn({ method: "GET" })
-  .inputValidator((input: { projectId: string }) => input)
-  .handler(
-    async (): Promise<
-      Array<{
-        slug: string;
-        name: string;
-        description: string;
-        categories: string[];
-        logo: string | null;
-      }>
-    > => {
-      try {
-        const { createComposioClient } = await import("@nochore/harness");
-        const { TOOLKIT_CATALOG_PROVIDER_SLUGS } = await import("../lib/provider-metadata");
-        const composio = await createComposioClient();
+type ToolkitSummary = {
+  slug: string;
+  name: string;
+  description: string;
+  categories: string[];
+  logo: string | null;
+};
 
-        const results = await Promise.allSettled(
-          TOOLKIT_CATALOG_PROVIDER_SLUGS.map((slug) =>
-            composio.toolkits.get(slug).then((tk) => ({
+// Toolkit summaries are near-static (new Composio integrations ship rarely) and
+// project-agnostic (the projectId input is accepted for FormData consistency
+// but not read). Cache the whole result per-process for an hour so navigation
+// doesn't pay ~1s per Composio round-trip. Process restart / deploy evicts.
+let toolkitSummariesCache: { data: ToolkitSummary[]; expires: number } | null = null;
+const TOOLKIT_SUMMARIES_TTL_MS = 60 * 60 * 1000;
+let toolkitSummariesInFlight: Promise<ToolkitSummary[]> | null = null;
+
+async function loadToolkitSummaries(): Promise<ToolkitSummary[]> {
+  const now = Date.now();
+  if (toolkitSummariesCache && now < toolkitSummariesCache.expires) {
+    return toolkitSummariesCache.data;
+  }
+  if (toolkitSummariesInFlight) {
+    return toolkitSummariesInFlight;
+  }
+  toolkitSummariesInFlight = (async () => {
+    try {
+      const { createComposioClient } = await import("@nochore/harness");
+      const { TOOLKIT_CATALOG_PROVIDER_SLUGS } = await import("../lib/provider-metadata");
+      const composio = await createComposioClient();
+
+      const results = await Promise.allSettled(
+        TOOLKIT_CATALOG_PROVIDER_SLUGS.map((slug) =>
+          composio.toolkits.get(slug).then(
+            (tk): ToolkitSummary => ({
               slug: tk.slug,
               name: tk.name,
               description: (tk as unknown as { meta?: { description?: string } }).meta?.description ?? "",
@@ -211,28 +225,29 @@ export const fetchToolkitSummaries = createServerFn({ method: "GET" })
                 []
               ).map((c) => c.name),
               logo: (tk as unknown as { meta?: { logo?: string } }).meta?.logo ?? null,
-            })),
+            }),
           ),
-        );
+        ),
+      );
 
-        return results
-          .filter(
-            (
-              r,
-            ): r is PromiseFulfilledResult<{
-              slug: string;
-              name: string;
-              description: string;
-              categories: string[];
-              logo: string | null;
-            }> => r.status === "fulfilled",
-          )
-          .map((r) => r.value);
-      } catch {
-        return [];
-      }
-    },
-  );
+      const data = results
+        .filter((r): r is PromiseFulfilledResult<ToolkitSummary> => r.status === "fulfilled")
+        .map((r) => r.value);
+
+      toolkitSummariesCache = { data, expires: Date.now() + TOOLKIT_SUMMARIES_TTL_MS };
+      return data;
+    } catch {
+      return [];
+    } finally {
+      toolkitSummariesInFlight = null;
+    }
+  })();
+  return toolkitSummariesInFlight;
+}
+
+export const fetchToolkitSummaries = createServerFn({ method: "GET" })
+  .inputValidator((input: { projectId: string }) => input)
+  .handler(async (): Promise<ToolkitSummary[]> => loadToolkitSummaries());
 
 export const listConnections = createServerFn({ method: "GET" })
   .inputValidator((input: { projectId: string }) => input)
