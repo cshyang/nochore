@@ -53,9 +53,10 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
     threadId: typeof search.threadId === "string" ? search.threadId : undefined,
     pendingActionId: typeof search.pendingActionId === "string" ? search.pendingActionId : undefined,
   }),
-  loader: async ({ params, search }) => {
+  loaderDeps: ({ search }) => ({ threadId: search.threadId }),
+  loader: async ({ params, deps }) => {
     const { projectId, agentId } = params;
-    const requestedThreadId = search?.threadId;
+    const requestedThreadId = deps.threadId;
     try {
       const [
         agent,
