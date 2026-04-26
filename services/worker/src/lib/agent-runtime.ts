@@ -18,7 +18,7 @@ import {
 import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 
-type WorkerRepositories = Pick<
+type AgentRepositories = Pick<
   ReturnType<typeof createProjectRepositories>,
   | "agentRepository"
   | "approvalRepository"
@@ -28,10 +28,10 @@ type WorkerRepositories = Pick<
   | "lessonRepository"
   | "runEventRepository"
   | "runRepository"
-  | "workItemRepository"
+  | "agentTaskRepository"
 >;
 
-export interface WorkerRuntime extends WorkerRepositories {
+export interface AgentRuntime extends AgentRepositories {
   db: HarnessDb;
   composio: Awaited<ReturnType<typeof createComposioClient>>;
   userId: string;
@@ -50,7 +50,7 @@ export async function createModel(modelOverride?: string): Promise<LanguageModel
   return createAiSdkModel(modelOverride);
 }
 
-export async function createWorkerRuntime(projectId: string): Promise<WorkerRuntime> {
+export async function createAgentRuntime(projectId: string): Promise<AgentRuntime> {
   const db = openProjectDb(projectId);
   const composio = await createComposioClient();
   const repositories = createProjectRepositories(db);
@@ -67,7 +67,7 @@ export async function createWorkerRuntime(projectId: string): Promise<WorkerRunt
     lessonRepository: repositories.lessonRepository,
     runEventRepository: repositories.runEventRepository,
     runRepository: repositories.runRepository,
-    workItemRepository: repositories.workItemRepository,
+    agentTaskRepository: repositories.agentTaskRepository,
     composio,
     userId: getComposioUserId(projectId),
     activeProviders: providers,
@@ -124,10 +124,10 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
       "- Put evidence and recommended actions before raw data. Deep data is a reference, not the body.",
       "",
       "Delegation:",
-      "- You can delegate focused sub-tasks to specialists using spawn_sub_run.",
+      "- You can delegate focused tasks to specialists using delegate_task.",
       "- Roles: scout (research & data gathering), analyst (pattern analysis & insights), builder (executing specific actions).",
-      "- Use delegation when a sub-task benefits from focused attention. You receive the specialist's output and synthesize the final result.",
-      "- Do not delegate simple tool calls — only multi-step sub-tasks that require focused reasoning.",
+      "- Use delegation when a task benefits from focused attention. You receive the specialist's output and synthesize the final result.",
+      "- Do not delegate simple tool calls — only multi-step tasks that require focused reasoning.",
       "",
       "Metric recording:",
       "- When you observe quantitative metrics relevant to your outcome, use record_metric to capture them.",
@@ -167,8 +167,7 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
 }
 
 function frameTrigger(trigger: RunTrigger, schedule?: string): string {
-  const reason =
-    typeof trigger.metadata?.reason === "string" ? trigger.metadata.reason.trim() : "";
+  const reason = typeof trigger.metadata?.reason === "string" ? trigger.metadata.reason.trim() : "";
 
   switch (trigger.type) {
     case "chat":
@@ -188,7 +187,7 @@ function frameTrigger(trigger: RunTrigger, schedule?: string): string {
   }
 }
 
-export function buildSubRunPrompt(params: {
+export function buildAgentTaskPrompt(params: {
   role: string;
   task: string;
   context?: string;

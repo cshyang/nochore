@@ -20,7 +20,7 @@ const defaultDeps: ToolProviderDeps = {
   warn: (message) => logger.warn(message),
 };
 
-// Worker-local tool provider seam. This keeps provider-specific routing out of the run loop
+// Runtime-local tool provider seam. This keeps provider-specific routing out of the run loop
 // without pretending we have a general-purpose framework adapter yet.
 export async function listProviderTools(
   context: ToolProviderContext,

@@ -48,10 +48,10 @@ export function RunStatsStrip({ stats, outOfRange }: RunStatsStripProps) {
     });
   }
 
-  if (stats.subagents > 0) {
+  if (stats.tasks > 0) {
     segments.push({
-      key: "subagents",
-      label: `${stats.subagents} subagent${stats.subagents === 1 ? "" : "s"}`,
+      key: "tasks",
+      label: `${stats.tasks} task${stats.tasks === 1 ? "" : "s"}`,
     });
   }
 
@@ -112,8 +112,7 @@ export function RunOutOfRangeNote({ outOfRange }: RunOutOfRangeNoteProps) {
       }}
     >
       This run used <span style={{ color: COLORS.orange }}>{ratioLabel} the usual tokens</span> — typically{" "}
-      {formatTokens(Math.round(outOfRange.typicalMedian))}, this run{" "}
-      {outOfRange.observed.toLocaleString()}.
+      {formatTokens(Math.round(outOfRange.typicalMedian))}, this run {outOfRange.observed.toLocaleString()}.
     </div>
   );
 }

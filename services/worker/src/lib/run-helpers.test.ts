@@ -22,7 +22,7 @@ function createApprovalRuntime(initialRunStatus: string) {
         requestEventId?: string;
         createdAt: Date;
         expiresAt?: Date;
-        workItemId?: string;
+        taskId?: string;
       }) {
         const id = `approval_row_${++approvalCount}`;
         approvals.set(id, {
@@ -36,7 +36,7 @@ function createApprovalRuntime(initialRunStatus: string) {
           status: "pending",
           requestReason: input.requestReason,
           requestEventId: input.requestEventId,
-          workItemId: input.workItemId,
+          taskId: input.taskId,
           createdAt: input.createdAt,
           expiresAt: input.expiresAt,
         });
@@ -138,8 +138,8 @@ describe("handleApprovalRequest", () => {
     ]);
   });
 
-  it("keeps the parent run waiting for children when a child approval is rejected", async () => {
-    const harness = createApprovalRuntime("waiting_for_children");
+  it("keeps the parent run waiting for tasks when a task approval is rejected", async () => {
+    const harness = createApprovalRuntime("waiting_for_tasks");
     const metadataStatuses: string[] = [];
 
     let thrown: unknown;
@@ -153,7 +153,7 @@ describe("handleApprovalRequest", () => {
         policyReason: "External writes require approval",
         eventIds: [],
         projectId: "project_123",
-        workItemId: "work_123",
+        taskId: "task_123",
         waitApi: {
           async createToken() {
             return { id: "wait_123" };
@@ -179,10 +179,10 @@ describe("handleApprovalRequest", () => {
     expect(thrown).toBeInstanceOf(ApprovalCheckpointError);
     expect(thrown).toMatchObject({
       stopCause: "approval_rejected",
-      workItemId: "work_123",
+      taskId: "task_123",
       message: "Do not send this yet",
     });
-    expect(harness.getRunStatus()).toBe("waiting_for_children");
+    expect(harness.getRunStatus()).toBe("waiting_for_tasks");
     expect(metadataStatuses).toEqual([]);
 
     const approvals = harness.getApprovals();
@@ -190,7 +190,7 @@ describe("handleApprovalRequest", () => {
     expect(approvals[0]).toMatchObject({
       status: "rejected",
       decisionReason: "Do not send this yet",
-      workItemId: "work_123",
+      taskId: "task_123",
       requestEventId: "evt_1",
     });
     expect(harness.getEvents().map((event) => event.type)).toEqual([

@@ -19,8 +19,8 @@ const EVENT_BORDER_COLORS: Record<string, string> = {
   tool_executed: COLORS.accent,
   agent_message: COLORS.textSecondary,
   finding_recorded: COLORS.green,
-  sub_run_started: COLORS.accent,
-  sub_run_completed: COLORS.green,
+  task_started: COLORS.accent,
+  task_completed: COLORS.green,
   tool_approval_requested: COLORS.orange,
   tool_approval_resolved: COLORS.orange,
   tool_approval_expired: COLORS.orange,
@@ -40,8 +40,8 @@ export function getBorderColor(type: string): string {
 
 export function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red" | "gray" {
   if (type === "tool_called" || type === "tool_executed") return "blue";
-  if (type === "finding_recorded" || type === "run_completed" || type === "sub_run_completed") return "green";
-  if (type === "sub_run_started") return "blue";
+  if (type === "finding_recorded" || type === "run_completed" || type === "task_completed") return "green";
+  if (type === "task_started") return "blue";
   if (type === "tool_approval_requested" || type === "tool_approval_resolved" || type === "tool_approval_expired") {
     return "yellow";
   }
@@ -57,8 +57,8 @@ export function getBadgeColor(type: string): "blue" | "green" | "yellow" | "red"
 export function getEventIcon(type: string) {
   if (type === "tool_called" || type === "tool_executed") return Lightning;
   if (type === "finding_recorded" || type === "run_completed") return Check;
-  if (type === "sub_run_started") return CircleNotch;
-  if (type === "sub_run_completed") return Check;
+  if (type === "task_started") return CircleNotch;
+  if (type === "task_completed") return Check;
   if (type === "run_stopped") return Warning;
   if (type === "run_cancelled") return Warning;
   if (type === "run_failed") return Warning;

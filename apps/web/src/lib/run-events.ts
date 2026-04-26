@@ -1,5 +1,5 @@
 import { narrateEvent } from "./narrate";
-import type { PendingActionView, RunView, TimelineEvent, WorkItemView } from "./types";
+import type { AgentTaskView, PendingActionView, RunView, TimelineEvent } from "./types";
 
 export function extractFinding(run: RunView): string | null {
   const finding = run.events.find((e) => e.type === "finding_recorded");
@@ -39,7 +39,7 @@ export function extractToolCallSummaries(run: RunView): ToolCallSummary[] {
     const toolName = e.payload?.toolName as string | undefined;
     if (!toolName) continue;
     if (e.type === "tool_called") called.add(toolName);
-    if (e.type === "approval_requested") gated.add(toolName);
+    if (e.type === "tool_approval_requested") gated.add(toolName);
   }
   return Array.from(called).map((toolName) => ({
     toolName,
@@ -61,6 +61,6 @@ export function findLatestStopEvent(run: RunView) {
   return [...run.events].reverse().find((event) => event.type === "run_stopped") ?? null;
 }
 
-export function findWorkItemForApproval(run: RunView, approval: PendingActionView): WorkItemView | null {
-  return approval.workItemId ? (run.workItems.find((item) => item.id === approval.workItemId) ?? null) : null;
+export function findAgentTaskForApproval(run: RunView, approval: PendingActionView): AgentTaskView | null {
+  return approval.taskId ? (run.tasks.find((item) => item.id === approval.taskId) ?? null) : null;
 }

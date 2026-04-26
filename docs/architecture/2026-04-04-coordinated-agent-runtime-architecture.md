@@ -3,7 +3,7 @@
 **Date:** 2026-04-04  
 **Status:** Accepted  
 **Builds on:** `2026-03-31-agent-evolution-design.md`  
-**Purpose:** Define the smallest durable runtime model that lets a lead agent coordinate child work without exposing containers or orchestration complexity in the product UI.
+**Purpose:** Define the smallest durable runtime model that lets a lead agent coordinate delegated AgentTask work without exposing containers or orchestration complexity in the product UI.
 
 ## Why This Exists
 
@@ -13,11 +13,11 @@ Nochore’s current runtime assumes:
 - one visible live execution thread
 - one flat event stream
 
-That works for direct work and today’s inline `spawn_sub_run`, but it breaks down when the lead agent needs to:
+That works for direct work and today’s inline `delegate_task`, but it breaks down when the lead agent needs to:
 
 - fan out internal work in parallel
 - pause on approvals
-- resume after child work completes
+- resume after delegated tasks complete
 - keep the frontend calm while multiple execution units are active
 
 The architecture should preserve the product promise:
@@ -26,26 +26,26 @@ The architecture should preserve the product promise:
 
 ## Reality Check: Current Code
 
-The current codebase is not layered yet.
+The current codebase is now layered around `AgentTask`, with orchestration still intentionally owned by the lead run.
 
 | Proposed surface | What exists today | Main gap |
 |---|---|---|
 | Identity | `AgentRecord` plus prompt assembly in `buildPromptBundle()` | No reusable identity object; identity is mostly compiled straight into prompt text |
-| Runtime | `agent-run.ts` plus inline `spawn_sub_run` | No explicit work-item model; sub-runs are only events under the parent run |
-| Delivery | SSE polling full snapshots every second | No first-class work-item or artifact projection yet |
+| Runtime | `agent-run.ts`, `agent-task-run.ts`, and `agent-session.ts` | Parallel fan-out and structured artifacts remain future work |
+| Delivery | SSE polling full snapshots every second | Uses projected `tasks[]`; structured artifact projection remains future work |
 
 Additional concrete issues:
 
-- Learned-rule suggestion detection currently runs in both `apps/web/src/server/approvals-core.ts` and `services/worker/src/triggers/agent-run.ts`, which can duplicate `policy_rule_suggested` events for the same approval lifecycle.
+- Learned-rule suggestion detection should stay single-owner in `apps/web/src/server/approvals-core.ts`; the worker runtime should not duplicate `policy_rule_suggested` events for the same approval lifecycle.
 - Trigger.dev metadata is populated in `agent-run.ts`, but the frontend does not consume it. The current live UI reads projected snapshots, not Trigger metadata.
 
 ## Core Thesis
 
 - **Single-face UX, multi-unit runtime**
 - **Async substrate, hybrid execution feel**
-- **Frontend tracks work items, not containers**
+- **Frontend tracks agent tasks, not containers**
 - **The lead agent owns final synthesis**
-- **No child unit may exceed parent policy**
+- **No agent task may exceed parent policy**
 - **Chat is a surface over reality, not the source of truth**
 
 ## Top-Level Architecture
@@ -87,7 +87,7 @@ The identity surface is the durable definition of the agent between runs. It sho
 - runtime prompt bundle
 - live tool clients
 - task plan
-- worker state
+- agent task state
 - execution outputs
 
 ### Current anchors
@@ -123,9 +123,9 @@ These are conceptually different, but they should be implemented as one coherent
 
 - load agent identity
 - decide how to handle the current turn
-- create child work
-- wait for or resume from child work
-- synthesize child results
+- create AgentTask records
+- wait for or resume from AgentTask runs
+- synthesize task results
 - enforce policy inheritance
 - emit durable status and result projections
 
@@ -136,7 +136,7 @@ Externally, the runtime should only expose two modes:
 | Mode | Meaning |
 |---|---|
 | `direct` | Lead agent handles bounded work itself |
-| `coordinated` | Lead agent creates child work and later synthesizes the results |
+| `coordinated` | Lead agent creates AgentTask records and later synthesizes the results |
 
 Do **not** expose `coordinate_later` as a separate top-level mode in Phase 1. Trigger.dev checkpoint/resume should hide most of the sync/async distinction from the product model.
 
@@ -144,22 +144,22 @@ Do **not** expose `coordinate_later` as a separate top-level mode in Phase 1. Tr
 
 The synthesis barrier is:
 
-1. create child work items
-2. trigger child execution in parallel
+1. create AgentTask records
+2. trigger `agent-task-run` execution
 3. wait for completion using Trigger.dev fan-out/fan-in semantics
 4. re-enter the coordinator
 5. synthesize
 
 There should be no custom polling loop in the runtime design.
 
-### Worker failure contract
+### Agent task failure contract
 
-Worker failure must be explicit from the start.
+Agent task failure must be explicit from the start.
 
 Default behavior:
 
-1. worker marks its work item `failed`
-2. failure reason is recorded on the work item and projected into the parent run
+1. task execution marks its AgentTask record `failed`
+2. failure reason is recorded on the AgentTask and projected into the parent run
 3. coordinator decides one of:
    - retry
    - continue with partial results
@@ -167,19 +167,19 @@ Default behavior:
 
 Default coordinator policy should be **best effort**:
 
-- if a failed work item was optional, synthesize with partial results
-- if a failed work item was required, fail the parent run or request human input
+- if a failed agent task was optional, synthesize with partial results
+- if a failed agent task was required, fail the parent run or request human input
 
-Worker retries should rely on Trigger.dev task-level retry configuration rather than custom retry loops inside the coordinator.
+Agent task retries should rely on Trigger.dev task-level retry configuration rather than custom retry loops inside the coordinator.
 
 ### Policy inheritance
 
 Policy flows down, never around.
 
 - lead agent defines the approval and tool envelope
-- child work inherits a narrowed version of that envelope
-- child work may restrict further
-- child work may never widen access or autonomy beyond the parent
+- AgentTask execution inherits a narrowed version of that envelope
+- AgentTask execution may restrict further
+- AgentTask execution may never widen access or autonomy beyond the parent
 
 ## 3. Delivery
 
@@ -188,7 +188,7 @@ Delivery turns runtime state into product surfaces.
 ### Delivery owns
 
 - projected run state
-- projected work-item state
+- projected agent-task state
 - approvals and needs-input projections
 - activity projections
 - final result summaries
@@ -209,17 +209,17 @@ Today the frontend consumes snapshots over SSE from:
 
 Those snapshots are currently derived from projected run state, not from Trigger.dev metadata.
 
-That means the target architecture should improve the projection model, not couple the frontend directly to worker containers or Trigger internals.
+That means the target architecture should improve the projection model, not couple the frontend directly to task containers or Trigger internals.
 
 ## Frontend Contract
 
-The frontend should not model containers. It should model one top-level run plus child work items.
+The frontend should not model containers. It should model one top-level run plus child agent tasks.
 
 ```mermaid
 flowchart TD
-    R["Run"] --> W1["Work item"]
-    R --> W2["Work item"]
-    R --> W3["Work item"]
+    R["Run"] --> W1["Agent task"]
+    R --> W2["Agent task"]
+    R --> W3["Agent task"]
     W1 --> O1["Outcome"]
     W2 --> O2["Outcome"]
     W3 --> O3["Outcome"]
@@ -228,7 +228,7 @@ flowchart TD
 
 ### Core rule
 
-The UI should care about **work-item lifecycle**, not execution-container lifecycle.
+The UI should care about **agent-task lifecycle**, not execution-container lifecycle.
 
 ### Recommended view model
 
@@ -243,7 +243,7 @@ interface RunView {
   status:
     | "queued"
     | "running"
-    | "waiting_for_children"
+    | "waiting_for_tasks"
     | "waiting_for_approval"
     | "waiting_for_external"
     | "completed"
@@ -251,7 +251,7 @@ interface RunView {
     | "cancelled";
   startedAt: string;
   completedAt?: string;
-  workItems: WorkItemView[];
+  tasks: AgentTaskView[];
   approvals: PendingActionView[];
   events: RunEventView[];
   summary?: RunResultView;
@@ -259,10 +259,10 @@ interface RunView {
 ```
 
 ```ts
-interface WorkItemView {
+interface AgentTaskView {
   id: string;
   parentRunId: string;
-  kind: "worker";
+  kind: "agent_task_run";
   role: string;
   title: string;
   status:
@@ -281,22 +281,22 @@ interface WorkItemView {
 }
 ```
 
-`partially_blocked` should **not** be a canonical run status. If the UI wants that view, it can derive it from work-item state.
+`partially_blocked` should **not** be a canonical run status. If the UI wants that view, it can derive it from agent-task state.
 
 ### What the frontend needs
 
 For Phase 1, the UI needs:
 
 - one lead-agent run
-- nested work items under that run
+- nested agent tasks under that run
 - approval state
 - current active run selection
-- projected progress across child work
+- projected progress across AgentTask work
 
 It does **not** need:
 
 - child containers
-- raw worker prompt state
+- raw task prompt state
 - a general inbox model yet
 - peer-agent coordination yet
 
@@ -304,19 +304,19 @@ It does **not** need:
 
 Phase 1 should introduce exactly one new durable concept:
 
-- `work_items`
+- `agent_tasks`
 
 Everything else can remain projected from existing run and approval state for now.
 
-### WorkItemRecord
+### AgentTaskRecord
 
 ```ts
-interface WorkItemRecord {
+interface AgentTaskRecord {
   id: string;
   parentRunId: string;
   rootRunId: string;
   agentId: string;
-  kind: "worker_run";
+  kind: "agent_task_run";
   role: string;
   title: string;
   status:
@@ -339,47 +339,55 @@ interface WorkItemRecord {
 
 ### Observability and tracing
 
-Every child worker event should carry enough correlation data to answer:
+Every AgentTask event should carry enough correlation data to answer:
 
-**“show me everything related to run X across all work items.”**
+**“show me everything related to run X across all agent tasks.”**
 
 Minimum correlation fields:
 
 - `rootRunId`
 - `parentRunId`
-- `workItemId`
+- `taskId`
 
 That applies to:
 
-- work-item records
-- child execution events
+- agent-task records
+- AgentTask execution events
 - projected timeline events
-- approval records created from child work
+- approval records created from AgentTask work
 
 ## Implementation Status
 
 ### Shipped: Phase 1 — Foundation (2026-04-04)
 
-- `work_items` table with full lifecycle (WorkItemRepository)
-- `worker-run` child Trigger.dev task via `triggerAndWait`
-- `spawn_sub_run` refactored from inline `executePiAgent()` to durable child tasks
-- DB-backed sub-run limit (replaces closure counter)
-- Events carry `workItemId` and `rootRunId` for correlation
-- `SerializedRun` + `RunView` include `workItems[]`
-- `WorkItemsSection` in `RunDetail` renders role, title, status, duration
-- SSE version derivation includes work item timestamps
-- Shared `run-helpers.ts` extracted for reuse by parent and child tasks
+- `agent_tasks` table with full lifecycle (AgentTaskRepository)
+- `agent-task-run` child Trigger.dev task via `triggerAndWait`
+- `delegate_task` refactored from inline `executePiAgent()` to durable child tasks
+- DB-backed task limit (replaces closure counter)
+- Events carry `taskId` and `rootRunId` for correlation
+- `SerializedRun` + `RunView` include `tasks[]`
+- `TasksSection` in `RunDetail` renders role, title, status, duration
+- SSE version derivation includes agent task timestamps
+- Shared `run-helpers.ts` extracted for reusable event and approval helpers
 
 ### Shipped: Phase 2A — Hardening (2026-04-04)
 
-- `work_item_id` nullable column on `approvals` table (additive migration)
-- `waiting_for_children` run status with transitions around `triggerAndWait`
-- Frontend "Coordinating" badge + work items view (replaces spinner)
-- Token counting: `inputTokens`/`outputTokens` accumulated from AI SDK `turn_end` events, stored on work items
+- `agent_task_id` nullable column on `approvals` table (additive migration)
+- `waiting_for_tasks` run status with transitions around `triggerAndWait`
+- Frontend "Coordinating" badge + agent tasks view (replaces spinner)
+- Token counting: `inputTokens`/`outputTokens` accumulated from AI SDK `turn_end` events, stored on agent tasks
+
+### Shipped: AgentTask runtime rewrite (2026-04-26)
+
+- Canonical domain name is `AgentTask`; runtime/API/UI language is `tasks` and `taskId`
+- Removed `WorkItem`, `workItems`, `workItemId`, `spawn_sub_run`, `sub_run_*`, and `waiting_for_children` from the active runtime surface
+- `runAgentSession(spec)` in `services/worker/src/lib/agent-session.ts` owns Pi execution, event recording, policy gate, approval checkpoints, metric tool injection, learned rules, and token result plumbing
+- Lead run passes a tool envelope that includes `delegate_task`; AgentTask runs receive a narrowed envelope with no delegation tool
+- Runtime reset migration preserves identity/configuration and durable memory while clearing runs, run events, approvals, and obsolete task correlation records
 
 ### Shipped: Cleanup (2026-04-04)
 
-- Single-owner learned rule detection (removed from worker, web server only)
+- Single-owner learned rule detection (worker runtime does not duplicate web server suggestions)
 - Removed unused Trigger.dev metadata events (`liveEvents` array)
 - Kept `metadata.set("status", ...)` for Trigger.dev dashboard
 
@@ -387,12 +395,12 @@ That applies to:
 
 | Item | Priority | Notes |
 |---|---|---|
-| Parallel fan-out (`batchTriggerAndWait`) | Medium | Enables LLM to plan multiple workers then wait for all |
-| `artifacts` table | Low | Structured durable outputs; currently using events + work item `result` column |
+| Parallel fan-out (`batchTriggerAndWait`) | Medium | Enables LLM to plan multiple agent tasks then wait for all |
+| `artifacts` table | Low | Structured durable outputs; currently using events + agent task `result` column |
 | Progressive autonomy QA fixes (1-4) | Medium | Edge cases in learned rules; no production data yet |
 | Detection pipeline tests | Medium | pattern-detector, condition-extractor, rule-resolver have zero unit tests |
 | Pinned specialists (V0.3) | Low | `SPECIALIST.md` in workspace for reusable roles |
-| Delegation config | Low | Per-agent `maxSubRuns`; currently hardcoded at 3 |
+| Delegation config | Low | Per-agent `maxAgentTasks`; currently hardcoded at 3 |
 | `inbox_items` | Low | Only needed for peer agents |
 | Peer coordination | Low | V1.0+ per evolution doc |
 
@@ -402,15 +410,14 @@ Future concepts (not Phase 1-2):
 
 - `peer_request` / `peer_result`
 - `coordinationRights`
-- peer-agent work items
+- peer-agent tasks
 - project topology fields
 
 ## Invariants
 
 1. The lead agent owns final synthesis.
-2. Workers remain internal product objects.
-3. No child unit may exceed parent policy.
+2. Agent tasks remain internal product objects.
+3. No agent task may exceed parent policy.
 4. Chat is a surface over reality, not the source of truth for coordinated work.
-5. The frontend thinks in runs and work items, not containers.
-6. Worker failure must be visible and recoverable at the coordinator level.
-
+5. The frontend thinks in runs and agent tasks, not containers.
+6. Agent task failure must be visible and recoverable at the coordinator level.

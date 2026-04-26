@@ -1,5 +1,5 @@
 import { logger } from "@trigger.dev/sdk/v3";
-import type { createWorkerRuntime } from "./agent-runtime";
+import type { AgentRuntime } from "./agent-runtime";
 
 export type RunEventType =
   | "run_started"
@@ -12,8 +12,8 @@ export type RunEventType =
   | "policy_rule_suggested"
   | "agent_message"
   | "finding_recorded"
-  | "sub_run_started"
-  | "sub_run_completed"
+  | "task_started"
+  | "task_completed"
   | "metric_observed"
   | "lesson_distilled"
   | "run_completed"
@@ -21,7 +21,7 @@ export type RunEventType =
   | "run_failed";
 
 export async function recordEvent(
-  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>,
+  runtime: AgentRuntime,
   runId: string,
   agentId: string,
   type: RunEventType,

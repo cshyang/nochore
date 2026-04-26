@@ -2,7 +2,7 @@ import { COLORS } from "./colors";
 import type { RunView } from "./types";
 
 export function statusColor(run: RunView): string {
-  if (run.status === "waiting_for_children" && run.hasActionableApprovals) {
+  if (run.status === "waiting_for_tasks" && run.hasActionableApprovals) {
     return COLORS.orange;
   }
 
@@ -17,7 +17,7 @@ export function statusColor(run: RunView): string {
       return COLORS.textSecondary;
     case "waiting_for_approval":
       return COLORS.orange;
-    case "waiting_for_children":
+    case "waiting_for_tasks":
       return COLORS.accent;
     case "running":
       return COLORS.accent;
@@ -29,9 +29,9 @@ export function statusColor(run: RunView): string {
 }
 
 export function statusLabel(run: RunView): string {
-  if (run.status === "waiting_for_children" && run.hasActionableApprovals) return "needs input";
+  if (run.status === "waiting_for_tasks" && run.hasActionableApprovals) return "needs input";
   if (run.status === "waiting_for_approval") return "waiting";
-  if (run.status === "waiting_for_children") return "coordinating";
+  if (run.status === "waiting_for_tasks") return "coordinating";
   if (run.status === "stopped") return "stopped";
   if (run.status === "cancelled") return "cancelled";
   return run.status;
@@ -39,7 +39,7 @@ export function statusLabel(run: RunView): string {
 
 export type BadgeTone = "green" | "red" | "yellow" | "blue" | "gray";
 
-export function workItemStatusColor(status: string): BadgeTone {
+export function taskStatusColor(status: string): BadgeTone {
   switch (status) {
     case "completed":
       return "green";

@@ -1,6 +1,6 @@
 import type { AgentRecord } from "@nochore/harness";
 import { metadata, wait } from "@trigger.dev/sdk/v3";
-import type { createWorkerRuntime } from "./agent-runtime";
+import type { AgentRuntime } from "./agent-runtime";
 import { recordEvent } from "./event-recording";
 
 export type ApprovalStopCause = "approval_rejected" | "approval_expired";
@@ -24,23 +24,23 @@ export function isApprovalTimeoutError(error: unknown): boolean {
 export class ApprovalCheckpointError extends Error {
   readonly stopCause: ApprovalStopCause;
   readonly approvalId?: string;
-  readonly workItemId?: string;
+  readonly taskId?: string;
 
   constructor(
     message: string,
     readonly status: "rejected" | "expired",
-    details?: { approvalId?: string; workItemId?: string },
+    details?: { approvalId?: string; taskId?: string },
   ) {
     super(message);
     this.name = "ApprovalCheckpointError";
     this.stopCause = status === "expired" ? "approval_expired" : "approval_rejected";
     this.approvalId = details?.approvalId;
-    this.workItemId = details?.workItemId;
+    this.taskId = details?.taskId;
   }
 }
 
 export async function handleApprovalRequest(params: {
-  runtime: Awaited<ReturnType<typeof createWorkerRuntime>>;
+  runtime: AgentRuntime;
   agent: AgentRecord;
   runId: string;
   toolName: string;
@@ -48,7 +48,7 @@ export async function handleApprovalRequest(params: {
   policyReason: string;
   eventIds: string[];
   projectId: string;
-  workItemId?: string;
+  taskId?: string;
   waitApi?: ApprovalWaitApi;
   metadataApi?: ApprovalMetadataApi;
 }): Promise<{ block: boolean; reason?: string } | undefined> {
@@ -61,7 +61,7 @@ export async function handleApprovalRequest(params: {
     policyReason,
     eventIds,
     projectId,
-    workItemId,
+    taskId,
     waitApi = wait,
     metadataApi = metadata,
   } = params;
@@ -85,7 +85,7 @@ export async function handleApprovalRequest(params: {
     requestReason: policyReason,
     createdAt,
     expiresAt,
-    workItemId,
+    taskId,
   });
 
   const reqPayload = {
@@ -96,13 +96,13 @@ export async function handleApprovalRequest(params: {
     reason: policyReason,
     policy: "approval",
     expiresAt: expiresAt.toISOString(),
-    ...(workItemId ? { workItemId } : {}),
+    ...(taskId ? { taskId } : {}),
   };
   const reqId = await recordEvent(runtime, runId, agent.id, "tool_approval_requested", reqPayload);
   eventIds.push(reqId);
   await runtime.approvalRepository.setRequestEventId(approvalRecordId, reqId);
 
-  if (!workItemId) {
+  if (!taskId) {
     await runtime.runRepository.markWaitingForApproval(runId);
     metadataApi.set("status", "waiting_for_approval");
   }
@@ -138,7 +138,7 @@ export async function handleApprovalRequest(params: {
         toolName,
         reason,
         expiresAt: expiresAt.toISOString(),
-        ...(workItemId ? { workItemId } : {}),
+        ...(taskId ? { taskId } : {}),
       };
       const expiryId = await recordEvent(runtime, runId, agent.id, "tool_approval_expired", expiryPayload);
       eventIds.push(expiryId);
@@ -150,7 +150,7 @@ export async function handleApprovalRequest(params: {
         toolName,
         status,
         reason,
-        ...(workItemId ? { workItemId } : {}),
+        ...(taskId ? { taskId } : {}),
       };
       const resId = await recordEvent(runtime, runId, agent.id, "tool_approval_resolved", resPayload);
       eventIds.push(resId);
@@ -162,7 +162,7 @@ export async function handleApprovalRequest(params: {
   const finalStatus = wasAlreadyResolved ? (approvalRow?.status ?? status) : status;
 
   if (finalStatus === "approved") {
-    if (!workItemId) {
+    if (!taskId) {
       await runtime.runRepository.markRunning(runId);
       metadataApi.set("status", "running");
     }
@@ -171,6 +171,6 @@ export async function handleApprovalRequest(params: {
 
   throw new ApprovalCheckpointError(reason, finalStatus === "expired" ? "expired" : "rejected", {
     approvalId: approvalRecordId,
-    workItemId,
+    taskId,
   });
 }

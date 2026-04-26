@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as harness from "../../index";
 
@@ -16,6 +16,7 @@ describe("public harness exports", () => {
     const expectedExports = [
       "AgentConfigSchema",
       "AgentScheduleSchema",
+      "AgentTaskRecordSchema",
       "ApprovalStatusSchema",
       "CHECKPOINT_KEEP_RECENT_TOKENS",
       "INLINE_COMPACTION_KEEP_RECENT_TOKENS",
@@ -23,6 +24,7 @@ describe("public harness exports", () => {
       "RECENT_MODEL_MESSAGE_LIMIT",
       "RECENT_VISIBLE_MESSAGE_LIMIT",
       "WorkspaceStore",
+      "agentTasks",
       "agents",
       "approvals",
       "buildConversationTranscript",
@@ -72,5 +74,7 @@ describe("public harness exports", () => {
     for (const name of expectedExports) {
       expect(harness).toHaveProperty(name);
     }
+    expect(harness).not.toHaveProperty("WorkItemRecordSchema");
+    expect(harness).not.toHaveProperty("WorkItemRepository");
   });
 });

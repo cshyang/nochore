@@ -14,6 +14,7 @@ export { createDb, type HarnessDb } from "../db/client";
 
 export {
   agents,
+  agentTasks,
   approvals,
   connections,
   learnedPolicyRules,

@@ -6,7 +6,7 @@ export const INTERNAL_TOOL_MODES: Record<string, ToolMode> = {
   bash: "write",
   edit: "write",
   read: "read",
-  spawn_sub_run: "write",
+  delegate_task: "write",
   submit_report: "read",
   record_metric: "read",
   write: "write",

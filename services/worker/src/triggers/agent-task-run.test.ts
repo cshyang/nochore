@@ -1,22 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalCheckpointError } from "../lib/run-helpers";
-import { stopWorkItemForApproval } from "./worker-run";
+import { stopAgentTaskForApproval } from "./agent-task-run";
 
-describe("stopWorkItemForApproval", () => {
-  it("marks the work item stopped and updates metadata", async () => {
+describe("stopAgentTaskForApproval", () => {
+  it("marks the task stopped and updates metadata", async () => {
     const stop = vi.fn(async () => {});
     const metadataStatuses: string[] = [];
 
-    await stopWorkItemForApproval({
+    await stopAgentTaskForApproval({
       runtime: {
-        workItemRepository: {
+        agentTaskRepository: {
           stop,
         },
       } as never,
-      workItemId: "work_123",
+      taskId: "task_123",
       error: new ApprovalCheckpointError("Approval window expired", "expired", {
         approvalId: "approval_123",
-        workItemId: "work_123",
+        taskId: "task_123",
       }),
       metadataApi: {
         set(_key, value) {
@@ -26,7 +26,7 @@ describe("stopWorkItemForApproval", () => {
     });
 
     expect(stop).toHaveBeenCalledTimes(1);
-    expect(stop.mock.calls[0]?.[0]).toBe("work_123");
+    expect(stop.mock.calls[0]?.[0]).toBe("task_123");
     expect(stop.mock.calls[0]?.[2]).toBe("Approval window expired");
     expect(metadataStatuses).toEqual(["stopped"]);
   });

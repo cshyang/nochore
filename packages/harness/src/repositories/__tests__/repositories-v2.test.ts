@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createTestDb } from "../../db/client";
 import { projects } from "../../db/schema";
 import { AgentRepository } from "../agent";
+import { AgentTaskRepository } from "../agent-task";
 import { ApprovalRepository } from "../approval";
 import { createProjectRepositories } from "../bundle";
 import { ConversationCheckpointRepository } from "../conversation-checkpoint";
@@ -10,7 +11,6 @@ import { ConversationThreadRepository } from "../conversation-thread";
 import { RunEventRepository } from "../event";
 import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
-import { WorkItemRepository } from "../work-item";
 
 describe("simplified repositories", () => {
   it("creates a concrete repository bundle for one project database", () => {
@@ -192,9 +192,9 @@ describe("simplified repositories", () => {
     expect(approvals).toHaveLength(1);
   });
 
-  it("stops work items as a terminal state and clears blocking metadata", async () => {
+  it("stops agent tasks as a terminal state and clears blocking metadata", async () => {
     const db = createTestDb();
-    const repo = new WorkItemRepository(db);
+    const repo = new AgentTaskRepository(db);
     const completedAt = new Date("2026-03-24T10:03:00Z");
 
     const id = await repo.create({
@@ -209,11 +209,11 @@ describe("simplified repositories", () => {
     await repo.markWaitingForApproval(id);
     await repo.stop(id, completedAt, "Approval expired");
 
-    const workItem = await repo.getById(id);
-    expect(workItem?.status).toBe("stopped");
-    expect(workItem?.error).toBe("Approval expired");
-    expect(workItem?.blockingReason).toBeUndefined();
-    expect(workItem?.completedAt?.toISOString()).toBe(completedAt.toISOString());
+    const task = await repo.getById(id);
+    expect(task?.status).toBe("stopped");
+    expect(task?.error).toBe("Approval expired");
+    expect(task?.blockingReason).toBeUndefined();
+    expect(task?.completedAt?.toISOString()).toBe(completedAt.toISOString());
   });
 
   it("returns only active lessons for an agent", async () => {

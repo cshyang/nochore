@@ -45,6 +45,8 @@ export {
   AgentConfigSchema,
   type AgentSchedule,
   AgentScheduleSchema,
+  type AgentTaskRecord,
+  AgentTaskRecordSchema,
   type ApprovalRecord,
   ApprovalRecordSchema,
   type ApprovalStatus,
@@ -78,6 +80,4 @@ export {
   ToolConfigSchema,
   type ToolMode,
   ToolModeSchema,
-  type WorkItemRecord,
-  WorkItemRecordSchema,
 } from "../types/index";

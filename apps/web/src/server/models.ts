@@ -1,5 +1,6 @@
 import type {
   AgentRecord,
+  AgentTaskRecord,
   ApprovalRecord,
   ApprovalStatus,
   connections,
@@ -9,7 +10,6 @@ import type {
   RunEvent,
   RunRecord,
   RunSummary,
-  WorkItemRecord,
 } from "@nochore/harness";
 import { MetricObservationSchema } from "@nochore/harness";
 import type { AgentView, ConnectionView, LearnedRuleView, ProjectView } from "../lib/types";
@@ -23,7 +23,7 @@ export interface SerializedRunEvent {
   payload: Record<string, unknown>;
 }
 
-export interface SerializedWorkItem {
+export interface SerializedAgentTask {
   id: string;
   parentRunId: string;
   kind: string;
@@ -36,6 +36,7 @@ export interface SerializedWorkItem {
   outputTokens?: number;
   blockingReason?: string;
   error?: string;
+  result?: string;
 }
 
 export interface SerializedRun {
@@ -46,7 +47,7 @@ export interface SerializedRun {
     | "queued"
     | "running"
     | "waiting_for_approval"
-    | "waiting_for_children"
+    | "waiting_for_tasks"
     | "stopped"
     | "completed"
     | "failed"
@@ -58,7 +59,7 @@ export interface SerializedRun {
   triggerRunId?: string;
   events: SerializedRunEvent[];
   approvals: SerializedPendingAction[];
-  workItems: SerializedWorkItem[];
+  tasks: SerializedAgentTask[];
   result?: {
     runId: string;
     agentId: string;
@@ -84,7 +85,7 @@ export interface SerializedPendingAction {
   id: string;
   runId: string;
   agentId: string;
-  workItemId?: string;
+  taskId?: string;
   proposal: {
     id: string;
     toolName: string;
@@ -116,7 +117,7 @@ export function buildAgentView(params: {
       run.status === "queued" ||
       run.status === "running" ||
       run.status === "waiting_for_approval" ||
-      run.status === "waiting_for_children",
+      run.status === "waiting_for_tasks",
   ).length;
   const pendingCount = params.approvals.filter(
     (approval) => approval.status === "pending" || approval.status === "expired",
@@ -243,7 +244,7 @@ export function buildSerializedRun(
   run: RunRecord,
   events: RunEvent[],
   approvals: ApprovalRecord[],
-  workItems: WorkItemRecord[] = [],
+  tasks: AgentTaskRecord[] = [],
 ): SerializedRun {
   const duration = run.completedAt
     ? run.completedAt.getTime() - run.startedAt.getTime()
@@ -280,20 +281,20 @@ export function buildSerializedRun(
       payload: event.payload,
     })),
     approvals: approvals.map(buildSerializedPendingAction),
-    workItems: workItems.map((wi) => ({
-      id: wi.id,
-      parentRunId: wi.parentRunId,
-      kind: wi.kind,
-      role: wi.role,
-      title: wi.title,
-      status: wi.status,
-      startedAt: wi.startedAt?.toISOString(),
-      completedAt: wi.completedAt?.toISOString(),
-      inputTokens: wi.inputTokens,
-      outputTokens: wi.outputTokens,
-      blockingReason: wi.blockingReason,
-      error: wi.error,
-      result: wi.result,
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      parentRunId: task.parentRunId,
+      kind: task.kind,
+      role: task.role,
+      title: task.title,
+      status: task.status,
+      startedAt: task.startedAt?.toISOString(),
+      completedAt: task.completedAt?.toISOString(),
+      inputTokens: task.inputTokens,
+      outputTokens: task.outputTokens,
+      blockingReason: task.blockingReason,
+      error: task.error,
+      result: task.result,
     })),
     result: {
       runId: run.id,
@@ -312,7 +313,7 @@ export function buildSerializedPendingAction(approval: ApprovalRecord): Serializ
     id: approval.id,
     runId: approval.runId,
     agentId: approval.agentId,
-    workItemId: approval.workItemId,
+    taskId: approval.taskId,
     proposal: {
       id: approval.id,
       toolName: approval.toolName,
@@ -344,8 +345,8 @@ export function mapRunStatus(status: RunRecord["status"]): SerializedRun["status
       return "running";
     case "waiting_for_approval":
       return "waiting_for_approval";
-    case "waiting_for_children":
-      return "waiting_for_children";
+    case "waiting_for_tasks":
+      return "waiting_for_tasks";
   }
 }
 

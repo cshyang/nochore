@@ -1,4 +1,4 @@
-import type { ApprovalRecord, RunEvent, RunRecord, WorkItemRecord } from "@nochore/harness";
+import type { AgentTaskRecord, ApprovalRecord, RunEvent, RunRecord } from "@nochore/harness";
 import { describe, expect, it } from "vitest";
 import { buildSerializedRun } from "./models";
 
@@ -8,7 +8,7 @@ describe("buildSerializedRun", () => {
       id: "run_123",
       agentId: "agent_123",
       triggerType: "manual",
-      status: "waiting_for_children",
+      status: "waiting_for_tasks",
       startedAt: new Date("2026-04-14T08:00:00Z"),
     };
     const events: RunEvent[] = [];
@@ -39,17 +39,17 @@ describe("buildSerializedRun", () => {
         status: "pending",
         requestReason: "External writes require approval",
         requestEventId: "evt_2",
-        workItemId: "work_123",
+        taskId: "task_123",
         createdAt: new Date("2026-04-14T08:03:00Z"),
       },
     ];
-    const workItems: WorkItemRecord[] = [
+    const tasks: AgentTaskRecord[] = [
       {
-        id: "work_123",
+        id: "task_123",
         parentRunId: "run_123",
         rootRunId: "run_123",
         agentId: "agent_123",
-        kind: "worker_run",
+        kind: "agent_task_run",
         role: "builder",
         title: "Prepare outbound notification",
         status: "waiting_for_approval",
@@ -58,14 +58,17 @@ describe("buildSerializedRun", () => {
       },
     ];
 
-    const serialized = buildSerializedRun(run, events, approvals, workItems);
+    const serialized = buildSerializedRun(run, events, approvals, tasks);
 
     expect(serialized.hasActionableApprovals).toBe(true);
     expect(serialized.approvals).toHaveLength(2);
     expect(serialized.approvals.map((approval) => approval.status)).toEqual(["approved", "pending"]);
     expect(serialized.approvals[1]).toMatchObject({
       id: "approval_pending",
-      workItemId: "work_123",
+      taskId: "task_123",
     });
+    expect(serialized.tasks).toHaveLength(1);
+    expect(serialized.tasks[0]).toMatchObject({ id: "task_123", status: "waiting_for_approval" });
+    expect("workItems" in serialized).toBe(false);
   });
 });

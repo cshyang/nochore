@@ -2,18 +2,18 @@ import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Badge } from "~/components/Badge";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
-import { workItemStatusColor } from "~/lib/status-format";
+import { taskStatusColor } from "~/lib/status-format";
 import { humanize } from "~/lib/text-format";
 import { formatDuration } from "~/lib/time-format";
-import type { WorkItemView } from "~/lib/types";
+import type { AgentTaskView } from "~/lib/types";
 
 const RESULT_CLIP_THRESHOLD = 400;
 
-export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) {
+export function TasksSection({ tasks }: { tasks?: AgentTaskView[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [resultExpanded, setResultExpanded] = useState<Set<string>>(new Set());
 
-  if (!workItems || workItems.length === 0) return null;
+  if (!tasks || tasks.length === 0) return null;
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -45,21 +45,22 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
           marginBottom: 2,
         }}
       >
-        Work Items
+        Tasks
       </div>
-      {workItems.map((wi) => {
-        const isOpen = expanded.has(wi.id);
-        const isResultOpen = resultExpanded.has(wi.id);
-        const bodyId = `work-item-body-${wi.id}`;
-        const duration = wi.startedAt && wi.completedAt ? formatDuration(wi.startedAt, wi.completedAt) : undefined;
-        const totalTokens = (wi.inputTokens ?? 0) + (wi.outputTokens ?? 0);
-        const errorColor = wi.status === "stopped" ? COLORS.orange : COLORS.red;
-        const showClip = (wi.result?.length ?? 0) > RESULT_CLIP_THRESHOLD && !isResultOpen;
-        const visibleResult = showClip ? `${wi.result!.slice(0, RESULT_CLIP_THRESHOLD)}…` : wi.result;
+      {tasks.map((task) => {
+        const isOpen = expanded.has(task.id);
+        const isResultOpen = resultExpanded.has(task.id);
+        const bodyId = `agent-task-body-${task.id}`;
+        const duration =
+          task.startedAt && task.completedAt ? formatDuration(task.startedAt, task.completedAt) : undefined;
+        const totalTokens = (task.inputTokens ?? 0) + (task.outputTokens ?? 0);
+        const errorColor = task.status === "stopped" ? COLORS.orange : COLORS.red;
+        const showClip = (task.result?.length ?? 0) > RESULT_CLIP_THRESHOLD && !isResultOpen;
+        const visibleResult = showClip ? `${task.result!.slice(0, RESULT_CLIP_THRESHOLD)}…` : task.result;
 
         return (
           <div
-            key={wi.id}
+            key={task.id}
             style={{
               background: COLORS.surface,
               border: `1px solid ${COLORS.border}`,
@@ -69,7 +70,7 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
           >
             <button
               type="button"
-              onClick={() => toggle(wi.id)}
+              onClick={() => toggle(task.id)}
               aria-expanded={isOpen}
               aria-controls={bodyId}
               style={{
@@ -106,7 +107,7 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                 {isOpen ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
               </span>
               <span style={{ marginTop: isOpen ? 1 : 0 }}>
-                <Badge color={workItemStatusColor(wi.status)}>{humanize(wi.role)}</Badge>
+                <Badge color={taskStatusColor(task.status)}>{humanize(task.role)}</Badge>
               </span>
               <span
                 style={{
@@ -121,14 +122,14 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                   lineHeight: isOpen ? TYPE.leading.normal : undefined,
                 }}
               >
-                {wi.title}
+                {task.title}
               </span>
               {!isOpen && duration && (
                 <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{duration}</span>
               )}
-              {!isOpen && wi.error && (
+              {!isOpen && task.error && (
                 <span style={{ fontSize: TYPE.scale.xs, color: errorColor }}>
-                  {wi.status === "stopped" ? "Stopped" : "Error"}
+                  {task.status === "stopped" ? "Stopped" : "Error"}
                 </span>
               )}
             </button>
@@ -154,10 +155,10 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                 >
                   {totalTokens > 0 && <span>{totalTokens.toLocaleString()} tokens</span>}
                   {duration && <span>{duration}</span>}
-                  <span>{humanize(wi.status)}</span>
+                  <span>{humanize(task.status)}</span>
                 </div>
 
-                {wi.error && (
+                {task.error && (
                   <div style={{ display: "grid", gap: 4 }}>
                     <div
                       style={{
@@ -168,7 +169,7 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                         letterSpacing: TYPE.tracking.wide,
                       }}
                     >
-                      {wi.status === "stopped" ? "Stopped" : "Error"}
+                      {task.status === "stopped" ? "Stopped" : "Error"}
                     </div>
                     <div
                       style={{
@@ -178,12 +179,12 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                         wordBreak: "break-word",
                       }}
                     >
-                      {wi.error}
+                      {task.error}
                     </div>
                   </div>
                 )}
 
-                {wi.result && (
+                {task.result && (
                   <div style={{ display: "grid", gap: 4 }}>
                     <div
                       style={{
@@ -207,10 +208,10 @@ export function WorkItemsSection({ workItems }: { workItems?: WorkItemView[] }) 
                     >
                       {visibleResult}
                     </div>
-                    {wi.result.length > RESULT_CLIP_THRESHOLD && (
+                    {task.result.length > RESULT_CLIP_THRESHOLD && (
                       <button
                         type="button"
-                        onClick={() => toggleResult(wi.id)}
+                        onClick={() => toggleResult(task.id)}
                         style={{
                           alignSelf: "start",
                           background: "transparent",

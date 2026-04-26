@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalCheckpointError } from "../lib/run-helpers";
-import { handleStoppedSubRun, stopRunForApproval } from "./agent-run";
-import type { WorkerRunResult } from "./worker-run";
+import { handleStoppedAgentTask, stopRunForApproval } from "./agent-run";
+import type { AgentTaskRunResult } from "./agent-task-run";
 
 function createEventRuntime() {
   let eventCount = 0;
@@ -39,7 +39,7 @@ describe("stopRunForApproval", () => {
       agentId: "agent_123",
       error: new ApprovalCheckpointError("Declined by operator", "rejected", {
         approvalId: "approval_123",
-        workItemId: "work_123",
+        taskId: "task_123",
       }),
       eventIds,
       metadataApi: {
@@ -60,7 +60,7 @@ describe("stopRunForApproval", () => {
           cause: "approval_rejected",
           reason: "Declined by operator",
           approvalId: "approval_123",
-          workItemId: "work_123",
+          taskId: "task_123",
         },
       },
     ]);
@@ -69,21 +69,21 @@ describe("stopRunForApproval", () => {
   });
 });
 
-describe("handleStoppedSubRun", () => {
+describe("handleStoppedAgentTask", () => {
   it("records a stopped child result and rethrows it as an approval checkpoint", async () => {
     const harness = createEventRuntime();
     const eventIds: string[] = [];
 
     let thrown: unknown;
     try {
-      await handleStoppedSubRun({
+      await handleStoppedAgentTask({
         runtime: harness.runtime as never,
         runId: "run_123",
         agentId: "agent_123",
         role: "analyst",
-        workItemId: "work_123",
+        taskId: "task_123",
         result: {
-          workItemId: "work_123",
+          taskId: "task_123",
           status: "stopped",
           output: "",
           durationMs: 0,
@@ -93,7 +93,7 @@ describe("handleStoppedSubRun", () => {
           cause: "approval_expired",
           reason: "Approval expired after 24 hours",
           approvalId: "approval_123",
-        } satisfies Extract<WorkerRunResult, { status: "stopped" }>,
+        } satisfies Extract<AgentTaskRunResult, { status: "stopped" }>,
         eventIds,
       });
     } catch (error) {
@@ -104,20 +104,20 @@ describe("handleStoppedSubRun", () => {
     expect(thrown).toMatchObject({
       stopCause: "approval_expired",
       approvalId: "approval_123",
-      workItemId: "work_123",
+      taskId: "task_123",
       message: "Approval expired after 24 hours",
     });
     expect(harness.getEvents()).toEqual([
       {
         id: "evt_1",
-        type: "sub_run_completed",
+        type: "task_completed",
         payload: {
           role: "analyst",
           outcome: "stopped",
           success: false,
           cause: "approval_expired",
           reason: "Approval expired after 24 hours",
-          workItemId: "work_123",
+          taskId: "task_123",
           approvalId: "approval_123",
         },
       },

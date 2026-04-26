@@ -63,14 +63,15 @@ export function AgentWorkspaceActivityPane({
       startedAt: new Date().toISOString(),
       events: [],
       approvals: [],
-      workItems: [],
+      tasks: [],
     };
 
     return [placeholder, ...runs];
   }, [activeRunId, runs, selectedRunId]);
 
   const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
-  const hasJumpToLive = Boolean(activeRunId) && selectedRun?.id !== activeRunId && displayRuns.some((run) => run.id === activeRunId);
+  const hasJumpToLive =
+    Boolean(activeRunId) && selectedRun?.id !== activeRunId && displayRuns.some((run) => run.id === activeRunId);
 
   // Arrow-key navigation between runs. Scoped to window because the effect
   // only mounts while the Runs tab is active — switching to Chat/Settings
@@ -87,10 +88,7 @@ export function AgentWorkspaceActivityPane({
       if (displayRuns.length === 0) return;
       const idx = displayRuns.findIndex((r) => r.id === selectedRunId);
       const current = idx === -1 ? 0 : idx;
-      const nextIdx =
-        e.key === "ArrowUp"
-          ? Math.max(0, current - 1)
-          : Math.min(displayRuns.length - 1, current + 1);
+      const nextIdx = e.key === "ArrowUp" ? Math.max(0, current - 1) : Math.min(displayRuns.length - 1, current + 1);
       if (nextIdx !== current) {
         e.preventDefault();
         onSelectRun(displayRuns[nextIdx].id);

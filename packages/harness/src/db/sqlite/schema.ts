@@ -139,7 +139,7 @@ export const approvals = sqliteTable(
     requestReason: text("request_reason"),
     requestEventId: text("request_event_id"),
     decisionReason: text("decision_reason"),
-    workItemId: text("work_item_id"),
+    taskId: text("agent_task_id"),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at"),
     resolvedAt: integer("resolved_at"),
@@ -201,14 +201,14 @@ export const lessons = sqliteTable(
   (table) => [index("idx_lessons_agent_scope").on(table.agentId, table.scope)],
 );
 
-export const workItems = sqliteTable(
-  "work_items",
+export const agentTasks = sqliteTable(
+  "agent_tasks",
   {
     id: text("id").primaryKey(),
     parentRunId: text("parent_run_id").notNull(),
     rootRunId: text("root_run_id").notNull(),
     agentId: text("agent_id").notNull(),
-    kind: text("kind").notNull().default("worker_run"),
+    kind: text("kind").notNull().default("agent_task_run"),
     role: text("role").notNull(),
     title: text("title").notNull(),
     status: text("status").notNull().default("queued"),
@@ -223,9 +223,9 @@ export const workItems = sqliteTable(
     completedAt: integer("completed_at"),
   },
   (table) => [
-    index("idx_work_items_parent_run").on(table.parentRunId),
-    index("idx_work_items_root_run").on(table.rootRunId),
-    index("idx_work_items_agent_created").on(table.agentId, table.createdAt),
+    index("idx_agent_tasks_parent_run").on(table.parentRunId),
+    index("idx_agent_tasks_root_run").on(table.rootRunId),
+    index("idx_agent_tasks_agent_created").on(table.agentId, table.createdAt),
   ],
 );
 

@@ -16,7 +16,7 @@ export interface CreateApprovalInput {
   requestEventId?: string;
   createdAt: Date;
   expiresAt?: Date;
-  workItemId?: string;
+  taskId?: string;
 }
 
 export class ApprovalRepository {
@@ -37,7 +37,7 @@ export class ApprovalRepository {
         status: "pending",
         requestReason: input.requestReason ?? null,
         requestEventId: input.requestEventId ?? null,
-        workItemId: input.workItemId ?? null,
+        taskId: input.taskId ?? null,
         createdAt: input.createdAt.getTime(),
         expiresAt: input.expiresAt?.getTime() ?? null,
       })
@@ -146,7 +146,7 @@ function toApprovalRecord(row: typeof approvals.$inferSelect): ApprovalRecord {
     requestReason: row.requestReason ?? undefined,
     requestEventId: row.requestEventId ?? undefined,
     decisionReason: row.decisionReason ?? undefined,
-    workItemId: row.workItemId ?? undefined,
+    taskId: row.taskId ?? undefined,
     createdAt: new Date(row.createdAt),
     expiresAt: row.expiresAt != null ? new Date(row.expiresAt) : undefined,
     resolvedAt: row.resolvedAt != null ? new Date(row.resolvedAt) : undefined,

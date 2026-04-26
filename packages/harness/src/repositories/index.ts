@@ -4,6 +4,10 @@ export {
   type CreateAgentInput,
 } from "./agent";
 export {
+  AgentTaskRepository,
+  type CreateAgentTaskInput,
+} from "./agent-task";
+export {
   ApprovalRepository,
   type CreateApprovalInput,
 } from "./approval";
@@ -36,7 +40,3 @@ export {
   type CreateRunInput,
   RunRepository,
 } from "./run";
-export {
-  type CreateWorkItemInput,
-  WorkItemRepository,
-} from "./work-item";

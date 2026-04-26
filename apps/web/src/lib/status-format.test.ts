@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLORS } from "./colors";
-import { statusColor, statusLabel, workItemStatusColor } from "./status-format";
+import { statusColor, statusLabel, taskStatusColor } from "./status-format";
 import type { RunView } from "./types";
 
 function makeRun(overrides: Partial<RunView>): RunView {
@@ -12,18 +12,18 @@ function makeRun(overrides: Partial<RunView>): RunView {
     hasActionableApprovals: false,
     events: [],
     approvals: [],
-    workItems: [],
+    tasks: [],
     ...overrides,
   } as RunView;
 }
 
 describe("statusColor", () => {
-  it("returns orange for waiting_for_children with actionable approvals", () => {
-    expect(statusColor(makeRun({ status: "waiting_for_children", hasActionableApprovals: true }))).toBe(COLORS.orange);
+  it("returns orange for waiting_for_tasks with actionable approvals", () => {
+    expect(statusColor(makeRun({ status: "waiting_for_tasks", hasActionableApprovals: true }))).toBe(COLORS.orange);
   });
 
-  it("returns accent for plain waiting_for_children", () => {
-    expect(statusColor(makeRun({ status: "waiting_for_children" }))).toBe(COLORS.accent);
+  it("returns accent for plain waiting_for_tasks", () => {
+    expect(statusColor(makeRun({ status: "waiting_for_tasks" }))).toBe(COLORS.accent);
   });
 
   it("covers the known status spectrum", () => {
@@ -38,13 +38,13 @@ describe("statusColor", () => {
 });
 
 describe("statusLabel", () => {
-  it("returns 'needs input' for waiting_for_children with actionable approvals", () => {
-    expect(statusLabel(makeRun({ status: "waiting_for_children", hasActionableApprovals: true }))).toBe("needs input");
+  it("returns 'needs input' for waiting_for_tasks with actionable approvals", () => {
+    expect(statusLabel(makeRun({ status: "waiting_for_tasks", hasActionableApprovals: true }))).toBe("needs input");
   });
 
   it("maps approval/coordination states to friendly labels", () => {
     expect(statusLabel(makeRun({ status: "waiting_for_approval" }))).toBe("waiting");
-    expect(statusLabel(makeRun({ status: "waiting_for_children" }))).toBe("coordinating");
+    expect(statusLabel(makeRun({ status: "waiting_for_tasks" }))).toBe("coordinating");
     expect(statusLabel(makeRun({ status: "stopped" }))).toBe("stopped");
     expect(statusLabel(makeRun({ status: "cancelled" }))).toBe("cancelled");
   });
@@ -55,21 +55,21 @@ describe("statusLabel", () => {
   });
 });
 
-describe("workItemStatusColor", () => {
+describe("taskStatusColor", () => {
   it("maps terminal outcomes to semantic tones", () => {
-    expect(workItemStatusColor("completed")).toBe("green");
-    expect(workItemStatusColor("failed")).toBe("red");
-    expect(workItemStatusColor("running")).toBe("blue");
+    expect(taskStatusColor("completed")).toBe("green");
+    expect(taskStatusColor("failed")).toBe("red");
+    expect(taskStatusColor("running")).toBe("blue");
   });
 
   it("groups waiting states as yellow", () => {
-    expect(workItemStatusColor("stopped")).toBe("yellow");
-    expect(workItemStatusColor("waiting_for_approval")).toBe("yellow");
-    expect(workItemStatusColor("waiting_for_external")).toBe("yellow");
+    expect(taskStatusColor("stopped")).toBe("yellow");
+    expect(taskStatusColor("waiting_for_approval")).toBe("yellow");
+    expect(taskStatusColor("waiting_for_external")).toBe("yellow");
   });
 
   it("returns gray for unknown status", () => {
-    expect(workItemStatusColor("queued")).toBe("gray");
-    expect(workItemStatusColor("weird")).toBe("gray");
+    expect(taskStatusColor("queued")).toBe("gray");
+    expect(taskStatusColor("weird")).toBe("gray");
   });
 });

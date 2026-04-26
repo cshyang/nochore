@@ -1,11 +1,11 @@
 import { asc, eq } from "drizzle-orm";
 import type { HarnessDb } from "../db/client";
-import { workItems } from "../db/schema";
-import { type WorkItemRecord, type WorkItemStatus, WorkItemStatusSchema } from "../types";
+import { agentTasks } from "../db/schema";
+import { type AgentTaskRecord, AgentTaskStatusSchema } from "../types";
 
 type Db = HarnessDb;
 
-export interface CreateWorkItemInput {
+export interface CreateAgentTaskInput {
   parentRunId: string;
   rootRunId: string;
   agentId: string;
@@ -14,19 +14,19 @@ export interface CreateWorkItemInput {
   title: string;
 }
 
-export class WorkItemRepository {
+export class AgentTaskRepository {
   constructor(private db: Db) {}
 
-  async create(input: CreateWorkItemInput): Promise<string> {
+  async create(input: CreateAgentTaskInput): Promise<string> {
     const id = crypto.randomUUID();
     this.db
-      .insert(workItems)
+      .insert(agentTasks)
       .values({
         id,
         parentRunId: input.parentRunId,
         rootRunId: input.rootRunId,
         agentId: input.agentId,
-        kind: input.kind ?? "worker_run",
+        kind: input.kind ?? "agent_task_run",
         role: input.role,
         title: input.title,
         status: "queued",
@@ -38,22 +38,22 @@ export class WorkItemRepository {
 
   async markRunning(id: string, triggerTaskRunId?: string): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({
         status: "running",
         startedAt: Date.now(),
         blockingReason: null,
         ...(triggerTaskRunId ? { triggerTaskRunId } : {}),
       })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
   async markWaitingForApproval(id: string): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({ status: "waiting_for_approval", blockingReason: "approval" })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
@@ -64,7 +64,7 @@ export class WorkItemRepository {
     tokens?: { inputTokens?: number; outputTokens?: number },
   ): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({
         status: "completed",
         completedAt: completedAt.getTime(),
@@ -73,83 +73,79 @@ export class WorkItemRepository {
         ...(tokens?.inputTokens != null ? { inputTokens: tokens.inputTokens } : {}),
         ...(tokens?.outputTokens != null ? { outputTokens: tokens.outputTokens } : {}),
       })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
   async fail(id: string, completedAt: Date, error: string): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({
         status: "failed",
         completedAt: completedAt.getTime(),
         blockingReason: null,
         error,
       })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
   async stop(id: string, completedAt: Date, error: string): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({
         status: "stopped",
         completedAt: completedAt.getTime(),
         blockingReason: null,
         error,
       })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
   async cancel(id: string, completedAt: Date): Promise<void> {
     this.db
-      .update(workItems)
+      .update(agentTasks)
       .set({
         status: "cancelled",
         completedAt: completedAt.getTime(),
         blockingReason: null,
       })
-      .where(eq(workItems.id, id))
+      .where(eq(agentTasks.id, id))
       .run();
   }
 
-  async getById(id: string): Promise<WorkItemRecord | null> {
-    const row = this.db.select().from(workItems).where(eq(workItems.id, id)).get();
-    return row ? toWorkItemRecord(row) : null;
+  async getById(id: string): Promise<AgentTaskRecord | null> {
+    const row = this.db.select().from(agentTasks).where(eq(agentTasks.id, id)).get();
+    return row ? toAgentTaskRecord(row) : null;
   }
 
-  async listByParentRun(parentRunId: string): Promise<WorkItemRecord[]> {
+  async listByParentRun(parentRunId: string): Promise<AgentTaskRecord[]> {
     return this.db
       .select()
-      .from(workItems)
-      .where(eq(workItems.parentRunId, parentRunId))
-      .orderBy(asc(workItems.createdAt))
+      .from(agentTasks)
+      .where(eq(agentTasks.parentRunId, parentRunId))
+      .orderBy(asc(agentTasks.createdAt))
       .all()
-      .map(toWorkItemRecord);
+      .map(toAgentTaskRecord);
   }
 
-  async listByRootRun(rootRunId: string): Promise<WorkItemRecord[]> {
+  async listByRootRun(rootRunId: string): Promise<AgentTaskRecord[]> {
     return this.db
       .select()
-      .from(workItems)
-      .where(eq(workItems.rootRunId, rootRunId))
-      .orderBy(asc(workItems.createdAt))
+      .from(agentTasks)
+      .where(eq(agentTasks.rootRunId, rootRunId))
+      .orderBy(asc(agentTasks.createdAt))
       .all()
-      .map(toWorkItemRecord);
+      .map(toAgentTaskRecord);
   }
 
   async countByParentRun(parentRunId: string): Promise<number> {
-    return this.db
-      .select()
-      .from(workItems)
-      .where(eq(workItems.parentRunId, parentRunId))
-      .all().length;
+    return this.db.select().from(agentTasks).where(eq(agentTasks.parentRunId, parentRunId)).all().length;
   }
 }
 
-function toWorkItemRecord(row: typeof workItems.$inferSelect): WorkItemRecord {
+function toAgentTaskRecord(row: typeof agentTasks.$inferSelect): AgentTaskRecord {
   return {
     id: row.id,
     parentRunId: row.parentRunId,
@@ -158,8 +154,8 @@ function toWorkItemRecord(row: typeof workItems.$inferSelect): WorkItemRecord {
     kind: row.kind,
     role: row.role,
     title: row.title,
-    status: WorkItemStatusSchema.parse(row.status),
-    blockingReason: (row.blockingReason ?? undefined) as WorkItemRecord["blockingReason"],
+    status: AgentTaskStatusSchema.parse(row.status),
+    blockingReason: (row.blockingReason ?? undefined) as AgentTaskRecord["blockingReason"],
     error: row.error ?? undefined,
     result: row.result ?? undefined,
     triggerTaskRunId: row.triggerTaskRunId ?? undefined,
