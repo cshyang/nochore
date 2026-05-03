@@ -60,12 +60,16 @@ Key directories inside `apps/web/src/`:
 - `db/` — Drizzle schema + SQLite client
 
 **`services/worker/`** — trigger.dev task definitions:
-- `triggers/agent-run.ts` — Lead agent pipeline task; owns task creation, `delegate_task`, `triggerAndWait`, and final synthesis
-- `triggers/agent-task-run.ts` — Agent task execution task; runs with a narrowed tool envelope and no delegation tool
+- `triggers/agent-run.ts` — Lead agent pipeline task; owns run setup, lead session execution, and final synthesis
+- `triggers/agent-task-run.ts` — Trigger.dev entrypoint for AgentTask execution
 - `triggers/scheduled-runs.ts` — Cron-triggered agent runs
-- `lib/agent-session.ts` — Shared agent session kernel (Pi runtime, events, policy gate, approvals, metrics)
+- `lib/agent-task-coordinator.ts` — AgentTask coordinator; owns `delegate_task`, task creation, `triggerAndWait`, task events, and best-effort failure handling
+- `lib/agent-task-execution.ts` — AgentTask execution contract; owns task-specific prompt/tool scope and typed task results
+- `lib/agent-executor.ts` — Neutral executor contract for swappable agent runtime adapters
+- `lib/agent-session.ts` — Shared executor-neutral session kernel (events, policy gate, approvals, metrics)
+- `lib/tool-envelope.ts` — Lead/task tool envelope builders and reserved-name validation
 - `lib/run-helpers.ts` — Shared runtime helper barrel
-- `lib/pi-runtime.ts` — pi-coding-agent wrapper (executePiAgent with token counting)
+- `lib/pi-runtime.ts` — pi-coding-agent adapter implementing `defaultAgentExecutor`
 
 ## Key Documents
 
@@ -84,7 +88,7 @@ Key directories inside `apps/web/src/`:
 - **ContextAssembler** — shared by pipeline and chat, step-aware (different steps get different context)
 - **Stateless chat** — ADK-style: load state per request, process, save, discard
 - **Workspace permissions**: Agent can read all .md files, write to scratchpad/ and reports/. KNOWLEDGE.md and POLICY.md are human-curated only.
-- **Coordinated runtime**: Lead agent delegates focused work via `delegate_task`, creating durable `AgentTask` records and waiting with `triggerAndWait`. Agent tasks run in separate Trigger.dev containers with independent checkpoint/resume, inherit a narrowed tool envelope, and cannot delegate further. Frontend tracks `tasks`, not containers. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` for full status + backlog.
+- **Coordinated runtime**: Lead agent delegates focused work via `delegate_task`; the AgentTask coordinator creates durable `AgentTask` records and waits with `triggerAndWait`. Agent tasks run in separate Trigger.dev containers with independent checkpoint/resume, inherit a narrowed tool envelope, and cannot delegate further. Frontend tracks `tasks`, not containers. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` for full status + backlog.
 
 ## Open Design Questions
 

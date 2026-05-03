@@ -5,14 +5,14 @@ import {
   createAiSdkModel,
   extractRunInsights,
   getAgentWorkspacePath,
-  type PiToolDefinition,
 } from "@nochore/harness";
 import { logger, metadata, task } from "@trigger.dev/sdk/v3";
 import { buildPromptBundle, createAgentRuntime } from "../lib/agent-runtime";
 import { runAgentSession } from "../lib/agent-session";
+import { createDelegateTaskTool } from "../lib/agent-task-coordinator";
 import { ApprovalCheckpointError, recordEvent } from "../lib/run-helpers";
+import { buildLeadToolEnvelope } from "../lib/tool-envelope";
 import { listProviderTools } from "../lib/tool-provider";
-import { agentTaskRunTask } from "./agent-task-run";
 
 export const agentRunTask = task({
   id: "agent-run",
@@ -44,149 +44,30 @@ export const agentRunTask = task({
       const promptId = await recordEvent(runtime, runId, agent.id, "prompt_built", promptPayload);
       eventIds.push(promptId);
 
-      const allTools: PiToolDefinition[] = await listProviderTools({
+      const providerTools = await listProviderTools({
         userId: runtime.userId,
         activeProviders: runtime.activeProviders,
         providerConfigs: runtime.providerConfigs,
       });
 
       const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
-
-      const MAX_AGENT_TASKS = 3;
-
-      const delegateTaskTool: PiToolDefinition = {
-        name: "delegate_task",
-        label: "Delegate to Specialist",
-        description:
-          "Delegate a focused task to a specialist. Roles: scout (research & data gathering), " +
-          "analyst (pattern analysis & insights), builder (executing specific actions). " +
-          "Use when a task benefits from focused attention.",
-        parameters: {
-          type: "object",
-          required: ["role", "task"],
-          properties: {
-            role: { type: "string", enum: ["scout", "analyst", "builder"], description: "Specialist role" },
-            task: { type: "string", description: "What the specialist should do" },
-            context: { type: "string", description: "Optional data or context to pass to the specialist" },
-          },
-        },
-        execute: async (_toolCallId, params) => {
-          const role = (params.role as string) ?? "scout";
-          const taskDesc = (params.task as string) ?? "";
-          const context = params.context as string | undefined;
-
-          // DB-backed limit check replaces closure counter
-          const currentCount = await runtime.agentTaskRepository.countByParentRun(runId);
-          if (currentCount >= MAX_AGENT_TASKS) {
-            return {
-              content: [
-                { type: "text" as const, text: `Task limit reached (${MAX_AGENT_TASKS}). Cannot delegate further.` },
-              ],
-              details: { blocked: true, reason: "maxAgentTasks" },
-            };
-          }
-
-          // Create a durable task before triggering the child container.
-          const taskId = await runtime.agentTaskRepository.create({
-            parentRunId: runId,
-            rootRunId: runId,
-            agentId: agent.id,
-            role,
-            title: taskDesc.slice(0, 200),
-          });
-
-          const startPayload = { role, task: taskDesc, taskId, taskIndex: currentCount + 1 };
-          const startId = await recordEvent(runtime, runId, agent.id, "task_started", startPayload);
-          eventIds.push(startId);
-
-          await runtime.runRepository.markWaitingForTasks(runId);
-          metadata.set("status", "waiting_for_tasks");
-
-          try {
-            const result = await agentTaskRunTask.triggerAndWait({
-              taskId,
-              parentRunId: runId,
-              rootRunId: runId,
-              agentId: agent.id,
-              projectId: payload.projectId,
-              role,
-              task: taskDesc,
-              context,
-              agentInstructions: agent.instructions,
-            });
-
-            if (!result.ok) {
-              await runtime.runRepository.markRunning(runId);
-              metadata.set("status", "running");
-              const errorMsg = String(result.error ?? "Agent task failed");
-              await runtime.agentTaskRepository.fail(taskId, new Date(), errorMsg);
-              const failPayload = { role, success: false, error: errorMsg, taskId };
-              const failId = await recordEvent(runtime, runId, agent.id, "task_completed", failPayload);
-              eventIds.push(failId);
-
-              return {
-                content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
-                details: { role, success: false, error: errorMsg, taskId },
-              };
-            }
-
-            const output = result.output;
-            if (output.status === "stopped") {
-              await handleStoppedAgentTask({
-                runtime,
-                runId,
-                agentId: agent.id,
-                role,
-                taskId,
-                result: output,
-                eventIds,
-              });
-            }
-            await runtime.runRepository.markRunning(runId);
-            metadata.set("status", "running");
-            const completePayload = {
-              role,
-              outcome: "completed",
-              success: true,
-              outputLength: output.output.length,
-              taskId,
-            };
-            const completeId = await recordEvent(runtime, runId, agent.id, "task_completed", completePayload);
-            eventIds.push(completeId);
-
-            return {
-              content: [{ type: "text" as const, text: output.output || "(No output)" }],
-              details: { role, success: true, durationMs: output.durationMs, taskId },
-            };
-          } catch (err) {
-            if (err instanceof ApprovalCheckpointError) {
-              throw err;
-            }
-
-            await runtime.runRepository.markRunning(runId);
-            metadata.set("status", "running");
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            await runtime.agentTaskRepository.fail(taskId, new Date(), errorMsg);
-            const failPayload = { role, success: false, error: errorMsg, taskId };
-            const failId = await recordEvent(runtime, runId, agent.id, "task_completed", failPayload);
-            eventIds.push(failId);
-
-            return {
-              content: [{ type: "text" as const, text: `Specialist (${role}) failed: ${errorMsg}` }],
-              details: { role, success: false, error: errorMsg, taskId },
-            };
-          }
-        },
-      };
-
-      allTools.push(delegateTaskTool);
+      const allTools = buildLeadToolEnvelope({
+        providerTools,
+        delegateTaskTool: createDelegateTaskTool({
+          runtime,
+          agent,
+          runId,
+          projectId: payload.projectId,
+          eventIds,
+        }),
+      });
 
       logger.info("Lead prompt context assembled", {
         skills: promptBundle.selectedSkills.map((s) => s.id),
         activeProviders: runtime.activeProviders,
       });
 
-      const piResult = await runAgentSession({
+      const executionResult = await runAgentSession({
         runtime,
         agent,
         runId,
@@ -198,18 +79,18 @@ export const agentRunTask = task({
         eventIds,
       });
 
-      if (piResult.output.trim()) {
-        const findingPayload = { text: piResult.output };
+      if (executionResult.output.trim()) {
+        const findingPayload = { text: executionResult.output };
         const findingId = await recordEvent(runtime, runId, agent.id, "finding_recorded", findingPayload);
         eventIds.push(findingId);
       }
 
       const summary = buildSummary({
         status: "completed",
-        finalText: piResult.output,
+        finalText: executionResult.output,
         agent,
         runId,
-        recentToolCalls: piResult.toolCalls,
+        recentToolCalls: executionResult.toolCalls,
         eventIds,
       });
       await runtime.runRepository.complete(runId, new Date(), summary);
@@ -246,7 +127,7 @@ export const agentRunTask = task({
           headline: summary.headline,
           finalText: summary.finalText,
           details: summary.details,
-          toolCallCount: piResult.toolCalls.length,
+          toolCallCount: executionResult.toolCalls.length,
         });
       }
 
@@ -269,8 +150,8 @@ export const agentRunTask = task({
         runId,
         agentId: agent.id,
         triggerType: payload.trigger.type,
-        durationMs: piResult.durationMs,
-        toolCallCount: piResult.toolCalls.length,
+        durationMs: executionResult.durationMs,
+        toolCallCount: executionResult.toolCalls.length,
       });
 
       return { runId, agentId: agent.id, summary };
@@ -329,36 +210,6 @@ export async function stopRunForApproval(params: {
   params.eventIds.push(stopId);
   await params.runtime.runRepository.stop(params.runId, new Date(), params.error.message);
   (params.metadataApi ?? metadata).set("status", "stopped");
-}
-
-export async function handleStoppedAgentTask(params: {
-  runtime: Awaited<ReturnType<typeof createAgentRuntime>>;
-  runId: string;
-  agentId: string;
-  role: string;
-  taskId: string;
-  result: Extract<AgentTaskRunResult, { status: "stopped" }>;
-  eventIds: string[];
-}): Promise<never> {
-  const stopPayload = {
-    role: params.role,
-    outcome: "stopped",
-    success: false,
-    cause: params.result.cause,
-    reason: params.result.reason,
-    taskId: params.taskId,
-    ...(params.result.approvalId ? { approvalId: params.result.approvalId } : {}),
-  };
-  const eventId = await recordEvent(params.runtime, params.runId, params.agentId, "task_completed", stopPayload);
-  params.eventIds.push(eventId);
-  throw new ApprovalCheckpointError(
-    params.result.reason ?? "An agent task stopped awaiting human input",
-    params.result.cause === "approval_expired" ? "expired" : "rejected",
-    {
-      approvalId: params.result.approvalId,
-      taskId: params.taskId,
-    },
-  );
 }
 
 async function ensureRunRecord(

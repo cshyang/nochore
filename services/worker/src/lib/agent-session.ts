@@ -1,7 +1,8 @@
-import { type AgentRecord, MetricObservationSchema, type PiToolDefinition } from "@nochore/harness";
+import { type AgentRecord, type AgentToolDefinition, MetricObservationSchema } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
+import type { AgentExecutionResult, AgentExecutor } from "./agent-executor";
 import type { AgentRuntime } from "./agent-runtime";
-import { executePiAgent, type PiAgentResult } from "./pi-runtime";
+import { defaultAgentExecutor } from "./pi-runtime";
 import {
   createToolConfigLookup,
   evaluatePolicy,
@@ -26,15 +27,19 @@ export interface AgentSessionSpec {
   systemPrompt: string;
   userPrompt: string;
   workspacePath: string;
-  tools: PiToolDefinition[];
+  tools: AgentToolDefinition[];
   eventIds: string[];
   correlation?: AgentSessionCorrelation;
   onTaskApprovalWaiting?: (taskId: string) => Promise<void>;
   onTaskApprovalResumed?: (taskId: string) => Promise<void>;
+  executor?: AgentExecutor;
+  approvalHandler?: typeof handleApprovalRequest;
 }
 
-export async function runAgentSession(spec: AgentSessionSpec): Promise<PiAgentResult> {
+export async function runAgentSession(spec: AgentSessionSpec): Promise<AgentExecutionResult> {
   const tools = [...spec.tools, createRecordMetricTool(spec)];
+  const executor = spec.executor ?? defaultAgentExecutor;
+  const approvalHandler = spec.approvalHandler ?? handleApprovalRequest;
   const toolConfigLookup = createToolConfigLookup(spec.agent, tools);
   const learnedRules = await spec.runtime.learnedRuleRepository.listActive(spec.agent.id);
   const recentToolCalls: Array<{ toolName: string; timestamp: Date }> = [];
@@ -49,11 +54,11 @@ export async function runAgentSession(spec: AgentSessionSpec): Promise<PiAgentRe
     taskId: spec.correlation?.taskId,
   });
 
-  return executePiAgent({
+  return executor({
     systemPrompt: spec.systemPrompt,
     userPrompt: spec.userPrompt,
     workspacePath: spec.workspacePath,
-    composioTools: tools,
+    tools,
     onEvent: async (event) => {
       if (event.type === "tool_executed") {
         recentToolCalls.push({ toolName: event.payload.toolName as string, timestamp: new Date() });
@@ -93,7 +98,7 @@ export async function runAgentSession(spec: AgentSessionSpec): Promise<PiAgentRe
         await spec.onTaskApprovalWaiting?.(taskId);
       }
 
-      const approvalResult = await handleApprovalRequest({
+      const approvalResult = await approvalHandler({
         runtime: spec.runtime,
         agent: spec.agent,
         runId: spec.runId,
@@ -114,7 +119,7 @@ export async function runAgentSession(spec: AgentSessionSpec): Promise<PiAgentRe
   });
 }
 
-function createRecordMetricTool(spec: AgentSessionSpec): PiToolDefinition {
+function createRecordMetricTool(spec: AgentSessionSpec): AgentToolDefinition {
   return {
     name: "record_metric",
     label: "Record Metric",

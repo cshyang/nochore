@@ -12,7 +12,9 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { getModel, registerBuiltInApiProviders } from "@mariozechner/pi-ai";
 import { createAgentSession, createCodingTools, SessionManager } from "@mariozechner/pi-coding-agent";
+import type { AgentToolDefinition } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
+import type { AgentExecutionResult, AgentExecutor, AgentExecutorConfig } from "./agent-executor";
 
 let providersRegistered = false;
 function ensureProviders() {
@@ -20,35 +22,6 @@ function ensureProviders() {
     registerBuiltInApiProviders();
     providersRegistered = true;
   }
-}
-
-interface PiToolDefinition {
-  name: string;
-  label: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  execute: (
-    toolCallId: string,
-    params: Record<string, unknown>,
-  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }>;
-}
-
-export interface PiAgentConfig {
-  systemPrompt: string;
-  userPrompt: string;
-  workspacePath: string;
-  composioTools: PiToolDefinition[];
-  onEvent: (event: { type: string; payload: Record<string, unknown> }) => Promise<string>;
-  /** Native pi-coding-agent hook — runs before every tool call. Return { block, reason } to prevent execution. */
-  beforeToolCall?: (toolName: string, args: unknown) => Promise<{ block: boolean; reason?: string } | undefined>;
-}
-
-export interface PiAgentResult {
-  output: string;
-  toolCalls: Array<{ toolName: string; timestamp: Date }>;
-  durationMs: number;
-  inputTokens: number;
-  outputTokens: number;
 }
 
 function createPiModel() {
@@ -63,7 +36,9 @@ function createPiModel() {
 /** Max times we'll re-prompt if the agent didn't call submit_report. */
 const MAX_RETRY_ATTEMPTS = 2;
 
-export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResult> {
+export const defaultAgentExecutor: AgentExecutor = executeWithPiCodingAgent;
+
+async function executeWithPiCodingAgent(config: AgentExecutorConfig): Promise<AgentExecutionResult> {
   const start = Date.now();
 
   if (!existsSync(config.workspacePath)) {
@@ -76,11 +51,11 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
   // The agent MUST call this to deliver its final output. Captures in
   // closure — no text-block guessing, no overwrite bugs.
   let report = "";
-  const submitReportTool: PiToolDefinition = {
+  const submitReportTool: AgentToolDefinition = {
     name: "submit_report",
     label: "Submit Report",
     description:
-      "Submit your final response as markdown. Call this exactly once before finishing. " +
+      "Submit your final response in the format required by the system prompt. Call this exactly once before finishing. " +
       "Lead with your conclusion in the first sentence — no vanity titles, no restating who you are. " +
       "Match depth to what was asked: a focused question gets a focused answer, a broad sweep gets a broader one. " +
       "Structure the response around what was asked, not a fixed template.",
@@ -89,7 +64,7 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
       properties: {
         report: {
           type: "string",
-          description: "The full analysis report in markdown format.",
+          description: "The full final response in the format required by the system prompt.",
         },
       },
       required: ["report"],
@@ -103,7 +78,7 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
     },
   };
 
-  const allTools = [...config.composioTools, submitReportTool];
+  const allTools = [...config.tools, submitReportTool];
 
   const { session } = await createAgentSession({
     model,
@@ -126,7 +101,7 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
   }
 
   let lastStopReason = "";
-  const toolCalls: PiAgentResult["toolCalls"] = [];
+  const toolCalls: AgentExecutionResult["toolCalls"] = [];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
@@ -200,8 +175,8 @@ export async function executePiAgent(config: PiAgentConfig): Promise<PiAgentResu
     workspacePath: config.workspacePath,
     systemPromptLength: config.systemPrompt.length,
     userPromptLength: config.userPrompt.length,
-    composioToolCount: config.composioTools.length,
-    composioToolNames: config.composioTools.map((t) => t.name),
+    customToolCount: config.tools.length,
+    customToolNames: config.tools.map((t) => t.name),
     builtInTools: "bash, read, edit, write, submit_report",
   });
 

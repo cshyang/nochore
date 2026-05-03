@@ -1,12 +1,12 @@
 /**
- * Bridge between Composio tools and pi-coding-agent ToolDefinitions.
+ * Bridge between Composio tools and agent tool definitions.
  *
  * Goes through ComposioAdapter (harness) rather than calling @composio/core directly.
- * Each Composio tool becomes a pi ToolDefinition that the agent can call like any
+ * Each Composio tool becomes an AgentToolDefinition that the agent can call like any
  * built-in tool.
  */
 
-import { type ComposioAdapter, createComposioAdapter, type PiToolDefinition } from "@nochore/harness";
+import { type AgentToolDefinition, type ComposioAdapter, createComposioAdapter } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
 
 let _adapter: Promise<ComposioAdapter> | null = null;
@@ -18,10 +18,10 @@ function getAdapter(): Promise<ComposioAdapter> {
   return _adapter;
 }
 
-export async function getComposioToolsForPi(params: {
+export async function getComposioAgentTools(params: {
   userId: string;
   toolkits: string[];
-}): Promise<PiToolDefinition[]> {
+}): Promise<AgentToolDefinition[]> {
   if (!params.toolkits.length) return [];
 
   const adapter = await getAdapter();
@@ -32,7 +32,7 @@ export async function getComposioToolsForPi(params: {
     limit: 100,
   });
 
-  logger.info("Composio tools fetched for pi-agent", {
+  logger.info("Composio tools fetched for agent execution", {
     userId: params.userId,
     toolkits: params.toolkits,
     toolCount: rawTools.length,

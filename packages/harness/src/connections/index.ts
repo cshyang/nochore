@@ -11,5 +11,4 @@ export {
   type ComposioRawTool,
   createComposioAdapter,
 } from "./composio-adapter";
-export type { PiToolDefinition } from "./google-ads/tools";
-export { getGoogleAdsToolsForPi } from "./google-ads/tools";
+export { getGoogleAdsAgentTools } from "./google-ads/tools";

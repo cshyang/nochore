@@ -26,12 +26,12 @@ The architecture should preserve the product promise:
 
 ## Reality Check: Current Code
 
-The current codebase is now layered around `AgentTask`, with orchestration still intentionally owned by the lead run.
+The current codebase is now layered around `AgentTask`. The lead run owns accountability and final synthesis, while a small coordinator helper owns delegated task orchestration.
 
 | Proposed surface | What exists today | Main gap |
 |---|---|---|
 | Identity | `AgentRecord` plus prompt assembly in `buildPromptBundle()` | No reusable identity object; identity is mostly compiled straight into prompt text |
-| Runtime | `agent-run.ts`, `agent-task-run.ts`, and `agent-session.ts` | Parallel fan-out and structured artifacts remain future work |
+| Runtime | `agent-run.ts`, `agent-task-run.ts`, `agent-session.ts`, `agent-task-coordinator.ts`, `agent-task-execution.ts`, and `tool-envelope.ts` | Parallel fan-out and durable artifact projection remain future work |
 | Delivery | SSE polling full snapshots every second | Uses projected `tasks[]`; structured artifact projection remains future work |
 
 Additional concrete issues:
@@ -362,7 +362,7 @@ That applies to:
 
 - `agent_tasks` table with full lifecycle (AgentTaskRepository)
 - `agent-task-run` child Trigger.dev task via `triggerAndWait`
-- `delegate_task` refactored from inline `executePiAgent()` to durable child tasks
+- `delegate_task` refactored from inline agent execution to durable child tasks
 - DB-backed task limit (replaces closure counter)
 - Events carry `taskId` and `rootRunId` for correlation
 - `SerializedRun` + `RunView` include `tasks[]`
@@ -381,9 +381,30 @@ That applies to:
 
 - Canonical domain name is `AgentTask`; runtime/API/UI language is `tasks` and `taskId`
 - Removed `WorkItem`, `workItems`, `workItemId`, `spawn_sub_run`, `sub_run_*`, and `waiting_for_children` from the active runtime surface
-- `runAgentSession(spec)` in `services/worker/src/lib/agent-session.ts` owns Pi execution, event recording, policy gate, approval checkpoints, metric tool injection, learned rules, and token result plumbing
+- `runAgentSession(spec)` in `services/worker/src/lib/agent-session.ts` owns executor-neutral event recording, policy gate, approval checkpoints, metric tool injection, learned rules, and token result plumbing
 - Lead run passes a tool envelope that includes `delegate_task`; AgentTask runs receive a narrowed envelope with no delegation tool
 - Runtime reset migration preserves identity/configuration and durable memory while clearing runs, run events, approvals, and obsolete task correlation records
+
+### Shipped: Phase 2 — Boundary hardening (2026-05-03)
+
+- `agent-task-coordinator.ts` owns `delegate_task`, AgentTask record creation, parent status transitions, `triggerAndWait`, task events, and best-effort child failure handling
+- `tool-envelope.ts` makes lead and AgentTask tool envelopes explicit; AgentTask envelopes exclude `delegate_task` by construction
+- `runAgentSession(spec)` accepts injected execution and approval handlers for lifecycle tests while defaulting to the normal agent executor and approval flow
+- Worker tests cover delegation lifecycle, best-effort task failure, task-limit blocking, tool-envelope narrowing, session metric correlation, and task approval correlation
+
+### Shipped: Phase 3 — AgentTask execution contract (2026-05-03)
+
+- `agent-task-execution.ts` owns the child execution boundary: task-specific prompt, narrowed tool envelope, session execution, approval callbacks, token plumbing, and typed task result normalization
+- AgentTask results normalize to `{ summary, findings, artifacts, metrics, nextActions, rawText }` and are stored as JSON in the existing `agent_tasks.result` field
+- `tool-envelope.ts` validates reserved internal tool names (`delegate_task`, `record_metric`, `submit_report`) and duplicate provider tool names
+- `agent-task-run.ts` is now mostly Trigger.dev plumbing around `AgentTaskExecution`
+
+### Shipped: Phase 4 — Executor adapter boundary (2026-05-03)
+
+- `agent-executor.ts` defines the executor-neutral contract: prompt, workspace, tools, events, policy gate hook, and tokenized result
+- `agent-session.ts` depends on the neutral executor contract; policy, approvals, metric recording, learned rules, and correlation no longer know about the concrete pi-coding-agent adapter
+- `pi-runtime.ts` is now one swappable adapter behind `defaultAgentExecutor`
+- Shared tool names are executor-neutral: `AgentToolDefinition`, `getGoogleAdsAgentTools`, and `getComposioAgentTools`
 
 ### Shipped: Cleanup (2026-04-04)
 
@@ -396,7 +417,7 @@ That applies to:
 | Item | Priority | Notes |
 |---|---|---|
 | Parallel fan-out (`batchTriggerAndWait`) | Medium | Enables LLM to plan multiple agent tasks then wait for all |
-| `artifacts` table | Low | Structured durable outputs; currently using events + agent task `result` column |
+| `artifacts` table | Low | Structured durable outputs; typed task results currently live in `agent_tasks.result` JSON |
 | Progressive autonomy QA fixes (1-4) | Medium | Edge cases in learned rules; no production data yet |
 | Detection pipeline tests | Medium | pattern-detector, condition-extractor, rule-resolver have zero unit tests |
 | Pinned specialists (V0.3) | Low | `SPECIALIST.md` in workspace for reusable roles |

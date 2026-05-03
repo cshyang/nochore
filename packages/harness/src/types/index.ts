@@ -26,6 +26,11 @@ export {
   type AgentTaskStatus,
   AgentTaskStatusSchema,
 } from "./agent-task";
+export type {
+  AgentToolContent,
+  AgentToolDefinition,
+  AgentToolResult,
+} from "./agent-tool";
 export {
   type ApprovalRecord,
   ApprovalRecordSchema,

@@ -1,9 +1,14 @@
-import { type AgentRecord, buildToolConfigEntry, type PiToolDefinition, type ToolConfigEntry } from "@nochore/harness";
+import {
+  type AgentRecord,
+  type AgentToolDefinition,
+  buildToolConfigEntry,
+  type ToolConfigEntry,
+} from "@nochore/harness";
 import { INTERNAL_TOOL_MODES, inferToolProvider } from "./policy-helpers";
 
 export { INTERNAL_TOOL_MODES };
 
-export function createToolConfigLookup(agent: AgentRecord, tools: PiToolDefinition[]): Map<string, ToolConfigEntry> {
+export function createToolConfigLookup(agent: AgentRecord, tools: AgentToolDefinition[]): Map<string, ToolConfigEntry> {
   const lookup = new Map<string, ToolConfigEntry>();
 
   for (const tool of tools) {

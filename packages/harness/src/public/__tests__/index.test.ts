@@ -13,6 +13,7 @@ describe("public harness exports", () => {
   });
 
   it("keeps the app and worker import surface available from the package root", () => {
+    const source = readFileSync(PUBLIC_INDEX_PATH, "utf8");
     const expectedExports = [
       "AgentConfigSchema",
       "AgentScheduleSchema",
@@ -45,7 +46,7 @@ describe("public harness exports", () => {
       "getAgentDefinitionById",
       "getAgentWorkspacePath",
       "getComposioUserId",
-      "getGoogleAdsToolsForPi",
+      "getGoogleAdsAgentTools",
       "getProjectDirectory",
       "getProjectPersistence",
       "getPromptDefinitionById",
@@ -76,5 +77,9 @@ describe("public harness exports", () => {
     }
     expect(harness).not.toHaveProperty("WorkItemRecordSchema");
     expect(harness).not.toHaveProperty("WorkItemRepository");
+    expect(source).toContain("AgentToolDefinition");
+    expect(source).toContain("getGoogleAdsAgentTools");
+    expect(source).not.toContain(["Pi", "ToolDefinition"].join(""));
+    expect(harness).not.toHaveProperty(["getGoogleAds", "ToolsForPi"].join(""));
   });
 });
