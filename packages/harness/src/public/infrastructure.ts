@@ -7,13 +7,14 @@ export {
   createComposioAdapter,
   createComposioClient,
   getComposioUserId,
-  getGoogleAdsToolsForPi,
+  getGoogleAdsAgentTools,
 } from "../connections/index";
 
 export { createDb, type HarnessDb } from "../db/client";
 
 export {
   agents,
+  agentTasks,
   approvals,
   connections,
   learnedPolicyRules,

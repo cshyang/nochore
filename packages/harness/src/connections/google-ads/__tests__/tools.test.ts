@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PiToolDefinition } from "../tools";
+import type { AgentToolDefinition } from "../../../types";
 
 const mockQuery = vi.fn().mockResolvedValue([]);
 const mockMutate = vi.fn().mockResolvedValue({ mutate_operation_responses: [] });
@@ -12,15 +12,15 @@ vi.mock("../client", () => ({
   }),
 }));
 
-const { getGoogleAdsToolsForPi } = await import("../tools");
+const { getGoogleAdsAgentTools } = await import("../tools");
 
-describe("getGoogleAdsToolsForPi", () => {
-  let tools: PiToolDefinition[];
+describe("getGoogleAdsAgentTools", () => {
+  let tools: AgentToolDefinition[];
 
   beforeEach(() => {
     mockQuery.mockReset().mockResolvedValue([]);
     mockMutate.mockReset().mockResolvedValue({ mutate_operation_responses: [] });
-    tools = getGoogleAdsToolsForPi({ customerId: "1073100792" });
+    tools = getGoogleAdsAgentTools({ customerId: "1073100792" });
   });
 
   it("returns exactly 6 tools", () => {
@@ -173,9 +173,7 @@ describe("getGoogleAdsToolsForPi", () => {
         },
       ]);
       mockMutate.mockResolvedValueOnce({
-        mutate_operation_responses: [
-          { campaign_budget_result: { resource_name: "customers/107/campaignBudgets/1" } },
-        ],
+        mutate_operation_responses: [{ campaign_budget_result: { resource_name: "customers/107/campaignBudgets/1" } }],
       });
 
       const tool = tools.find((t) => t.name === "googleads_adjust_budget")!;

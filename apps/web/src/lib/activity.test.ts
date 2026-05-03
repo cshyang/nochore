@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatAgentActivitySummary,
-  mergeAgentViewWithActivity,
-  mergeProjectViewWithActivity,
-} from "./activity";
+import { formatAgentActivitySummary, mergeAgentViewWithActivity, mergeProjectViewWithActivity } from "./activity";
 import type { AgentActivityStateView, AgentView, ProjectActivityStateView, ProjectView } from "./types";
 
 const baseAgent: AgentView = {
@@ -53,7 +49,7 @@ describe("activity view helpers", () => {
           startedAt: new Date(Date.now() - 30_000).toISOString(),
           events: [],
           approvals: [],
-          workItems: [],
+          tasks: [],
         },
       ],
     };

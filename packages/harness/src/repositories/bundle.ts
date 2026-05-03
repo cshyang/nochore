@@ -1,5 +1,6 @@
 import type { HarnessDb } from "../db/client";
 import { AgentRepository } from "./agent";
+import { AgentTaskRepository } from "./agent-task";
 import { ApprovalRepository } from "./approval";
 import { ConversationCheckpointRepository } from "./conversation-checkpoint";
 import { ConversationEventRepository } from "./conversation-event";
@@ -8,7 +9,6 @@ import { RunEventRepository } from "./event";
 import { LearnedRuleRepository } from "./learned-rule";
 import { LessonRepository } from "./lesson";
 import { RunRepository } from "./run";
-import { WorkItemRepository } from "./work-item";
 
 // Concrete Drizzle-backed repository bundle for a single project database.
 export function createProjectRepositories(db: HarnessDb) {
@@ -22,6 +22,6 @@ export function createProjectRepositories(db: HarnessDb) {
     lessonRepository: new LessonRepository(db),
     runEventRepository: new RunEventRepository(db),
     runRepository: new RunRepository(db),
-    workItemRepository: new WorkItemRepository(db),
+    agentTaskRepository: new AgentTaskRepository(db),
   };
 }

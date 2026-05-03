@@ -15,7 +15,6 @@ export type {
   ComposioCatalogEntry,
   ComposioExecuteResult,
   ComposioRawTool,
-  PiToolDefinition,
 } from "../connections/index";
 export {
   buildConversationTranscript,
@@ -45,6 +44,11 @@ export {
   AgentConfigSchema,
   type AgentSchedule,
   AgentScheduleSchema,
+  type AgentTaskRecord,
+  AgentTaskRecordSchema,
+  type AgentToolContent,
+  type AgentToolDefinition,
+  type AgentToolResult,
   type ApprovalRecord,
   ApprovalRecordSchema,
   type ApprovalStatus,
@@ -78,6 +82,4 @@ export {
   ToolConfigSchema,
   type ToolMode,
   ToolModeSchema,
-  type WorkItemRecord,
-  WorkItemRecordSchema,
 } from "../types/index";

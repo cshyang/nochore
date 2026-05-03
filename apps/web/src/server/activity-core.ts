@@ -2,7 +2,7 @@ import type { ApprovalRecord, RunRecord, RunStatus } from "@nochore/harness";
 import { getProjectDeps } from "./deps";
 import { buildSerializedPendingAction, buildSerializedRun } from "./models";
 
-const ACTIVE_RUN_STATUSES = new Set<RunStatus>(["queued", "running", "waiting_for_approval", "waiting_for_children"]);
+const ACTIVE_RUN_STATUSES = new Set<RunStatus>(["queued", "running", "waiting_for_approval", "waiting_for_tasks"]);
 const ACTIONABLE_APPROVAL_STATUSES = new Set<ApprovalRecord["status"]>(["pending"]);
 
 export async function loadAgentActivityState(projectId: string, agentId: string) {
@@ -19,7 +19,7 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
         run,
         await deps.runEventRepository.listByRun(run.id),
         await deps.approvalRepository.listByRun(run.id),
-        await deps.workItemRepository.listByParentRun(run.id),
+        await deps.agentTaskRepository.listByParentRun(run.id),
       ),
     ),
   );
@@ -29,9 +29,9 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
   const latestRun = runs[0] ?? null;
   const latestActiveRun =
     activeRuns.sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime())[0] ?? null;
-  const workItemTimestamps = serializedRuns.flatMap((sr) =>
-    sr.workItems.flatMap((wi) =>
-      [wi.startedAt, wi.completedAt].filter((t): t is string => t != null).map((t) => new Date(t).getTime()),
+  const taskTimestamps = serializedRuns.flatMap((sr) =>
+    sr.tasks.flatMap((task) =>
+      [task.startedAt, task.completedAt].filter((t): t is string => t != null).map((t) => new Date(t).getTime()),
     ),
   );
   const timestamps = [
@@ -39,7 +39,7 @@ export async function loadAgentActivityState(projectId: string, agentId: string)
     ...collectRunTimestamps(runs),
     ...collectApprovalTimestamps(actionableApprovals),
     ...(await deps.runEventRepository.listByAgent(agentId, 200)).map((event) => event.timestamp.getTime()),
-    ...workItemTimestamps,
+    ...taskTimestamps,
   ];
 
   return {
@@ -145,9 +145,7 @@ export function deriveActivityVersion(timestamps: number[]): number {
   return maxTimestamp * 1000 + checksum;
 }
 
-export function isActionableApproval(
-  approval: ApprovalRecord,
-): approval is ApprovalRecord & { status: "pending" } {
+export function isActionableApproval(approval: ApprovalRecord): approval is ApprovalRecord & { status: "pending" } {
   return ACTIONABLE_APPROVAL_STATUSES.has(approval.status);
 }
 

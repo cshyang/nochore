@@ -65,7 +65,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
   jira: {
     name: "Jira",
     icon: "📋",
-    defaultReason: "Track and update work items when required",
+    defaultReason: "Track and update tasks when required",
   },
   builtin: {
     name: "Nochore built-ins",

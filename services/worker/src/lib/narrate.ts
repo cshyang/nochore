@@ -22,8 +22,8 @@ export type RunEventType =
   | "agent_message"
   | "finding_recorded"
   | "lesson_distilled"
-  | "sub_run_started"
-  | "sub_run_completed"
+  | "task_started"
+  | "task_completed"
   | "run_completed"
   | "run_stopped"
   | "run_cancelled"
@@ -134,13 +134,13 @@ export function narrateEvent(type: string, payload: Record<string, unknown>): st
       return `Lesson distilled (scope: ${scope ?? "general"})`;
     }
 
-    case "sub_run_started": {
+    case "task_started": {
       const role = payload.role as string | undefined;
       const taskDesc = payload.task as string | undefined;
-      return `${titleCase(role ?? "Specialist")} started: ${truncate(taskDesc ?? "sub-task", 150)}`;
+      return `${titleCase(role ?? "Specialist")} started: ${truncate(taskDesc ?? "task", 150)}`;
     }
 
-    case "sub_run_completed": {
+    case "task_completed": {
       const role = payload.role as string | undefined;
       const outcome = payload.outcome as string | undefined;
       if (outcome === "stopped") {

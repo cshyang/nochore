@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimateCost, formatCost, formatTokens, isOutOfRange, summarizeRun } from "./run-stats";
-import type { RunEventView, RunView, WorkItemView } from "./types";
+import type { AgentTaskView, RunEventView, RunView } from "./types";
 
 function makeRun(overrides: Partial<RunView> = {}): RunView {
   return {
@@ -13,16 +13,16 @@ function makeRun(overrides: Partial<RunView> = {}): RunView {
     completedAt: "2026-04-15T00:02:00Z",
     events: [],
     approvals: [],
-    workItems: [],
+    tasks: [],
     ...overrides,
   };
 }
 
-function makeWorkItem(overrides: Partial<WorkItemView> = {}): WorkItemView {
+function makeAgentTask(overrides: Partial<AgentTaskView> = {}): AgentTaskView {
   return {
-    id: "wi-1",
+    id: "task-1",
     parentRunId: "run-1",
-    kind: "worker_run",
+    kind: "agent_task_run",
     role: "researcher",
     title: "Research subtask",
     status: "completed",
@@ -66,7 +66,7 @@ describe("summarizeRun", () => {
       startedAt: "2026-04-15T00:00:00Z",
       events: [],
       approvals: [],
-      workItems: [],
+      tasks: [],
     };
     const stats = summarizeRun(placeholder);
     expect(stats).toEqual({
@@ -77,24 +77,24 @@ describe("summarizeRun", () => {
       durationMs: 0,
       turns: 0,
       toolCalls: 0,
-      subagents: 0,
+      tasks: 0,
     });
   });
 
-  it("sums tokens across workItems and counts subagents by kind", () => {
+  it("sums tokens across tasks and counts delegated tasks by kind", () => {
     const run = makeRun({
-      workItems: [
-        makeWorkItem({ id: "wi-1", inputTokens: 1000, outputTokens: 200 }),
-        makeWorkItem({ id: "wi-2", inputTokens: 500, outputTokens: 100 }),
-        // non-worker_run should not count as a subagent
-        makeWorkItem({ id: "wi-3", kind: "planner_task", inputTokens: 300, outputTokens: 50 }),
+      tasks: [
+        makeAgentTask({ id: "task-1", inputTokens: 1000, outputTokens: 200 }),
+        makeAgentTask({ id: "task-2", inputTokens: 500, outputTokens: 100 }),
+        // non-agent_task_run should not count as a delegated task
+        makeAgentTask({ id: "task-3", kind: "planner_task", inputTokens: 300, outputTokens: 50 }),
       ],
     });
     const stats = summarizeRun(run);
     expect(stats.inputTokens).toBe(1800);
     expect(stats.outputTokens).toBe(350);
     expect(stats.totalTokens).toBe(2150);
-    expect(stats.subagents).toBe(2);
+    expect(stats.tasks).toBe(2);
     expect(stats.costEstimate).toBeCloseTo(estimateCost(1800, 350), 6);
   });
 
@@ -131,7 +131,7 @@ describe("isOutOfRange", () => {
     makeRun({
       id,
       status: "completed",
-      workItems: [makeWorkItem({ id: `wi-${id}`, inputTokens: total, outputTokens: 0 })],
+      tasks: [makeAgentTask({ id: `task-${id}`, inputTokens: total, outputTokens: 0 })],
     });
 
   it("does not flag when prior history is below minimum (5 completed priors)", () => {
@@ -180,8 +180,8 @@ describe("isOutOfRange", () => {
       withTokens("p4", 400),
       withTokens("p5", 500),
       // these should be excluded:
-      makeRun({ id: "target", status: "completed", workItems: [makeWorkItem({ inputTokens: 10_000 })] }),
-      makeRun({ id: "pf1", status: "failed", workItems: [makeWorkItem({ inputTokens: 99_999 })] }),
+      makeRun({ id: "target", status: "completed", tasks: [makeAgentTask({ inputTokens: 10_000 })] }),
+      makeRun({ id: "pf1", status: "failed", tasks: [makeAgentTask({ inputTokens: 99_999 })] }),
       // zero-value prior — must not drag median
       withTokens("pz", 0),
     ];

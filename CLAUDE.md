@@ -60,17 +60,22 @@ Key directories inside `apps/web/src/`:
 - `db/` — Drizzle schema + SQLite client
 
 **`services/worker/`** — trigger.dev task definitions:
-- `triggers/agent-run.ts` — Lead agent pipeline task (orchestrates child workers)
-- `triggers/worker-run.ts` — Child worker task (runs in separate Trigger.dev container)
+- `triggers/agent-run.ts` — Lead agent pipeline task; owns run setup, lead session execution, and final synthesis
+- `triggers/agent-task-run.ts` — Trigger.dev entrypoint for AgentTask execution
 - `triggers/scheduled-runs.ts` — Cron-triggered agent runs
-- `lib/run-helpers.ts` — Shared runtime helpers (recordEvent, handleApprovalRequest, policy evaluation)
-- `lib/pi-runtime.ts` — pi-coding-agent wrapper (executePiAgent with token counting)
+- `lib/agent-task-coordinator.ts` — AgentTask coordinator; owns `delegate_task`, task creation, `triggerAndWait`, task events, and best-effort failure handling
+- `lib/agent-task-execution.ts` — AgentTask execution contract; owns task-specific prompt/tool scope and typed task results
+- `lib/agent-executor.ts` — Neutral executor contract for swappable agent runtime adapters
+- `lib/agent-session.ts` — Shared executor-neutral session kernel (events, policy gate, approvals, metrics)
+- `lib/tool-envelope.ts` — Lead/task tool envelope builders and reserved-name validation
+- `lib/run-helpers.ts` — Shared runtime helper barrel
+- `lib/pi-runtime.ts` — pi-coding-agent adapter implementing `defaultAgentExecutor`
 
 ## Key Documents
 
 - `docs/architecture/philosophy.md` — Core thesis, four pillars, design axioms, competitive analysis
 - `docs/architecture/ux-moments.md` — UX design (Setup, Found Something, Getting Smarter, Agent Card, Run Narrative)
-- `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), work items, implementation status + backlog
+- `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` — Coordinated runtime: 3-layer model (Identity/Runtime/Delivery), AgentTask implementation status + backlog
 - `docs/architecture/2026-03-31-agent-evolution-design.md` — Trust model, topology promotion, progressive autonomy
 
 ## Architecture Concepts
@@ -83,7 +88,7 @@ Key directories inside `apps/web/src/`:
 - **ContextAssembler** — shared by pipeline and chat, step-aware (different steps get different context)
 - **Stateless chat** — ADK-style: load state per request, process, save, discard
 - **Workspace permissions**: Agent can read all .md files, write to scratchpad/ and reports/. KNOWLEDGE.md and POLICY.md are human-curated only.
-- **Coordinated runtime**: Lead agent orchestrates child workers via `triggerAndWait`. Each worker runs in a separate Trigger.dev container with independent checkpoint/resume. Work items are durable DB records. Frontend tracks work items, not containers. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` for full status + backlog.
+- **Coordinated runtime**: Lead agent delegates focused work via `delegate_task`; the AgentTask coordinator creates durable `AgentTask` records and waits with `triggerAndWait`. Agent tasks run in separate Trigger.dev containers with independent checkpoint/resume, inherit a narrowed tool envelope, and cannot delegate further. Frontend tracks `tasks`, not containers. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md` for full status + backlog.
 
 ## Open Design Questions
 
@@ -93,7 +98,7 @@ Key directories inside `apps/web/src/`:
 - ~~Memory schema~~ → Three-layer split (files/DB/JSONL), event log + lessons
 - ~~Policy composition~~ → Strictest rule wins, deterministic ordering. Learned rules (from approval patterns) sit alongside static rules but can never override a stricter static rule. See `docs/archive/2026-03-30-progressive-autonomy-design.md`
 - ~~Progressive trust automation~~ → Learned policy rules derived from approval history. Pattern detection (counting, not ML), user-confirmed suggestions, full revocability. See `docs/archive/2026-03-30-progressive-autonomy-design.md`
-- ~~Coordinated runtime model~~ → 3-layer architecture (Identity/Runtime/Delivery), work items as first-class durable objects, `direct`/`coordinated` modes, worker failure contract. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md`
+- ~~Coordinated runtime model~~ → 3-layer architecture (Identity/Runtime/Delivery), AgentTask as the first-class delegated work object, `direct`/`coordinated` modes, task failure contract. See `docs/architecture/2026-04-04-coordinated-agent-runtime-architecture.md`
 
 ### Still Open
 - **Data type → tool resolution** — When multiple tools provide the same data type (Tier 2)

@@ -33,27 +33,84 @@ interface Tone {
 function toneFor(run: RunView): Tone {
   switch (run.status) {
     case "completed":
-      return { label: "Completed", bg: COLORS.greenDim, border: COLORS.greenBorder, text: COLORS.green, dot: COLORS.green };
+      return {
+        label: "Completed",
+        bg: COLORS.greenDim,
+        border: COLORS.greenBorder,
+        text: COLORS.green,
+        dot: COLORS.green,
+      };
     case "failed":
       return { label: "Failed", bg: COLORS.redDim, border: COLORS.redBorder, text: COLORS.red, dot: COLORS.red };
     case "stopped":
-      return { label: "Stopped", bg: COLORS.orangeDim, border: COLORS.orangeBorder, text: COLORS.orange, dot: COLORS.orange };
+      return {
+        label: "Stopped",
+        bg: COLORS.orangeDim,
+        border: COLORS.orangeBorder,
+        text: COLORS.orange,
+        dot: COLORS.orange,
+      };
     case "cancelled":
-      return { label: "Cancelled", bg: COLORS.orangeDim, border: COLORS.orangeBorder, text: COLORS.orange, dot: COLORS.orange, dotShape: "ring" };
+      return {
+        label: "Cancelled",
+        bg: COLORS.orangeDim,
+        border: COLORS.orangeBorder,
+        text: COLORS.orange,
+        dot: COLORS.orange,
+        dotShape: "ring",
+      };
     case "waiting_for_approval":
-      return { label: "Waiting", bg: COLORS.orangeDim, border: COLORS.orangeBorder, text: COLORS.orange, dot: COLORS.orange, pulse: true };
-    case "waiting_for_children":
+      return {
+        label: "Waiting",
+        bg: COLORS.orangeDim,
+        border: COLORS.orangeBorder,
+        text: COLORS.orange,
+        dot: COLORS.orange,
+        pulse: true,
+      };
+    case "waiting_for_tasks":
       return run.hasActionableApprovals
-        ? { label: "Needs input", bg: COLORS.orangeDim, border: COLORS.orangeBorder, text: COLORS.orange, dot: COLORS.orange, pulse: true }
-        : { label: "Coordinating", bg: COLORS.accentDim, border: COLORS.accentBorder, text: COLORS.accentBright, dot: COLORS.accent, pulse: true };
+        ? {
+            label: "Needs input",
+            bg: COLORS.orangeDim,
+            border: COLORS.orangeBorder,
+            text: COLORS.orange,
+            dot: COLORS.orange,
+            pulse: true,
+          }
+        : {
+            label: "Coordinating",
+            bg: COLORS.accentDim,
+            border: COLORS.accentBorder,
+            text: COLORS.accentBright,
+            dot: COLORS.accent,
+            pulse: true,
+          };
     case "queued":
-      return { label: "Queued", bg: COLORS.grayDim, border: COLORS.border, text: COLORS.textSecondary, dot: COLORS.textSecondary, dotShape: "ring" };
+      return {
+        label: "Queued",
+        bg: COLORS.grayDim,
+        border: COLORS.border,
+        text: COLORS.textSecondary,
+        dot: COLORS.textSecondary,
+        dotShape: "ring",
+      };
     default:
-      return { label: "Running", bg: COLORS.accentDim, border: COLORS.accentBorder, text: COLORS.accentBright, dot: COLORS.accent, pulse: true };
+      return {
+        label: "Running",
+        bg: COLORS.accentDim,
+        border: COLORS.accentBorder,
+        text: COLORS.accentBright,
+        dot: COLORS.accent,
+        pulse: true,
+      };
   }
 }
 
-const SIZE_STYLES: Record<StatusPillSize, { padding: string; fontSize: string; weight: number; gap: number; dot: number }> = {
+const SIZE_STYLES: Record<
+  StatusPillSize,
+  { padding: string; fontSize: string; weight: number; gap: number; dot: number }
+> = {
   hero: { padding: "5px 12px", fontSize: TYPE.scale.sm, weight: TYPE.weight.semibold, gap: 8, dot: 7 },
   compact: { padding: "2px 8px", fontSize: TYPE.scale.xs, weight: TYPE.weight.medium, gap: 6, dot: 6 },
 };

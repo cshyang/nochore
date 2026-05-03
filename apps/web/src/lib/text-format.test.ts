@@ -11,7 +11,7 @@ describe("humanize", () => {
   });
 
   it("handles mixed delimiters", () => {
-    expect(humanize("sub_run-started")).toBe("Sub Run Started");
+    expect(humanize("task-started")).toBe("Task Started");
   });
 
   it("leaves single words capitalized", () => {

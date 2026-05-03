@@ -4,7 +4,7 @@ export type RunStatus =
   | "queued"
   | "running"
   | "waiting_for_approval"
-  | "waiting_for_children"
+  | "waiting_for_tasks"
   | "stopped"
   | "completed"
   | "failed"
@@ -19,8 +19,11 @@ export type RunEventType =
   | "tool_approval_expired"
   | "policy_rule_suggested"
   | "policy_rule_accepted"
+  | "agent_message"
   | "tool_executed"
   | "finding_recorded"
+  | "task_started"
+  | "task_completed"
   | "notification_sent"
   | "lesson_distilled"
   | "run_completed"
@@ -112,7 +115,7 @@ export interface PendingActionView {
   id: string;
   runId: string;
   agentId: string;
-  workItemId?: string;
+  taskId?: string;
   proposal: {
     id: string;
     toolName: string;
@@ -153,7 +156,7 @@ export interface TimelineEvent {
   timestamp: number; // epoch ms
 }
 
-export interface WorkItemView {
+export interface AgentTaskView {
   id: string;
   parentRunId: string;
   kind: string;
@@ -181,7 +184,7 @@ export interface RunView {
   triggerRunId?: string;
   events: RunEventView[];
   approvals: PendingActionView[];
-  workItems: WorkItemView[];
+  tasks: AgentTaskView[];
   result?: RunResultView;
   summary?: RunSummaryView;
 }
@@ -200,7 +203,7 @@ export interface ApprovalView {
   requestReason?: string;
   requestEventId?: string;
   decisionReason?: string;
-  workItemId?: string;
+  taskId?: string;
   createdAt: string;
   expiresAt?: string;
   resolvedAt?: string;

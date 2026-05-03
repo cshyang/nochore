@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const WorkItemStatusSchema = z.enum([
+export const AgentTaskStatusSchema = z.enum([
   "queued",
   "running",
   "waiting_for_approval",
@@ -10,12 +10,12 @@ export const WorkItemStatusSchema = z.enum([
   "failed",
   "cancelled",
 ]);
-export type WorkItemStatus = z.infer<typeof WorkItemStatusSchema>;
+export type AgentTaskStatus = z.infer<typeof AgentTaskStatusSchema>;
 
-export const WorkItemBlockingReasonSchema = z.enum(["approval", "dependency", "external", "policy"]);
-export type WorkItemBlockingReason = z.infer<typeof WorkItemBlockingReasonSchema>;
+export const AgentTaskBlockingReasonSchema = z.enum(["approval", "dependency", "external", "policy"]);
+export type AgentTaskBlockingReason = z.infer<typeof AgentTaskBlockingReasonSchema>;
 
-export const WorkItemRecordSchema = z.object({
+export const AgentTaskRecordSchema = z.object({
   id: z.string(),
   parentRunId: z.string(),
   rootRunId: z.string(),
@@ -23,8 +23,8 @@ export const WorkItemRecordSchema = z.object({
   kind: z.string(),
   role: z.string(),
   title: z.string(),
-  status: WorkItemStatusSchema,
-  blockingReason: WorkItemBlockingReasonSchema.optional(),
+  status: AgentTaskStatusSchema,
+  blockingReason: AgentTaskBlockingReasonSchema.optional(),
   error: z.string().optional(),
   result: z.string().optional(),
   triggerTaskRunId: z.string().optional(),
@@ -34,4 +34,4 @@ export const WorkItemRecordSchema = z.object({
   startedAt: z.date().optional(),
   completedAt: z.date().optional(),
 });
-export type WorkItemRecord = z.infer<typeof WorkItemRecordSchema>;
+export type AgentTaskRecord = z.infer<typeof AgentTaskRecordSchema>;

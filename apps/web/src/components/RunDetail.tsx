@@ -4,21 +4,20 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ApprovalCard } from "~/components/ApprovalCard";
 import { type ChecklistItem, DraftChecklist } from "~/components/agent-workspace-chrome";
-import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { EventTimeline } from "~/components/EventTimeline";
 import { NarrativeCard } from "~/components/run/NarrativeCard";
 import { RunHeader } from "~/components/run/RunHeader";
 import { RunOutOfRangeNote, RunStatsStrip } from "~/components/run/RunStatsStrip";
 import { markdownStyles, timelineContainerStyle } from "~/components/run/styles";
+import { TasksSection } from "~/components/run/TasksSection";
 import { ViewEventsToggle } from "~/components/run/ViewEventsToggle";
-import { WorkItemsSection } from "~/components/run/WorkItemsSection";
-import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import {
   buildTimelineEvents,
   extractFinding,
+  findAgentTaskForApproval,
   findLatestStopEvent,
-  findWorkItemForApproval,
   getActionableApprovals,
 } from "~/lib/run-events";
 import { isOutOfRange, summarizeRun } from "~/lib/run-stats";
@@ -66,10 +65,7 @@ export function RunDetail({
 
   const timelineEvents = useMemo(() => (run ? buildTimelineEvents(run) : []), [run]);
   const stats = useMemo(() => (run ? summarizeRun(run) : null), [run]);
-  const outOfRange = useMemo(
-    () => (run ? isOutOfRange(run, priorRuns ?? [], "tokens") : undefined),
-    [run, priorRuns],
-  );
+  const outOfRange = useMemo(() => (run ? isOutOfRange(run, priorRuns ?? [], "tokens") : undefined), [run, priorRuns]);
 
   // ── Empty state: no runs at all ────────────────────────────────────────
   if (!hasRuns || !run) {
@@ -141,9 +137,8 @@ export function RunDetail({
   const status = (run.status ?? "").toLowerCase();
   const finding = extractFinding(run);
   const actionableApprovals = getActionableApprovals(run);
-  const blockingApproval =
-    actionableApprovals.find((approval) => approval.workItemId) ?? actionableApprovals[0] ?? null;
-  const blockingWorkItem = blockingApproval ? findWorkItemForApproval(run, blockingApproval) : null;
+  const blockingApproval = actionableApprovals.find((approval) => approval.taskId) ?? actionableApprovals[0] ?? null;
+  const blockingAgentTask = blockingApproval ? findAgentTaskForApproval(run, blockingApproval) : null;
   const stopEvent = findLatestStopEvent(run);
   const pendingApprovalArtifacts = (
     <PendingApprovalArtifacts
@@ -157,11 +152,11 @@ export function RunDetail({
   const resolvedApprovalArtifacts = <ResolvedApprovalArtifacts run={run} />;
 
   // ── Coordinating children ──────────────────────────────────────────────
-  if (status === "waiting_for_children") {
+  if (status === "waiting_for_tasks") {
     const title = run.hasActionableApprovals ? "Specialist waiting for approval" : "Coordinating specialist work";
     const description = run.hasActionableApprovals
-      ? blockingWorkItem
-        ? `${humanize(blockingWorkItem.role)} is paused until an approval decision is made.`
+      ? blockingAgentTask
+        ? `${humanize(blockingAgentTask.role)} is paused until an approval decision is made.`
         : "A delegated specialist is paused until an approval decision is made."
       : "Specialist work is still in progress.";
 
@@ -170,7 +165,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -263,7 +258,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -328,7 +323,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -384,7 +379,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -441,7 +436,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <NarrativeCard run={run} summary={run.summary} timelineEvents={timelineEvents} />
         {resolvedApprovalArtifacts}
@@ -456,7 +451,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -513,7 +508,7 @@ export function RunDetail({
         <RunHeader run={run} />
         {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
         <RunOutOfRangeNote outOfRange={outOfRange} />
-        <WorkItemsSection workItems={run.workItems} />
+        <TasksSection tasks={run.tasks} />
         {pendingApprovalArtifacts}
         <div
           style={{
@@ -569,7 +564,7 @@ export function RunDetail({
       <RunHeader run={run} />
       {stats ? <RunStatsStrip stats={stats} outOfRange={outOfRange} /> : null}
       <RunOutOfRangeNote outOfRange={outOfRange} />
-      <WorkItemsSection workItems={run.workItems} />
+      <TasksSection tasks={run.tasks} />
       {pendingApprovalArtifacts}
 
       <ViewEventsToggle showEvents={showEvents} onToggle={() => setShowEvents((v) => !v)} hasFinding />
@@ -610,8 +605,8 @@ function PendingApprovalArtifacts({
   return (
     <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
       {actionable.map((approval) => {
-        const workItem = findWorkItemForApproval(run, approval);
-        const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
+        const task = findAgentTaskForApproval(run, approval);
+        const title = task ? `${humanize(task.role)} approval` : undefined;
 
         return (
           <ApprovalCard
@@ -655,8 +650,8 @@ function ResolvedApprovalArtifacts({ run }: { run: RunView }) {
       </summary>
       <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
         {resolved.map((approval) => {
-          const workItem = findWorkItemForApproval(run, approval);
-          const title = workItem ? `${humanize(workItem.role)} approval` : undefined;
+          const task = findAgentTaskForApproval(run, approval);
+          const title = task ? `${humanize(task.role)} approval` : undefined;
           return <ApprovalCard key={approval.id} approval={approval} title={title} />;
         })}
       </div>

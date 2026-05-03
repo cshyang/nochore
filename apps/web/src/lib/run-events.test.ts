@@ -3,11 +3,11 @@ import {
   buildTimelineEvents,
   extractFinding,
   extractToolNames,
+  findAgentTaskForApproval,
   findLatestStopEvent,
-  findWorkItemForApproval,
   getActionableApprovals,
 } from "./run-events";
-import type { PendingActionView, RunEventView, RunView, WorkItemView } from "./types";
+import type { AgentTaskView, PendingActionView, RunEventView, RunView } from "./types";
 
 function makeEvent(overrides: Partial<RunEventView> & Pick<RunEventView, "type">): RunEventView {
   return {
@@ -28,7 +28,7 @@ function makeRun(overrides: Partial<RunView>): RunView {
     startedAt: "2026-04-15T00:00:00Z",
     events: [],
     approvals: [],
-    workItems: [],
+    tasks: [],
     ...overrides,
   } as RunView;
 }
@@ -73,6 +73,19 @@ describe("buildTimelineEvents", () => {
   it("returns empty array for run with no events", () => {
     expect(buildTimelineEvents(makeRun({}))).toEqual([]);
   });
+
+  it("handles task lifecycle events", () => {
+    const run = makeRun({
+      events: [
+        makeEvent({ id: "task_start", type: "task_started", payload: { role: "analyst", task: "Review data" } }),
+        makeEvent({ id: "task_done", type: "task_completed", payload: { role: "analyst", success: true } }),
+      ],
+    });
+    const result = buildTimelineEvents(run);
+    expect(result.map((event) => event.type)).toEqual(["task_started", "task_completed"]);
+    expect(result[0]?.summary).toContain("Analyst started");
+    expect(result[1]?.summary).toBe("Analyst completed");
+  });
 });
 
 describe("extractToolNames", () => {
@@ -99,7 +112,10 @@ describe("extractToolNames", () => {
 });
 
 describe("getActionableApprovals", () => {
-  function makeApproval(status: PendingActionView["status"], extra: Partial<PendingActionView> = {}): PendingActionView {
+  function makeApproval(
+    status: PendingActionView["status"],
+    extra: Partial<PendingActionView> = {},
+  ): PendingActionView {
     return {
       id: `appr_${status}`,
       status,
@@ -110,12 +126,7 @@ describe("getActionableApprovals", () => {
 
   it("returns only pending and expired approvals", () => {
     const run = makeRun({
-      approvals: [
-        makeApproval("pending"),
-        makeApproval("approved"),
-        makeApproval("expired"),
-        makeApproval("rejected"),
-      ],
+      approvals: [makeApproval("pending"), makeApproval("approved"), makeApproval("expired"), makeApproval("rejected")],
     });
     expect(getActionableApprovals(run).map((a) => a.status)).toEqual(["pending", "expired"]);
   });
@@ -142,25 +153,25 @@ describe("findLatestStopEvent", () => {
   });
 });
 
-describe("findWorkItemForApproval", () => {
-  function makeWorkItem(id: string): WorkItemView {
-    return { id, role: "specialist", status: "running" } as WorkItemView;
+describe("findAgentTaskForApproval", () => {
+  function makeAgentTask(id: string): AgentTaskView {
+    return { id, role: "specialist", status: "running" } as AgentTaskView;
   }
 
-  it("returns the matching work item by approval.workItemId", () => {
-    const run = makeRun({ workItems: [makeWorkItem("wi1"), makeWorkItem("wi2")] });
-    const approval = { workItemId: "wi2" } as PendingActionView;
-    expect(findWorkItemForApproval(run, approval)?.id).toBe("wi2");
+  it("returns the matching task by approval.taskId", () => {
+    const run = makeRun({ tasks: [makeAgentTask("task_1"), makeAgentTask("task_2")] });
+    const approval = { taskId: "task_2" } as PendingActionView;
+    expect(findAgentTaskForApproval(run, approval)?.id).toBe("task_2");
   });
 
-  it("returns null when approval has no workItemId", () => {
-    const run = makeRun({ workItems: [makeWorkItem("wi1")] });
-    expect(findWorkItemForApproval(run, {} as PendingActionView)).toBeNull();
+  it("returns null when approval has no taskId", () => {
+    const run = makeRun({ tasks: [makeAgentTask("task_1")] });
+    expect(findAgentTaskForApproval(run, {} as PendingActionView)).toBeNull();
   });
 
-  it("returns null when work item is not in the run", () => {
-    const run = makeRun({ workItems: [makeWorkItem("wi1")] });
-    const approval = { workItemId: "wi-missing" } as PendingActionView;
-    expect(findWorkItemForApproval(run, approval)).toBeNull();
+  it("returns null when task is not in the run", () => {
+    const run = makeRun({ tasks: [makeAgentTask("task_1")] });
+    const approval = { taskId: "task-missing" } as PendingActionView;
+    expect(findAgentTaskForApproval(run, approval)).toBeNull();
   });
 });

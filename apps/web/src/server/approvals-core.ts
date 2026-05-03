@@ -42,7 +42,7 @@ export async function approveActionWithResolution(params: {
       reason: params.reason,
       toolName: approval.toolName,
       toolInput: approval.toolInput,
-      ...(approval.workItemId ? { workItemId: approval.workItemId } : {}),
+      ...(approval.taskId ? { taskId: approval.taskId } : {}),
     },
   });
 

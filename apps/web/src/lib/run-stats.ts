@@ -15,35 +15,33 @@ export interface RunStats {
   durationMs: number; // 0 if the run is still in progress
   turns: number; // LLM turns that issued tool calls (approximated by tool_called events)
   toolCalls: number;
-  subagents: number; // work items representing child runs
+  tasks: number; // delegated agent tasks
 }
 
 export function estimateCost(inputTokens: number, outputTokens: number): number {
   return inputTokens * COST_PER_INPUT_TOKEN + outputTokens * COST_PER_OUTPUT_TOKEN;
 }
 
-// Handles placeholder/empty runs gracefully — missing events/workItems arrays
+// Handles placeholder/empty runs gracefully — missing events/tasks arrays
 // fall through to zeros without throwing. AgentWorkspace synthesizes runs
 // before the SSE snapshot catches up, so this must stay tolerant.
 export function summarizeRun(run: RunView): RunStats {
-  const workItems = run.workItems ?? [];
+  const tasks = run.tasks ?? [];
   const events = run.events ?? [];
 
   let inputTokens = 0;
   let outputTokens = 0;
-  let subagents = 0;
-  for (const wi of workItems) {
-    if (wi.kind === "worker_run") subagents += 1;
-    inputTokens += wi.inputTokens ?? 0;
-    outputTokens += wi.outputTokens ?? 0;
+  let taskCount = 0;
+  for (const task of tasks) {
+    if (task.kind === "agent_task_run") taskCount += 1;
+    inputTokens += task.inputTokens ?? 0;
+    outputTokens += task.outputTokens ?? 0;
   }
 
   const toolCalls = events.filter((e) => e.type === "tool_called").length;
 
   const durationMs =
-    run.completedAt && run.startedAt
-      ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
-      : 0;
+    run.completedAt && run.startedAt ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime() : 0;
 
   return {
     inputTokens,
@@ -55,7 +53,7 @@ export function summarizeRun(run: RunView): RunStats {
     // rounds to ~1 turn. Good enough for "N turns" copy.
     turns: toolCalls,
     toolCalls,
-    subagents,
+    tasks: taskCount,
   };
 }
 

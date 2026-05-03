@@ -2,10 +2,10 @@ import { z } from "zod";
 import type {
   AgentActivityStateView,
   AgentView,
-  ProjectActivityStateView,
   ConnectionView,
   ConversationStateView,
   ConversationThreadSummaryView,
+  ProjectActivityStateView,
   ProjectView,
   RunActivityStateView,
   RunView,
@@ -103,7 +103,7 @@ const PendingActionViewSchema = z.object({
   id: z.string(),
   runId: z.string(),
   agentId: z.string(),
-  workItemId: z.string().optional(),
+  taskId: z.string().optional(),
   proposal: z.object({
     id: z.string(),
     toolName: z.string(),
@@ -118,11 +118,11 @@ const PendingActionViewSchema = z.object({
   resolvedReason: z.string().optional(),
 });
 
-const ActionableApprovalStateViewSchema = PendingActionViewSchema.extend({
+const _ActionableApprovalStateViewSchema = PendingActionViewSchema.extend({
   status: z.enum(["pending", "expired"]),
 });
 
-const WorkItemViewSchema = z.object({
+const AgentTaskViewSchema = z.object({
   id: z.string(),
   parentRunId: z.string(),
   kind: z.string(),
@@ -146,7 +146,7 @@ const RunViewSchema = z.object({
     "queued",
     "running",
     "waiting_for_approval",
-    "waiting_for_children",
+    "waiting_for_tasks",
     "stopped",
     "completed",
     "failed",
@@ -159,7 +159,7 @@ const RunViewSchema = z.object({
   triggerRunId: z.string().optional(),
   events: z.array(RunEventViewSchema).default([]),
   approvals: z.array(PendingActionViewSchema).default([]),
-  workItems: z.array(WorkItemViewSchema).default([]),
+  tasks: z.array(AgentTaskViewSchema).default([]),
   result: RunResultViewSchema.optional(),
   summary: RunSummaryViewSchema.optional(),
 });

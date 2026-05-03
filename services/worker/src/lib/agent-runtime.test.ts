@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildSubRunPrompt } from "./agent-runtime";
+import { buildAgentTaskPrompt } from "./agent-runtime";
 
 const tempDirs: string[] = [];
 const previousProjectRoot = process.env.PROJECT_ROOT;
@@ -13,7 +13,7 @@ afterEach(async () => {
   tempDirs.length = 0;
 });
 
-describe("buildSubRunPrompt", () => {
+describe("buildAgentTaskPrompt", () => {
   it("loads specialist role definitions from capabilities", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "nochore-specialist-"));
     tempDirs.push(root);
@@ -27,7 +27,7 @@ describe("buildSubRunPrompt", () => {
       "utf-8",
     );
 
-    const prompt = buildSubRunPrompt({
+    const prompt = buildAgentTaskPrompt({
       role: "analyst",
       task: "Summarize the numbers.",
       agentInstructions: "Keep the response concise.",

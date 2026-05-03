@@ -1,11 +1,12 @@
 /**
- * Direct Google Ads tools for pi-coding-agent.
+ * Direct Google Ads tools for agent execution.
  *
- * Returns PiToolDefinition[] — the same interface as getComposioToolsForPi().
+ * Returns AgentToolDefinition[] — the same interface as getComposioAgentTools().
  * When Composio's Google Ads integration is fixed, delete this file and
  * remove the routing branch in agent-run.ts.
  */
 
+import type { AgentToolDefinition, AgentToolResult } from "../../types";
 import { createGoogleAdsCustomer } from "./client";
 import {
   campaignPerformanceQuery,
@@ -16,27 +17,14 @@ import {
   searchTermsQuery,
 } from "./queries";
 
-export interface PiToolDefinition {
-  name: string;
-  label: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  execute: (
-    toolCallId: string,
-    params: Record<string, unknown>,
-  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }>;
-}
-
-type ToolResult = { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> };
-
-function success(data: unknown): ToolResult {
+function success(data: unknown): AgentToolResult {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data) }],
     details: { successful: true, error: null },
   };
 }
 
-function failure(toolName: string, err: unknown): ToolResult {
+function failure(toolName: string, err: unknown): AgentToolResult {
   const message = err instanceof Error ? err.message : String(err);
   return {
     content: [{ type: "text" as const, text: `Error executing ${toolName}: ${message}` }],
@@ -48,7 +36,7 @@ function micros(value: number | null | undefined): number {
   return (value ?? 0) / 1_000_000;
 }
 
-export function getGoogleAdsToolsForPi(params: { customerId: string }): PiToolDefinition[] {
+export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToolDefinition[] {
   const customer = createGoogleAdsCustomer(params.customerId);
 
   return [
@@ -238,7 +226,11 @@ export function getGoogleAdsToolsForPi(params: { customerId: string }): PiToolDe
       },
       execute: async (_toolCallId, toolParams) => {
         try {
-          const { campaignId, keywords, matchType = "EXACT" } = toolParams as {
+          const {
+            campaignId,
+            keywords,
+            matchType = "EXACT",
+          } = toolParams as {
             campaignId: string;
             keywords: string[];
             matchType?: string;
@@ -262,8 +254,7 @@ export function getGoogleAdsToolsForPi(params: { customerId: string }): PiToolDe
 
           // Build mutation operations — cast through any because the
           // google-ads-api MutateOperation generic requires protobuf entity types
-          const matchTypeValue =
-            matchType === "PHRASE" ? 3 : matchType === "BROAD" ? 2 : 4; // EXACT=4, PHRASE=3, BROAD=2
+          const matchTypeValue = matchType === "PHRASE" ? 3 : matchType === "BROAD" ? 2 : 4; // EXACT=4, PHRASE=3, BROAD=2
 
           const operations = keywords.map((keyword) => ({
             entity: "campaign_criterion" as any,

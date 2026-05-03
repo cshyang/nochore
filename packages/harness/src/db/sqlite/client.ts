@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { HarnessDb } from "../types";
 import * as schema from "./schema";
 
-const RESET_TABLES = [
+const FULL_RESET_TABLES = [
   "chat_messages",
   "action_executions",
   "pending_actions",
@@ -16,6 +16,7 @@ const RESET_TABLES = [
   "learned_policy_rules",
   "suggestion_suppressions",
   "work_items",
+  "agent_tasks",
   "run_events",
   "lessons",
   "agents",
@@ -23,7 +24,9 @@ const RESET_TABLES = [
   "projects",
 ] as const;
 
-const CURRENT_SCHEMA_VERSION = 3;
+const RUNTIME_RESET_TABLES = ["runs", "approvals", "work_items", "agent_tasks", "run_events"] as const;
+
+const CURRENT_SCHEMA_VERSION = 4;
 
 const CREATE_DDL = `
   CREATE TABLE IF NOT EXISTS projects (
@@ -138,7 +141,7 @@ const CREATE_DDL = `
     request_reason TEXT,
     request_event_id TEXT,
     decision_reason TEXT,
-    work_item_id TEXT,
+    agent_task_id TEXT,
     created_at INTEGER NOT NULL,
     expires_at INTEGER,
     resolved_at INTEGER
@@ -199,12 +202,12 @@ const CREATE_DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_connections_project_provider ON connections (project_id, provider);
 
-  CREATE TABLE IF NOT EXISTS work_items (
+  CREATE TABLE IF NOT EXISTS agent_tasks (
     id TEXT PRIMARY KEY,
     parent_run_id TEXT NOT NULL,
     root_run_id TEXT NOT NULL,
     agent_id TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'worker_run',
+    kind TEXT NOT NULL DEFAULT 'agent_task_run',
     role TEXT NOT NULL,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued',
@@ -218,9 +221,9 @@ const CREATE_DDL = `
     started_at INTEGER,
     completed_at INTEGER
   );
-  CREATE INDEX IF NOT EXISTS idx_work_items_parent_run ON work_items (parent_run_id);
-  CREATE INDEX IF NOT EXISTS idx_work_items_root_run ON work_items (root_run_id);
-  CREATE INDEX IF NOT EXISTS idx_work_items_agent_created ON work_items (agent_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_agent_tasks_parent_run ON agent_tasks (parent_run_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_tasks_root_run ON agent_tasks (root_run_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_tasks_agent_created ON agent_tasks (agent_id, created_at);
 `;
 
 export function createDb(dbPath: string): HarnessDb {
@@ -240,12 +243,12 @@ export function createTestDb(): HarnessDb {
 
 function ensureSchema(sqlite: Database.Database, forceReset = false) {
   const version = sqlite.pragma("user_version", { simple: true }) as number;
-  const needsReset = forceReset || version !== CURRENT_SCHEMA_VERSION || hasLegacyAgentSchema(sqlite);
+  const needsFullReset = forceReset || hasLegacyAgentSchema(sqlite);
 
-  if (needsReset) {
+  if (needsFullReset) {
     sqlite.exec("BEGIN");
     try {
-      for (const table of RESET_TABLES) {
+      for (const table of FULL_RESET_TABLES) {
         sqlite.exec(`DROP TABLE IF EXISTS ${table}`);
       }
       sqlite.exec(CREATE_DDL);
@@ -258,8 +261,28 @@ function ensureSchema(sqlite: Database.Database, forceReset = false) {
     return;
   }
 
+  if (version !== CURRENT_SCHEMA_VERSION) {
+    sqlite.exec("BEGIN");
+    try {
+      for (const table of RUNTIME_RESET_TABLES) {
+        sqlite.exec(`DROP TABLE IF EXISTS ${table}`);
+      }
+      sqlite.exec(CREATE_DDL);
+      migrateAddColumns(sqlite);
+      deleteEpisodicLessons(sqlite);
+      renameDelegationToolConfig(sqlite);
+      sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+      sqlite.exec("COMMIT");
+    } catch (error) {
+      sqlite.exec("ROLLBACK");
+      throw error;
+    }
+    return;
+  }
+
   sqlite.exec(CREATE_DDL);
   migrateAddColumns(sqlite);
+  renameDelegationToolConfig(sqlite);
 }
 
 function migrateAddColumns(sqlite: Database.Database) {
@@ -338,8 +361,8 @@ function migrateAddColumns(sqlite: Database.Database) {
   if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "expires_at")) {
     sqlite.exec("ALTER TABLE approvals ADD COLUMN expires_at INTEGER");
   }
-  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "work_item_id")) {
-    sqlite.exec("ALTER TABLE approvals ADD COLUMN work_item_id TEXT");
+  if (approvalCols.length > 0 && !approvalCols.some((c) => c.name === "agent_task_id")) {
+    sqlite.exec("ALTER TABLE approvals ADD COLUMN agent_task_id TEXT");
   }
 
   const agentCols = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
@@ -351,6 +374,63 @@ function migrateAddColumns(sqlite: Database.Database) {
   if (connectionCols.length > 0 && !connectionCols.some((c) => c.name === "authorized_by_user_id")) {
     sqlite.exec("ALTER TABLE connections ADD COLUMN authorized_by_user_id TEXT");
   }
+}
+
+function deleteEpisodicLessons(sqlite: Database.Database) {
+  if (tableExists(sqlite, "lessons")) {
+    sqlite.exec("DELETE FROM lessons WHERE scope LIKE 'episode:%'");
+  }
+}
+
+function renameDelegationToolConfig(sqlite: Database.Database) {
+  if (tableExists(sqlite, "agents")) {
+    const rows = sqlite.prepare("SELECT id, tool_config FROM agents").all() as Array<{
+      id: string;
+      tool_config: string | null;
+    }>;
+    const update = sqlite.prepare("UPDATE agents SET tool_config = ? WHERE id = ?");
+
+    for (const row of rows) {
+      if (!row.tool_config?.includes("spawn_sub_run")) {
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(row.tool_config) as {
+          tools?: Record<string, Record<string, unknown>>;
+        };
+        const tools = parsed.tools ?? {};
+        const legacy = tools.spawn_sub_run;
+        if (!legacy) {
+          continue;
+        }
+
+        tools.delegate_task = {
+          ...legacy,
+          toolName: "delegate_task",
+          slug: "delegate_task",
+          title: legacy.title ?? "Delegate tasks",
+          description: legacy.description ?? "Delegate work to an agent task via the coordinated runtime.",
+        };
+        delete tools.spawn_sub_run;
+        parsed.tools = tools;
+        update.run(JSON.stringify(parsed), row.id);
+      } catch {
+        // Keep invalid config as-is; repository validation will surface it later.
+      }
+    }
+  }
+
+  if (tableExists(sqlite, "learned_policy_rules")) {
+    sqlite.exec("UPDATE learned_policy_rules SET tool_name = 'delegate_task' WHERE tool_name = 'spawn_sub_run'");
+  }
+  if (tableExists(sqlite, "suggestion_suppressions")) {
+    sqlite.exec("UPDATE suggestion_suppressions SET tool_name = 'delegate_task' WHERE tool_name = 'spawn_sub_run'");
+  }
+}
+
+function tableExists(sqlite: Database.Database, tableName: string): boolean {
+  return sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) != null;
 }
 
 function hasLegacyAgentSchema(sqlite: Database.Database): boolean {
