@@ -13,7 +13,7 @@ type SettingsLocalTab = "basics" | "access" | "notifications";
 
 const SETTINGS_TAB_OPTIONS: Array<{ value: SettingsLocalTab; label: string }> = [
   { value: "basics", label: "Basics" },
-  { value: "access", label: "Connections" },
+  { value: "access", label: "Access" },
   { value: "notifications", label: "Notifications" },
 ];
 
@@ -56,6 +56,9 @@ export function AgentWorkspaceSettingsPanel({
   onUpdateAgent,
   onConnect,
   onDisconnect,
+  onListGoogleAdsAccounts,
+  onSetConnectionConfig,
+  onSetAgentConnectionBinding,
   onAcceptLearnedRule,
   onDismissLearnedRule,
   onSuppressLearnedRule,
@@ -71,6 +74,9 @@ export function AgentWorkspaceSettingsPanel({
   onUpdateAgent?: AgentWorkspaceProps["onUpdateAgent"];
   onConnect?: AgentWorkspaceProps["onConnect"];
   onDisconnect?: AgentWorkspaceProps["onDisconnect"];
+  onListGoogleAdsAccounts?: AgentWorkspaceProps["onListGoogleAdsAccounts"];
+  onSetConnectionConfig?: AgentWorkspaceProps["onSetConnectionConfig"];
+  onSetAgentConnectionBinding?: AgentWorkspaceProps["onSetAgentConnectionBinding"];
   onAcceptLearnedRule?: AgentWorkspaceProps["onAcceptLearnedRule"];
   onDismissLearnedRule?: AgentWorkspaceProps["onDismissLearnedRule"];
   onSuppressLearnedRule?: AgentWorkspaceProps["onSuppressLearnedRule"];
@@ -88,6 +94,7 @@ export function AgentWorkspaceSettingsPanel({
   const [showProviderPicker, setShowProviderPicker] = useState(false);
   const [briefingModalOpen, setBriefingModalOpen] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: agent.id resets the local settings tab when switching agents.
   useEffect(() => {
     setLocalTab("basics");
     setName(agent.name);
@@ -96,7 +103,16 @@ export function AgentWorkspaceSettingsPanel({
     setSelectedSkills(agent.skills ?? []);
     setNotificationConfig(getNotificationConfig(agent.notificationConfig));
     setPrimaryMetric(agent.primaryMetric ?? "");
-  }, [agent.id]);
+  }, [
+    agent.description,
+    agent.id,
+    agent.instructions,
+    agent.name,
+    agent.notificationConfig,
+    agent.primaryMetric,
+    agent.schedule,
+    agent.skills,
+  ]);
 
   const persist = async (patch: Partial<Parameters<NonNullable<AgentWorkspaceProps["onUpdateAgent"]>>[0]>) => {
     if (!onUpdateAgent) return;
@@ -170,6 +186,10 @@ export function AgentWorkspaceSettingsPanel({
           onPersistToolConfig={persistToolConfig}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
+          onListGoogleAdsAccounts={onListGoogleAdsAccounts}
+          onSetConnectionConfig={onSetConnectionConfig}
+          connectionBindings={agent.connectionBindings ?? []}
+          onSetAgentConnectionBinding={onSetAgentConnectionBinding}
           onAcceptLearnedRule={onAcceptLearnedRule}
           onDismissLearnedRule={onDismissLearnedRule}
           onSuppressLearnedRule={onSuppressLearnedRule}

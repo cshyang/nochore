@@ -261,6 +261,18 @@ export interface ConnectionView {
   connectedAccountId?: string | null;
   config?: Record<string, unknown>;
   authorizedByUserId?: string | null;
+  /** Humanized "Provider: account" label, server-built. */
+  label?: string | null;
+  /** Account identifier shown under the provider name (email, customer label, Composio alias, …). */
+  accountLabel?: string | null;
+  /** "composio" when routed through Composio OAuth, "direct" when configured locally. */
+  connector?: "composio" | "direct" | null;
+  /** Optional one-line resource summary (e.g. "Google Ads customer 123-456-7890"). */
+  resourceSummary?: string | null;
+  /** Toolkit logo URL pulled from Composio's toolkit catalog. */
+  logo?: string | null;
+  /** Humanized provider name from Composio's toolkit catalog (e.g. "Google Ads" vs the slug "googleads"). */
+  providerName?: string | null;
 }
 
 export interface AgentView {

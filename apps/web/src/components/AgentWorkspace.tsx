@@ -13,7 +13,7 @@ import {
 import { AgentWorkspaceSettingsPanel } from "~/components/agent-workspace-settings";
 import { Button } from "~/components/Button";
 import { MemoryDossier } from "~/components/MemoryDossier";
-import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, TYPE } from "~/lib/colors";
 import { humanize } from "~/lib/text-format";
 import type { PendingActionView } from "~/lib/types";
 
@@ -28,6 +28,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onRunTriggered,
     onConnect,
     onDisconnect,
+    onListGoogleAdsAccounts,
+    onSetConnectionConfig,
+    onSetAgentConnectionBinding,
     requiredProviders = [],
     activeRunId,
     onCancelRun,
@@ -52,7 +55,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const draftThreadOpen = props.draftThreadOpen ?? false;
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
 
-  const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "runs");
+  const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "chat");
   const chatRunCompleteRef = useRef<(() => void) | null>(null);
   const previousAgentIdRef = useRef(agent.id);
   const notifiedChatRunRef = useRef<string | null>(null);
@@ -93,7 +96,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   useEffect(() => {
     if (previousAgentIdRef.current !== agent.id) {
       previousAgentIdRef.current = agent.id;
-      setTab(props.initialTab ?? "runs");
+      setTab(props.initialTab ?? "chat");
       setSelectedRunId(props.initialRunId ?? null);
       setChatApprovalContext(resolvePendingApproval(runs, props.initialPendingActionId));
       setChatTriggeredRunId(null);
@@ -289,9 +292,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
                 {cancelling ? "Cancelling..." : "Cancel run"}
               </Button>
             ) : wrappedOnRunNow ? (
-              <Button onClick={wrappedOnRunNow}>
+              <Button variant="secondary" onClick={wrappedOnRunNow}>
                 <Play size={13} weight="bold" />
-                Run now
+                Background run
               </Button>
             ) : undefined
           }
@@ -362,6 +365,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onUpdateAgent={handleSave}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
+              onListGoogleAdsAccounts={onListGoogleAdsAccounts}
+              onSetConnectionConfig={onSetConnectionConfig}
+              onSetAgentConnectionBinding={onSetAgentConnectionBinding}
               onAcceptLearnedRule={onAcceptLearnedRule}
               onDismissLearnedRule={onDismissLearnedRule}
               onSuppressLearnedRule={onSuppressLearnedRule}

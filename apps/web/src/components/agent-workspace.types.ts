@@ -56,6 +56,21 @@ export interface AgentWorkspaceProps {
   onThreadCreated?: (threadId: string) => void;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
+  onListGoogleAdsAccounts?: (connectionId?: string) => Promise<{
+    accounts?: Array<{ id: string; formattedId: string; label: string }>;
+    error?: string;
+  }>;
+  onSetConnectionConfig?: (provider: string, config: Record<string, unknown>) => Promise<void> | void;
+  onSetAgentConnectionBinding?: (binding: {
+    provider: string;
+    connectionId: string;
+    resourceType?: string | null;
+    resourceId?: string | null;
+    resourceLabel?: string | null;
+    alias?: string;
+    purpose?: string | null;
+    isDefault?: boolean;
+  }) => Promise<void> | void;
   activeRunId?: string | null;
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;

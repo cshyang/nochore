@@ -1,17 +1,18 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "~/components/Button";
 import { ProviderIcon, SettingsCard, SmallAction } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { getProviderMetadata } from "~/lib/provider-metadata";
 import { humanize } from "~/lib/text-format";
-import type { ConnectionView, LearnedRuleView, ToolConfigEntryView } from "~/lib/types";
-import { updateConnectionConfig } from "~/server/connections";
+import type { AgentConnectionBindingView, ConnectionView, LearnedRuleView, ToolConfigEntryView } from "~/lib/types";
 
 type ApprovalMode = ToolConfigEntryView["approvalMode"];
+type GoogleAdsAccountOption = { id: string; formattedId: string; label: string };
 
-const PROVIDER_CONFIG_FIELDS: Record<string, { key: string; label: string; placeholder: string }> = {
-  googleads: { key: "customerId", label: "Customer ID", placeholder: "e.g. 123-456-7890" },
-};
+const PROVIDER_CONFIG_FIELDS: Record<
+  string,
+  Array<{ key: string; label: string; placeholder: string; type?: "password" | "text"; secret?: boolean }>
+> = {};
 
 export interface SettingsConnectionCardProps {
   connection: ConnectionView;
@@ -20,10 +21,23 @@ export interface SettingsConnectionCardProps {
   scopedRules: LearnedRuleView[];
   scopedSuggestions: LearnedRuleView[];
   providerLogos?: Record<string, string>;
+  binding?: AgentConnectionBindingView;
   onConnect?: (provider: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   onSetConnectionApproval: (mode: ApprovalMode) => void;
   onSetToolApproval: (toolName: string, mode: ApprovalMode) => void;
+  onListGoogleAdsAccounts?: (connectionId?: string) => Promise<{ accounts?: GoogleAdsAccountOption[]; error?: string }>;
+  onSetConnectionConfig?: (provider: string, config: Record<string, unknown>) => Promise<void> | void;
+  onSetAgentConnectionBinding?: (binding: {
+    provider: string;
+    connectionId: string;
+    resourceType?: string | null;
+    resourceId?: string | null;
+    resourceLabel?: string | null;
+    alias?: string;
+    purpose?: string | null;
+    isDefault?: boolean;
+  }) => Promise<void> | void;
   onAcceptLearnedRule?: (id: string) => void | Promise<void>;
   onDismissLearnedRule?: (id: string) => void | Promise<void>;
   onSuppressLearnedRule?: (id: string) => void | Promise<void>;
@@ -32,39 +46,42 @@ export interface SettingsConnectionCardProps {
 
 export function SettingsConnectionCard({
   connection,
-  projectId,
   tools,
   scopedRules,
   scopedSuggestions,
   providerLogos = {},
+  binding,
   onConnect,
   onDisconnect,
   onSetConnectionApproval,
   onSetToolApproval,
+  onListGoogleAdsAccounts,
+  onSetConnectionConfig,
+  onSetAgentConnectionBinding,
   onAcceptLearnedRule,
   onDismissLearnedRule,
   onSuppressLearnedRule,
   onRevokeLearnedRule,
 }: SettingsConnectionCardProps) {
   const meta = getProviderMetadata(connection.provider);
-  const configField = PROVIDER_CONFIG_FIELDS[connection.provider];
-  const existingValue = configField ? ((connection.config?.[configField.key] as string) ?? "") : "";
-  const configInputId = configField ? `connection-${connection.id}-${configField.key}` : undefined;
-  const [configValue, setConfigValue] = useState(existingValue);
+  const configFields =
+    connection.provider === "googleads" && connection.connectedAccountId
+      ? []
+      : (PROVIDER_CONFIG_FIELDS[connection.provider] ?? []);
+  const initialConfigValues = Object.fromEntries(
+    configFields.map((field) => [field.key, field.secret ? "" : ((connection.config?.[field.key] as string) ?? "")]),
+  );
+  const [configValues, setConfigValues] = useState<Record<string, string>>(initialConfigValues);
   const [expanded, setExpanded] = useState(false);
 
   const isBuiltin = connection.provider === "builtin";
+  const hasGoogleAdsAccountSelector = connection.provider === "googleads" && Boolean(connection.connectedAccountId);
   const connectionMode = deriveConnectionMode(tools);
   const ruleCount = scopedRules.length + scopedSuggestions.length;
-  const hasBody = Boolean(configField) || tools.length > 0 || ruleCount > 0;
+  const hasConnectionActions = connection.provider !== "builtin";
+  const hasBody =
+    hasGoogleAdsAccountSelector || configFields.length > 0 || tools.length > 0 || ruleCount > 0 || hasConnectionActions;
   const canBulkSet = !isBuiltin && tools.length > 1;
-
-  const saveConfig = async () => {
-    if (!configField || configValue === existingValue) return;
-    await updateConnectionConfig({
-      data: { projectId, provider: connection.provider, config: { [configField.key]: configValue.trim() } },
-    });
-  };
 
   return (
     <SettingsCard>
@@ -98,7 +115,11 @@ export function SettingsConnectionCard({
                     {connection.authorizedByUserId ?? "you"}
                   </>
                 )}
+                {connection.accountLabel ? ` · ${connection.accountLabel}` : ""}
                 {tools.length > 0 ? ` · ${tools.length} tool${tools.length === 1 ? "" : "s"}` : ""}
+                {hasGoogleAdsAccountSelector && getConfiguredGoogleAdsCustomerId(connection.config, binding)
+                  ? ` · ${formatGoogleAdsCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding)!)}`
+                  : ""}
               </div>
             </div>
           </div>
@@ -134,33 +155,80 @@ export function SettingsConnectionCard({
 
       {expanded && hasBody ? (
         <div style={{ borderTop: `1px solid ${COLORS.border}` }}>
-          {configField ? (
-            <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-              <label
-                htmlFor={configInputId}
-                style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}
-              >
-                {configField.label}
-              </label>
-              <input
-                id={configInputId}
-                value={configValue}
-                onChange={(e) => setConfigValue(e.target.value)}
-                onBlur={() => void saveConfig()}
-                placeholder={configField.placeholder}
-                style={{
-                  flex: 1,
-                  padding: "6px 10px",
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: RADIUS.md,
-                  background: COLORS.bg,
-                  color: COLORS.text,
-                  fontSize: TYPE.scale.sm,
-                  fontFamily: TYPE.body,
-                  outline: "none",
-                }}
-              />
+          {configFields.length > 0 ? (
+            <div style={{ padding: "14px 16px", display: "grid", gap: 10 }}>
+              {configFields.map((field) => {
+                const configInputId = `connection-${connection.id}-${field.key}`;
+                const isConfigured = Boolean(connection.config?.[`${field.key}Configured`]);
+                return (
+                  <div key={field.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <label
+                      htmlFor={configInputId}
+                      style={{
+                        width: 104,
+                        fontSize: TYPE.scale.xs,
+                        color: COLORS.textSecondary,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {field.label}
+                    </label>
+                    <input
+                      id={configInputId}
+                      type={field.type ?? "text"}
+                      value={configValues[field.key] ?? ""}
+                      onChange={(e) =>
+                        setConfigValues((prev) => ({
+                          ...prev,
+                          [field.key]: e.target.value,
+                        }))
+                      }
+                      onBlur={() => undefined}
+                      placeholder={isConfigured ? "Stored - paste a new value to replace" : field.placeholder}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: "6px 10px",
+                        border: `1px solid ${COLORS.border}`,
+                        borderRadius: RADIUS.md,
+                        background: COLORS.bg,
+                        color: COLORS.text,
+                        fontSize: TYPE.scale.sm,
+                        fontFamily: TYPE.body,
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
+          ) : null}
+
+          {hasGoogleAdsAccountSelector ? (
+            <GoogleAdsAccountSelector
+              connection={connection}
+              binding={binding}
+              expanded={expanded}
+              onLoadAccounts={onListGoogleAdsAccounts}
+              onSave={(customerId, label) =>
+                onSetAgentConnectionBinding
+                  ? onSetAgentConnectionBinding({
+                      provider: connection.provider,
+                      connectionId: connection.id,
+                      resourceType: "google_ads_customer",
+                      resourceId: customerId,
+                      resourceLabel: label,
+                      alias: `googleads_${customerId.replace(/\D/g, "")}`,
+                      purpose: "Primary Google Ads account for this agent",
+                      isDefault: true,
+                    })
+                  : onSetConnectionConfig?.(connection.provider, {
+                      selectedCustomerId: customerId,
+                      selectedCustomerLabel: label,
+                      selectedCustomerSource: "user",
+                    })
+              }
+            />
           ) : null}
 
           {tools.length > 0 ? (
@@ -251,7 +319,7 @@ export function SettingsConnectionCard({
               }}
             >
               <SmallAction color={COLORS.textSecondary} onClick={() => onConnect?.(connection.provider)}>
-                Reconnect
+                Change account
               </SmallAction>
               {connection.connectedAccountId ? (
                 <SmallAction
@@ -269,6 +337,106 @@ export function SettingsConnectionCard({
   );
 }
 
+function GoogleAdsAccountSelector({
+  connection,
+  binding,
+  expanded,
+  onLoadAccounts,
+  onSave,
+}: {
+  connection: ConnectionView;
+  binding?: AgentConnectionBindingView;
+  expanded: boolean;
+  onLoadAccounts?: (connectionId?: string) => Promise<{ accounts?: GoogleAdsAccountOption[]; error?: string }>;
+  onSave: (customerId: string, label: string) => Promise<void> | void;
+}) {
+  const [accounts, setAccounts] = useState<GoogleAdsAccountOption[] | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(
+    getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "",
+  );
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "");
+  }, [binding, connection.config]);
+
+  useEffect(() => {
+    if (!expanded || accounts || loading || !onLoadAccounts) return;
+    setLoading(true);
+    setError(null);
+    void onLoadAccounts(connection.id)
+      .then((result) => {
+        setAccounts(result.accounts ?? []);
+        setError(result.error ?? null);
+      })
+      .catch((err) => {
+        setAccounts([]);
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setLoading(false));
+  }, [accounts, connection.id, expanded, loading, onLoadAccounts]);
+
+  const selectedAccount = accounts?.find((account) => account.id === selectedCustomerId);
+
+  return (
+    <div style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
+      <SectionLabel>Project account</SectionLabel>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <label
+          htmlFor={`connection-${connection.id}-googleads-account`}
+          style={{ width: 104, fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}
+        >
+          Customer ID
+        </label>
+        <select
+          id={`connection-${connection.id}-googleads-account`}
+          value={selectedCustomerId}
+          disabled={loading || saving || !onLoadAccounts}
+          onChange={(event) => {
+            const next = event.target.value;
+            const account = accounts?.find((item) => item.id === next);
+            setSelectedCustomerId(next);
+            setSaving(true);
+            setError(null);
+            void Promise.resolve(onSave(next, account?.label ?? formatGoogleAdsCustomerId(next)))
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+                setSelectedCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "");
+              })
+              .finally(() => setSaving(false));
+          }}
+          style={{
+            flex: "1 1 260px",
+            minWidth: 220,
+            maxWidth: 420,
+            padding: "7px 10px",
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: RADIUS.md,
+            background: COLORS.bg,
+            color: selectedCustomerId ? COLORS.text : COLORS.textDim,
+            fontSize: TYPE.scale.sm,
+            fontFamily: TYPE.body,
+            outline: "none",
+          }}
+        >
+          <option value="">{loading ? "Loading accounts..." : "Choose account"}</option>
+          {(accounts ?? []).map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.label}
+            </option>
+          ))}
+        </select>
+        <span style={{ fontSize: TYPE.scale.xs, color: saving ? COLORS.accent : COLORS.textDim }}>
+          {saving ? "Saving..." : selectedAccount ? "Selected" : ""}
+        </span>
+      </div>
+      {error ? <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>{error}</div> : null}
+    </div>
+  );
+}
+
 function deriveConnectionMode(tools: ToolConfigEntryView[]): ApprovalMode | "mixed" {
   if (tools.length === 0) return "auto";
   const modes = new Set(tools.map((t) => t.approvalMode));
@@ -276,6 +444,24 @@ function deriveConnectionMode(tools: ToolConfigEntryView[]): ApprovalMode | "mix
     return tools[0].approvalMode;
   }
   return "mixed";
+}
+
+function getConfiguredGoogleAdsCustomerId(
+  config: ConnectionView["config"],
+  binding?: AgentConnectionBindingView,
+): string | null {
+  const value = binding?.resourceId ?? config?.selectedCustomerId ?? config?.customerId;
+  return typeof value === "string" && value.trim() ? normalizeGoogleAdsCustomerId(value) : null;
+}
+
+function normalizeGoogleAdsCustomerId(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function formatGoogleAdsCustomerId(value: string): string {
+  const digits = normalizeGoogleAdsCustomerId(value);
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function ConnectionStatusPill({ mode }: { mode: ApprovalMode | "mixed" }) {

@@ -179,6 +179,13 @@ const ConnectionViewSchema = z.object({
   createdAt: z.number(),
   connectedAccountId: z.string().nullable().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  authorizedByUserId: z.string().nullable().optional(),
+  label: z.string().nullable().optional(),
+  accountLabel: z.string().nullable().optional(),
+  connector: z.enum(["composio", "direct"]).nullable().optional(),
+  resourceSummary: z.string().nullable().optional(),
+  logo: z.string().nullable().optional(),
+  providerName: z.string().nullable().optional(),
 });
 
 const ChatMessageViewSchema = z.object({

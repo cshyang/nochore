@@ -261,7 +261,21 @@ export const listConnections = createServerFn({ method: "GET" })
     const { db } = getProjectDeps(data.projectId);
     const rows = db.select().from(connections).where(eq(connections.projectId, data.projectId)).all();
 
-    return jsonSafe(rows.map(buildConnectionView));
+    // Toolkit summaries are process-cached (1h TTL) so this is effectively free
+    // after the first hit. If the Composio fetch fails, fall back to no-logo
+    // rendering instead of breaking the page.
+    const toolkitSummaries = await loadToolkitSummaries().catch(() => [] as ToolkitSummary[]);
+    const summaryBySlug = new Map<string, ToolkitSummary>(toolkitSummaries.map((tk) => [tk.slug, tk]));
+
+    return jsonSafe(
+      rows.map((row) => {
+        const summary = summaryBySlug.get(row.provider);
+        return buildConnectionView(row, {
+          logo: summary?.logo ?? null,
+          providerName: summary?.name ?? null,
+        });
+      }),
+    );
   });
 
 export const createDirectConnection = createServerFn({ method: "POST" })

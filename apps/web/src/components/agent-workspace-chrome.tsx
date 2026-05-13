@@ -329,28 +329,35 @@ export function WorkspaceTabs({
   activeConnections: number;
   requiredProviders: number;
 }) {
+  const tabs: Array<{ value: WorkspaceTab; label: string }> = [
+    { value: "chat", label: "Chat" },
+    { value: "runs", label: "Activity" },
+    { value: "learned", label: "Memory" },
+    { value: "settings", label: "Settings" },
+  ];
+
   return (
     <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 14 }}>
-      {(["runs", "chat", "learned", "settings"] as const).map((item) => (
+      {tabs.map((item) => (
         <button
           type="button"
-          key={item}
-          onClick={() => onChange(item)}
+          key={item.value}
+          onClick={() => onChange(item.value)}
           style={{
             background: "transparent",
             border: "none",
             padding: "12px 0",
             marginBottom: -1,
             cursor: "pointer",
-            color: tab === item ? COLORS.text : COLORS.textDim,
-            borderBottom: `2px solid ${tab === item ? COLORS.accent : "transparent"}`,
+            color: tab === item.value ? COLORS.text : COLORS.textDim,
+            borderBottom: `2px solid ${tab === item.value ? COLORS.accent : "transparent"}`,
             fontWeight: TYPE.weight.medium,
             fontSize: TYPE.scale.sm,
             fontFamily: TYPE.body,
             transition: `color ${MOTION.duration} ${MOTION.ease}`,
           }}
         >
-          {item.charAt(0).toUpperCase() + item.slice(1)}
+          {item.label}
         </button>
       ))}
       <div
@@ -418,8 +425,8 @@ export function FirstRunPrompt({
               marginBottom: 4,
             }}
           >
-            The agent will follow its instructions, gather context from connected tools when needed, and record the
-            resulting findings in the Activity tab.
+            The agent will work in the background, gather context from connected tools when needed, and record the
+            resulting findings in Activity.
           </div>
           <ul
             style={{
@@ -430,7 +437,7 @@ export function FirstRunPrompt({
               lineHeight: 1.8,
             }}
           >
-            <li>Runs typically take 30 seconds to a few minutes</li>
+            <li>Background runs typically take 30 seconds to a few minutes</li>
             {providerNames.length > 0 ? <li>Using: {providerNames.join(", ")}</li> : null}
           </ul>
         </div>
@@ -440,7 +447,7 @@ export function FirstRunPrompt({
           </Button>
           <Button onClick={onStartRun}>
             <Play size={13} weight="bold" />
-            Start run
+            Start background run
           </Button>
         </div>
       </div>

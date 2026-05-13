@@ -165,23 +165,11 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
               </button>
             ))}
         </div>
-        {/* Connected services */}
+        {/* Connected services — Composio toolkit logo + humanized provider name + account
+            metadata when we have something more useful than the opaque Composio ID. */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
           {activeConnections.length > 0 ? (
-            activeConnections.map((c) => (
-              <span
-                key={c.id}
-                style={{
-                  background: COLORS.surfaceHover,
-                  borderRadius: RADIUS.pill,
-                  padding: "4px 10px",
-                  fontSize: TYPE.scale.xs,
-                  color: COLORS.textSecondary,
-                }}
-              >
-                {c.provider}
-              </span>
-            ))
+            activeConnections.map((c) => <ConnectionChip key={c.id} connection={c} />)
           ) : (
             <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>No systems connected</span>
           )}
@@ -494,6 +482,117 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Chip for a single connected toolkit: Composio logo + humanized provider name +
+ * an optional account label (email, customer code, alias, …). Account label is
+ * hidden when we only have an opaque Composio ID — otherwise we'd be showing
+ * `ca_abc123` which adds noise without information.
+ */
+function ConnectionChip({ connection }: { connection: ConnectionView }) {
+  const displayName = connection.providerName?.trim() || connection.provider;
+  // accountLabel falls back to connectedAccountId server-side; skip rendering when
+  // that's all we have so we don't surface opaque IDs to humans.
+  const account =
+    connection.accountLabel && connection.accountLabel !== connection.connectedAccountId
+      ? connection.accountLabel
+      : null;
+
+  return (
+    <span
+      title={account ? `${displayName} · ${account}` : displayName}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: COLORS.surfaceHover,
+        borderRadius: RADIUS.pill,
+        padding: "3px 10px 3px 4px",
+        fontSize: TYPE.scale.xs,
+        color: COLORS.textSecondary,
+        maxWidth: 260,
+      }}
+    >
+      <ConnectionLogo logo={connection.logo} fallbackInitial={displayName.charAt(0).toUpperCase()} />
+      <span
+        style={{
+          color: COLORS.text,
+          fontWeight: TYPE.weight.medium,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {displayName}
+      </span>
+      {account && (
+        <>
+          <span aria-hidden style={{ color: COLORS.textDim }}>
+            ·
+          </span>
+          <span
+            style={{
+              color: COLORS.textDim,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 140,
+            }}
+          >
+            {account}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+function ConnectionLogo({ logo, fallbackInitial }: { logo: string | null | undefined; fallbackInitial: string }) {
+  const [errored, setErrored] = useState(false);
+
+  if (logo && !errored) {
+    return (
+      <img
+        src={logo}
+        alt=""
+        width={16}
+        height={16}
+        loading="lazy"
+        onError={() => setErrored(true)}
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: 3,
+          background: COLORS.bgRaised,
+          objectFit: "contain",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+
+  // No logo / load failed: a quiet monogram tile so chips stay aligned.
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: 3,
+        background: COLORS.bgRaised,
+        color: COLORS.textDim,
+        fontSize: 9,
+        fontWeight: TYPE.weight.semibold,
+        flexShrink: 0,
+      }}
+    >
+      {fallbackInitial}
+    </span>
   );
 }
 

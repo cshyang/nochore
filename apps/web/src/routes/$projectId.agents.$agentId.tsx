@@ -6,16 +6,16 @@ import { useAgentActivityState } from "~/components/use-activity-state";
 import { mergeAgentViewWithActivity } from "~/lib/activity";
 import { isDirectProvider } from "~/lib/provider-metadata";
 import {
-  parseAgentView,
   parseAgentActivityStateView,
+  parseAgentView,
   parseConnectionViews,
   parseConversationStateView,
   parseConversationThreadSummaryViews,
   parseSkillViews,
   parseToolConfigEntryViews,
 } from "~/lib/view-models";
-import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { getAgentActivityState } from "~/server/activity";
+import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
 import { approveAction, rejectAction } from "~/server/approvals";
 import { deleteConversationThread, getConversationState, listConversationThreads } from "~/server/chat";
 import {
@@ -24,6 +24,9 @@ import {
   fetchToolkitSummaries,
   initiateConnection,
   listConnections,
+  listGoogleAdsAccounts,
+  updateConnectionConfig,
+  upsertAgentConnectionBinding,
 } from "~/server/connections";
 import {
   acceptLearnedRuleSuggestion,
@@ -35,6 +38,10 @@ import { getPolicyToolCatalog } from "~/server/policy-tools";
 import { listAvailableSkills } from "~/server/skills";
 
 const DRAFT_THREAD_ID = "draft:new-thread";
+type GoogleAdsAccountListResult = {
+  accounts?: Array<{ id: string; formattedId: string; label: string }>;
+  error?: string;
+};
 
 export const Route = createFileRoute("/$projectId/agents/$agentId")({
   validateSearch: (
@@ -154,6 +161,7 @@ function AgentDetailPage() {
 
   const handleConnect = useCallback(
     async (provider: string) => {
+      let popup: Window | null = null;
       try {
         if (isDirectProvider(provider)) {
           // Direct connections don't need OAuth — create the record immediately
@@ -162,14 +170,29 @@ function AgentDetailPage() {
           return;
         }
 
-        const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}`;
+        popup = window.open("about:blank", `composio-oauth-${provider}-${Date.now()}`, "width=600,height=700");
+        try {
+          popup?.document.write("<p style='font-family: system-ui; padding: 24px;'>Connecting to Composio...</p>");
+          popup?.document.close();
+        } catch {
+          // Some browsers keep a reused popup cross-origin; the redirect below is the important part.
+        }
+        const returnTo = `${window.location.pathname}${window.location.search}`;
+        const callbackUrl = `${window.location.origin}/${projectId}/callback/composio?provider=${provider}&returnTo=${encodeURIComponent(returnTo)}`;
         const result = await initiateConnection({ data: { projectId, provider, callbackUrl } });
         const data = result as { redirectUrl?: string };
         if (data.redirectUrl) {
-          window.open(data.redirectUrl, "composio-oauth", "width=600,height=700");
+          if (popup) {
+            popup.location.href = data.redirectUrl;
+          } else {
+            window.location.href = data.redirectUrl;
+          }
+        } else {
+          popup?.close();
         }
-      } catch {
-        // Connection initiation failed
+      } catch (error) {
+        popup?.close();
+        console.error("Connection initiation failed", error);
       }
     },
     [projectId, router],
@@ -220,6 +243,7 @@ function AgentDetailPage() {
     search.threadId,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset draft chat state when the route agent changes.
   useEffect(() => {
     setDraftThreadOpen(false);
     setPendingThreadNavigationId(null);
@@ -306,7 +330,10 @@ function AgentDetailPage() {
       if (thread.isPrimary) {
         return;
       }
-      if (thread.hasMessages && !window.confirm(`Delete "${thread.title}"? This will remove the full chat transcript.`)) {
+      if (
+        thread.hasMessages &&
+        !window.confirm(`Delete "${thread.title}"? This will remove the full chat transcript.`)
+      ) {
         return;
       }
 
@@ -332,7 +359,7 @@ function AgentDetailPage() {
 
       void router.invalidate();
     },
-    [agentId, conversation?.threadId, conversationThreads, draftThreadOpen, navigate, projectId, router],
+    [agentId, conversation?.threadId, draftThreadOpen, navigate, projectId, router],
   );
 
   const handleCancelRun = useCallback(async () => {
@@ -405,7 +432,11 @@ function AgentDetailPage() {
             ...prev,
             tab,
             threadId:
-              tab === "chat" ? (draftThreadOpen ? undefined : (prev.threadId ?? conversation?.threadId)) : prev.threadId,
+              tab === "chat"
+                ? draftThreadOpen
+                  ? undefined
+                  : (prev.threadId ?? conversation?.threadId)
+                : prev.threadId,
           }),
           replace: true,
         });
@@ -423,6 +454,17 @@ function AgentDetailPage() {
       onRunNow={handleRunNow}
       onConnect={handleConnect}
       onDisconnect={handleDisconnect}
+      onListGoogleAdsAccounts={async (connectionId) =>
+        coerceGoogleAdsAccountListResult(await listGoogleAdsAccounts({ data: { projectId, connectionId } }))
+      }
+      onSetConnectionConfig={async (provider, config) => {
+        await updateConnectionConfig({ data: { projectId, provider, config } });
+        void router.invalidate();
+      }}
+      onSetAgentConnectionBinding={async (binding) => {
+        await upsertAgentConnectionBinding({ data: { projectId, agentId, ...binding } });
+        void router.invalidate();
+      }}
       providerLogos={providerLogos}
       onUpdateAgent={async (updates) => {
         await updateAgentConfig({
@@ -478,4 +520,26 @@ function AgentDetailPage() {
       }}
     />
   );
+}
+
+function coerceGoogleAdsAccountListResult(value: unknown): GoogleAdsAccountListResult {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const accounts = Array.isArray(record.accounts)
+    ? record.accounts
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const account = item as Record<string, unknown>;
+          if (typeof account.id !== "string") return null;
+          return {
+            id: account.id,
+            formattedId: typeof account.formattedId === "string" ? account.formattedId : account.id,
+            label: typeof account.label === "string" ? account.label : account.id,
+          };
+        })
+        .filter((account): account is { id: string; formattedId: string; label: string } => account != null)
+    : [];
+  return {
+    accounts,
+    error: typeof record.error === "string" ? record.error : undefined,
+  };
 }

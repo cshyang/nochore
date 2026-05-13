@@ -185,7 +185,10 @@ export function buildAgentView(params: {
   };
 }
 
-export function buildConnectionView(row: typeof connections.$inferSelect): ConnectionView {
+export function buildConnectionView(
+  row: typeof connections.$inferSelect,
+  extras?: { logo?: string | null; providerName?: string | null },
+): ConnectionView {
   let parsedConfig: Record<string, unknown> | undefined;
   if (row.config) {
     try {
@@ -207,6 +210,8 @@ export function buildConnectionView(row: typeof connections.$inferSelect): Conne
     accountLabel: getAccountLabel(parsedConfig, row.composioEntityId),
     connector: row.composioEntityId ? "composio" : "direct",
     resourceSummary: buildResourceSummary(row.provider, parsedConfig),
+    logo: extras?.logo ?? null,
+    providerName: extras?.providerName ?? null,
   };
 }
 

@@ -6,7 +6,13 @@ import { SettingsConnectionCard } from "~/components/settings/settings-connectio
 import { SettingsLearnedRules } from "~/components/settings/settings-learned-rules";
 import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
 import { CONNECTABLE_PROVIDER_SLUGS, getProviderMetadata } from "~/lib/provider-metadata";
-import type { ConnectionView, LearnedRuleView, ToolConfigEntryView, ToolConfigView } from "~/lib/types";
+import type {
+  AgentConnectionBindingView,
+  ConnectionView,
+  LearnedRuleView,
+  ToolConfigEntryView,
+  ToolConfigView,
+} from "~/lib/types";
 
 type ApprovalMode = ToolConfigEntryView["approvalMode"];
 
@@ -16,6 +22,7 @@ export interface SettingsAccessPanelProps {
   policyTools: ToolConfigEntryView[];
   currentToolConfig: ToolConfigView;
   connections: NonNullable<AgentWorkspaceProps["projectConnections"]>;
+  connectionBindings: AgentConnectionBindingView[];
   missingRequiredProviders: ToolConfigView["requiredProviders"];
   learnedRules: LearnedRuleView[];
   learnedRuleSuggestions: LearnedRuleView[];
@@ -28,6 +35,9 @@ export interface SettingsAccessPanelProps {
   onPersistToolConfig: (toolConfig: ToolConfigView) => Promise<void>;
   onConnect?: AgentWorkspaceProps["onConnect"];
   onDisconnect?: AgentWorkspaceProps["onDisconnect"];
+  onListGoogleAdsAccounts?: AgentWorkspaceProps["onListGoogleAdsAccounts"];
+  onSetConnectionConfig?: AgentWorkspaceProps["onSetConnectionConfig"];
+  onSetAgentConnectionBinding?: AgentWorkspaceProps["onSetAgentConnectionBinding"];
   onAcceptLearnedRule?: AgentWorkspaceProps["onAcceptLearnedRule"];
   onDismissLearnedRule?: AgentWorkspaceProps["onDismissLearnedRule"];
   onSuppressLearnedRule?: AgentWorkspaceProps["onSuppressLearnedRule"];
@@ -40,6 +50,7 @@ export function SettingsAccessPanel({
   policyTools,
   currentToolConfig,
   connections,
+  connectionBindings,
   missingRequiredProviders,
   learnedRules,
   learnedRuleSuggestions,
@@ -52,6 +63,9 @@ export function SettingsAccessPanel({
   onPersistToolConfig,
   onConnect,
   onDisconnect,
+  onListGoogleAdsAccounts,
+  onSetConnectionConfig,
+  onSetAgentConnectionBinding,
   onAcceptLearnedRule,
   onDismissLearnedRule,
   onSuppressLearnedRule,
@@ -199,6 +213,10 @@ export function SettingsAccessPanel({
 
   const requestConnect = (provider: string, isReconnect: boolean) => {
     if (provider === "builtin") return;
+    if (isReconnect) {
+      onConnect?.(provider);
+      return;
+    }
     setPendingConsent({ provider, isReconnect });
   };
 
@@ -212,7 +230,7 @@ export function SettingsAccessPanel({
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      <SectionHeading>Connections</SectionHeading>
+      <SectionHeading>Access</SectionHeading>
       <div style={{ display: "grid", gap: 6 }}>
         {pendingConsent ? (
           <ConsentPanel
@@ -235,6 +253,12 @@ export function SettingsAccessPanel({
             providerLogos={providerLogos}
             onConnect={(provider) => requestConnect(provider, true)}
             onDisconnect={onDisconnect}
+            onListGoogleAdsAccounts={connection.provider === "googleads" ? onListGoogleAdsAccounts : undefined}
+            onSetConnectionConfig={onSetConnectionConfig}
+            binding={connectionBindings.find(
+              (binding) => binding.provider === connection.provider && binding.connectionId === connection.id,
+            )}
+            onSetAgentConnectionBinding={onSetAgentConnectionBinding}
             onSetConnectionApproval={(mode) => setConnectionApproval(connection.provider, mode)}
             onSetToolApproval={setToolApproval}
             onAcceptLearnedRule={onAcceptLearnedRule}
@@ -273,7 +297,7 @@ export function SettingsAccessPanel({
                     fontWeight: TYPE.weight.medium,
                   }}
                 >
-                  Connect
+                  Grant access
                 </button>
               </div>
             </SettingsCard>
@@ -284,11 +308,12 @@ export function SettingsAccessPanel({
           <SettingsCard>
             <div style={{ padding: "14px 16px" }}>
               <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginBottom: 10 }}>
-                Select a provider to connect
+                Select a system to grant access
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {CONNECTABLE_PROVIDER_SLUGS.filter((slug) => !connectedProviders.has(slug)).map((slug) => {
+                {CONNECTABLE_PROVIDER_SLUGS.map((slug) => {
                   const meta = getProviderMetadata(slug);
+                  const alreadyConnected = connectedProviders.has(slug);
                   return (
                     <button
                       type="button"
@@ -313,6 +338,20 @@ export function SettingsAccessPanel({
                       }}
                     >
                       <ProviderIcon provider={slug} logos={providerLogos} size={16} /> {meta.name}
+                      {alreadyConnected ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: COLORS.textDim,
+                            border: `1px solid ${COLORS.border}`,
+                            borderRadius: RADIUS.pill,
+                            padding: "1px 6px",
+                            marginLeft: 2,
+                          }}
+                        >
+                          Add another
+                        </span>
+                      ) : null}
                       {meta.connectionType === "direct" ? (
                         <span
                           style={{
@@ -586,6 +625,7 @@ function ConsentPanel({
 }) {
   const meta = getProviderMetadata(provider);
   const [acked, setAcked] = useState(false);
+  const requiresAck = !isReconnect;
 
   return (
     <SettingsCard>
@@ -594,7 +634,7 @@ function ConsentPanel({
           <ProviderIcon provider={provider} logos={providerLogos} size={22} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: TYPE.scale.base, fontWeight: TYPE.weight.semibold, color: COLORS.text }}>
-              {isReconnect ? "Reconnect" : "Connect"} {meta.name}
+              {isReconnect ? "Change account" : "Grant access to"} {meta.name}
             </div>
             <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary, marginTop: 2 }}>
               {meta.defaultReason ?? `Authorize ${meta.name} for this agent.`}
@@ -639,42 +679,44 @@ function ConsentPanel({
             </ul>
           ) : (
             <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
-              Specific actions become visible after connecting. Default approval mode is "Auto" — restrict in Settings
-              any time.
+              Specific actions become visible after access is granted. Default approval mode is "Auto" — restrict in
+              Settings any time.
             </div>
           )}
         </div>
 
-        <label
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            padding: "12px 14px",
-            borderRadius: RADIUS.md,
-            background: COLORS.orangeSubtle,
-            border: `1px solid ${COLORS.orange}`,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={acked}
-            onChange={(event) => setAcked(event.target.checked)}
-            style={{ marginTop: 3, accentColor: COLORS.accent }}
-          />
-          <span style={{ fontSize: TYPE.scale.sm, color: COLORS.text, lineHeight: TYPE.leading.normal }}>
-            I understand this credential will be usable by anyone who can run this agent. They'll be able to take
-            actions on this {meta.name} account on my behalf.
-          </span>
-        </label>
+        {requiresAck ? (
+          <label
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              padding: "12px 14px",
+              borderRadius: RADIUS.md,
+              background: COLORS.orangeSubtle,
+              border: `1px solid ${COLORS.orange}`,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={acked}
+              onChange={(event) => setAcked(event.target.checked)}
+              style={{ marginTop: 3, accentColor: COLORS.accent }}
+            />
+            <span style={{ fontSize: TYPE.scale.sm, color: COLORS.text, lineHeight: TYPE.leading.normal }}>
+              I understand this access will be usable by anyone who can run this agent. They'll be able to take actions
+              on this {meta.name} account on my behalf.
+            </span>
+          </label>
+        ) : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button variant="secondary" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" onClick={onConfirm} disabled={!acked}>
-            {isReconnect ? "Reconnect" : "Connect"}
+          <Button size="sm" onClick={onConfirm} disabled={requiresAck && !acked}>
+            {isReconnect ? "Change account" : "Grant access"}
           </Button>
         </div>
       </div>
