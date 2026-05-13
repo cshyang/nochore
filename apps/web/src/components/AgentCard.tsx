@@ -219,6 +219,7 @@ function MetricSparklineRow({
             fontWeight: TYPE.weight.semibold,
             color: COLORS.text,
             flexShrink: 0,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {unit && !unit.startsWith("%") ? `${unit}` : ""}

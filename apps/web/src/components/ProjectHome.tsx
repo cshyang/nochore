@@ -2,11 +2,12 @@ import { type ReactNode, useState } from "react";
 import { AgentCard } from "~/components/AgentCard";
 import { Badge } from "~/components/Badge";
 import { Card } from "~/components/Card";
-import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, MOTION, RADIUS, SPACE, TYPE } from "~/lib/colors";
 import { humanizeToolName } from "~/lib/narrate";
-import type { ConnectionView, ProjectView } from "~/lib/types";
+import type { AgentView, ConnectionView, ProjectView } from "~/lib/types";
 
 const transition = `${MOTION.duration} ${MOTION.ease}`;
+const tabular: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
 interface ProjectHomeProps {
   project: ProjectView;
@@ -58,15 +59,35 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
   const incompleteDrafts = project.agents.filter(isIncompleteDraft);
   const regularAgents = project.agents.filter((a) => !isIncompleteDraft(a));
 
+  const runningCount = project.agents.filter((a: AgentView) => a.status === "running").length;
+  const attentionCount = needsAttention.length + groupedNeedsInput.reduce((n, g) => n + g.items.length, 0);
+
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
       <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }`}</style>
 
       {/* Project header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <span style={{ fontSize: 24 }}>{project.icon}</span>
-          <div style={{ flex: 1 }}>
+      <div style={{ marginBottom: SPACE[6] }}>
+        <div style={{ display: "flex", alignItems: "center", gap: SPACE[4], marginBottom: SPACE[4] }}>
+          {/* Identity tile — gives the header a real anchor */}
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: RADIUS.sm,
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.border}`,
+              display: "grid",
+              placeItems: "center",
+              fontSize: 22,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+            aria-hidden
+          >
+            {project.icon}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h1
               style={{
                 fontSize: TYPE.scale.xl,
@@ -75,13 +96,17 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
                 letterSpacing: TYPE.tracking.tight,
                 color: COLORS.text,
                 margin: 0,
+                lineHeight: TYPE.leading.tight,
               }}
             >
               {project.name}
             </h1>
-            <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, marginTop: 2 }}>
-              {project.agents.length} agents · {project.connectionCount} connections
-            </div>
+            <ProjectStatusSnapshot
+              runningCount={runningCount}
+              attentionCount={attentionCount}
+              agentCount={project.agents.length}
+              connectionCount={project.connectionCount}
+            />
           </div>
           {onDeleteProject &&
             (confirmDelete ? (
@@ -223,14 +248,14 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
         <>
           {/* Consolidated needs-attention section */}
           {hasNeedsAttention && (
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: SPACE[6] }}>
               <div
                 style={{
                   fontSize: TYPE.scale.xs,
                   color: COLORS.textDim,
                   textTransform: "uppercase",
-                  letterSpacing: 1,
-                  marginBottom: 12,
+                  letterSpacing: TYPE.tracking.wide,
+                  marginBottom: SPACE[3],
                 }}
               >
                 Needs attention
@@ -340,14 +365,14 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
 
           {/* Incomplete drafts — resume setup prompt */}
           {incompleteDrafts.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: SPACE[6] }}>
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: TYPE.scale.xs,
                   color: COLORS.textDim,
                   textTransform: "uppercase",
-                  letterSpacing: 1,
-                  marginBottom: 12,
+                  letterSpacing: TYPE.tracking.wide,
+                  marginBottom: SPACE[3],
                 }}
               >
                 Finish setup
@@ -410,43 +435,137 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
             </div>
           )}
 
-          {/* Agent grid */}
-          <div
-            style={{
-              fontSize: 12,
-              color: COLORS.textDim,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              marginBottom: 12,
-            }}
-          >
-            {incompleteDrafts.length > 0 ? "Active agents" : "All agents"}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {regularAgents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} onClick={() => onSelectAgent(agent.id)} />
-            ))}
-
-            {/* Add agent */}
-            <Card
-              onClick={() => onNewAgent?.()}
-              style={{
-                cursor: "pointer",
-                borderStyle: "dashed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: 120,
-              }}
-            >
-              <div style={{ textAlign: "center" }}>
-                <span style={{ fontSize: 24, color: COLORS.accent }}>+</span>
-                <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, marginTop: 4 }}>Add agent</div>
+          {/* Agent grid — only when there are non-draft agents. Section header carries the "new agent" affordance,
+              auto-fit grid lets a single agent fill the row instead of leaving a dead column. */}
+          {regularAgents.length > 0 && (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: SPACE[3],
+                  marginBottom: SPACE[3],
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: TYPE.scale.xs,
+                    color: COLORS.textDim,
+                    textTransform: "uppercase",
+                    letterSpacing: TYPE.tracking.wide,
+                  }}
+                >
+                  {incompleteDrafts.length > 0 ? "Active agents" : "All agents"}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNewAgent?.()}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: COLORS.textSecondary,
+                    fontSize: TYPE.scale.xs,
+                    fontWeight: TYPE.weight.medium,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    padding: "2px 0",
+                    transition: `color ${transition}`,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.accent)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textSecondary)}
+                >
+                  + New agent
+                </button>
               </div>
-            </Card>
-          </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",
+                  gap: SPACE[3],
+                }}
+              >
+                {regularAgents.map((agent) => (
+                  <AgentCard key={agent.id} agent={agent} onClick={() => onSelectAgent(agent.id)} />
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+interface ProjectStatusSnapshotProps {
+  runningCount: number;
+  attentionCount: number;
+  agentCount: number;
+  connectionCount: number;
+}
+
+function ProjectStatusSnapshot({
+  runningCount,
+  attentionCount,
+  agentCount,
+  connectionCount,
+}: ProjectStatusSnapshotProps) {
+  const dotSize = 6;
+  const items: ReactNode[] = [];
+
+  if (runningCount > 0) {
+    items.push(
+      <span key="running" style={{ display: "inline-flex", alignItems: "center", gap: 6, ...tabular }}>
+        <span
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: 99,
+            background: COLORS.green,
+            animation: "pulse 3s ease-in-out infinite",
+          }}
+        />
+        <span style={{ color: COLORS.text }}>{runningCount}</span>
+        <span style={{ color: COLORS.textSecondary }}>running</span>
+      </span>,
+    );
+  }
+
+  if (attentionCount > 0) {
+    items.push(
+      <span key="attention" style={{ display: "inline-flex", alignItems: "center", gap: 6, ...tabular }}>
+        <span style={{ width: dotSize, height: dotSize, borderRadius: 99, background: COLORS.orange }} />
+        <span style={{ color: COLORS.text }}>{attentionCount}</span>
+        <span style={{ color: COLORS.textSecondary }}>needs you</span>
+      </span>,
+    );
+  }
+
+  items.push(
+    <span key="counts" style={{ color: COLORS.textDim, ...tabular }}>
+      {agentCount} {agentCount === 1 ? "agent" : "agents"} · {connectionCount}{" "}
+      {connectionCount === 1 ? "connection" : "connections"}
+    </span>,
+  );
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: SPACE[3],
+        marginTop: SPACE[1],
+        fontSize: TYPE.scale.sm,
+        lineHeight: 1.3,
+      }}
+    >
+      {items.map((node, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: SPACE[3] }}>
+          {i > 0 && <span style={{ color: COLORS.border }} aria-hidden>·</span>}
+          {node}
+        </span>
+      ))}
     </div>
   );
 }

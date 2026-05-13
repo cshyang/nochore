@@ -10,8 +10,8 @@
  */
 
 import { existsSync, mkdirSync } from "node:fs";
-import { getModel, registerBuiltInApiProviders } from "@mariozechner/pi-ai";
-import { createAgentSession, createCodingTools, SessionManager } from "@mariozechner/pi-coding-agent";
+import { getModel, getModels, getProviders, registerBuiltInApiProviders } from "@mariozechner/pi-ai";
+import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentToolDefinition } from "@nochore/harness";
 import { logger } from "@trigger.dev/sdk/v3";
 import type { AgentExecutionResult, AgentExecutor, AgentExecutorConfig } from "./agent-executor";
@@ -24,13 +24,47 @@ function ensureProviders() {
   }
 }
 
+/**
+ * Resolve a model reference to a pi-ai Model object.
+ *
+ * Accepts canonical "<provider>/<id>" (e.g. "zai/glm-5.1") or a bare id
+ * (e.g. "glm-5.1") if it is unambiguous across registered providers.
+ * Throws on miss — better a loud failure than the previous silent
+ * empty-output behavior when the model wasn't in pi-ai's registry.
+ */
+function resolvePiModel(reference: string) {
+  const slash = reference.indexOf("/");
+  if (slash !== -1) {
+    const provider = reference.slice(0, slash).trim();
+    const id = reference.slice(slash + 1).trim();
+    const model = getModel(provider as any, id as any);
+    if (model) return model;
+    throw new Error(
+      `Model not found: provider "${provider}" has no model "${id}". Set AGENT_LLM_MODEL to a valid <provider>/<id>.`,
+    );
+  }
+  const all = getProviders().flatMap((provider) => getModels(provider));
+  const matches = all.filter((model) => model.id === reference);
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    throw new Error(`Model "${reference}" not found in any registered provider. Use <provider>/<id> form.`);
+  }
+  const providers = matches
+    .map((model) => model.provider)
+    .sort()
+    .join(", ");
+  throw new Error(
+    `Model "${reference}" is ambiguous (registered under: ${providers}). Use <provider>/${reference} form.`,
+  );
+}
+
 function createPiModel() {
   ensureProviders();
-  const provider = process.env.AGENT_LLM_PROVIDER ?? process.env.LLM_PROVIDER ?? "anthropic";
-  const modelName = process.env.AGENT_LLM_MODEL ?? process.env.LLM_MODEL ?? "claude-sonnet-4-6";
-
-  logger.info(`Creating pi model: ${provider}/${modelName}`);
-  return getModel(provider as any, modelName as any);
+  const reference = process.env.AGENT_LLM_MODEL ?? process.env.LLM_MODEL ?? "anthropic/claude-sonnet-4-7";
+  logger.info(`Resolving pi model: ${reference}`);
+  const model = resolvePiModel(reference);
+  logger.info(`Resolved to: ${model.provider}/${model.id} via ${model.api}`);
+  return model;
 }
 
 /** Max times we'll re-prompt if the agent didn't call submit_report. */
@@ -80,24 +114,39 @@ async function executeWithPiCodingAgent(config: AgentExecutorConfig): Promise<Ag
 
   const allTools = [...config.tools, submitReportTool];
 
+  // Inject the system prompt via the public ResourceLoader path. Poking
+  // session._baseSystemPrompt directly stopped working in 0.70 — the agent
+  // rebuilds the system prompt from _baseSystemPromptOptions whenever the
+  // tool set changes, which would overwrite our injection.
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: config.workspacePath,
+    agentDir: getAgentDir(),
+    systemPrompt: config.systemPrompt,
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    noContextFiles: true,
+  });
+  await resourceLoader.reload();
+
   const { session } = await createAgentSession({
     model,
     thinkingLevel: "off",
-    tools: createCodingTools(config.workspacePath),
+    // tools: omitted — defaults to ["read", "bash", "edit", "write"]
     customTools: allTools as any,
+    resourceLoader,
     sessionManager: SessionManager.inMemory(),
     cwd: config.workspacePath,
   });
 
-  // systemPrompt is a read-only getter — _baseSystemPrompt is the internal setter
-  (session as any)._baseSystemPrompt = config.systemPrompt;
-
-  // Wire native pre-tool hook for approval gates
+  // Wire native pre-tool hook for approval gates. In 0.70, beforeToolCall is a
+  // public settable field on the agent (was setBeforeToolCall(...) in 0.62).
   if (config.beforeToolCall) {
     const hook = config.beforeToolCall;
-    (session as any).agent.setBeforeToolCall(async (context: any) => {
+    session.agent.beforeToolCall = async (context, _signal) => {
       return hook(context.toolCall.name, context.args);
-    });
+    };
   }
 
   let lastStopReason = "";
@@ -107,8 +156,8 @@ async function executeWithPiCodingAgent(config: AgentExecutorConfig): Promise<Ag
 
   session.subscribe((e: any) => {
     if (e.type === "tool_execution_start") {
-      const payload = { toolName: e.toolName, input: e.input };
-      logger.info(`Tool called: ${e.toolName}`, { inputPreview: JSON.stringify(e.input).slice(0, 500) });
+      const payload = { toolName: e.toolName, input: e.args };
+      logger.info(`Tool called: ${e.toolName}`, { inputPreview: JSON.stringify(e.args).slice(0, 500) });
       config.onEvent({ type: "tool_called", payload }).catch((err) => {
         logger.error("Failed to record tool_called event", { error: String(err) });
       });
@@ -134,10 +183,10 @@ async function executeWithPiCodingAgent(config: AgentExecutorConfig): Promise<Ag
 
     if (e.type === "turn_end") {
       const msg = e.message;
-      // Accumulate token usage across turns
+      // Accumulate token usage across turns. 0.70 Usage shape: { input, output, ... }.
       if (msg?.usage) {
-        totalInputTokens += msg.usage.promptTokens ?? msg.usage.inputTokens ?? 0;
-        totalOutputTokens += msg.usage.completionTokens ?? msg.usage.outputTokens ?? 0;
+        totalInputTokens += msg.usage.input ?? 0;
+        totalOutputTokens += msg.usage.output ?? 0;
       }
       if (msg?.stopReason) {
         lastStopReason = msg.stopReason;

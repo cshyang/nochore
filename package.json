@@ -17,12 +17,13 @@
   "dependencies": {
     "@composio/core": "^0.6.10",
     "@composio/vercel": "^0.6.7",
-    "@mariozechner/pi-coding-agent": "^0.62.0",
-    "@trigger.dev/sdk": "4.4.4",
+    "@mariozechner/pi-ai": "^0.70.2",
+    "@mariozechner/pi-coding-agent": "^0.70.2",
+    "@trigger.dev/sdk": "4.4.5",
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",
-    "@trigger.dev/build": "4.4.4"
+    "@trigger.dev/build": "4.4.5"
   }
 }
