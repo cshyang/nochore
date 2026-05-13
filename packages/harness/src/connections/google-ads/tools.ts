@@ -25,19 +25,35 @@ function success(data: unknown): AgentToolResult {
 }
 
 function failure(toolName: string, err: unknown): AgentToolResult {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = normalizeGoogleAdsError(err);
   return {
     content: [{ type: "text" as const, text: `Error executing ${toolName}: ${message}` }],
     details: { successful: false, error: message },
   };
 }
 
+function normalizeGoogleAdsError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("invalid_grant")) {
+    return [
+      "Google Ads OAuth refresh token is invalid or expired (invalid_grant).",
+      "Update this project's Google Ads connection refresh token, or replace GOOGLE_ADS_REFRESH_TOKEN if no project token is configured.",
+      `Raw error: ${message}`,
+    ].join(" ");
+  }
+  return message;
+}
+
 function micros(value: number | null | undefined): number {
   return (value ?? 0) / 1_000_000;
 }
 
-export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToolDefinition[] {
-  const customer = createGoogleAdsCustomer(params.customerId);
+export function getGoogleAdsAgentTools(params: {
+  customerId: string;
+  refreshToken?: string;
+  managerCustomerId?: string;
+}): AgentToolDefinition[] {
+  const getCustomer = () => createGoogleAdsCustomer(params);
 
   return [
     // ── Read tools ────────────────────────────────────────────────────
@@ -59,7 +75,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
       execute: async (_toolCallId, toolParams) => {
         try {
           const { startDate, endDate } = parseDateRangeParam(toolParams.dateRange as string | undefined);
-          const rows = await customer.query(listCampaignsQuery(startDate, endDate));
+          const rows = await getCustomer().query(listCampaignsQuery(startDate, endDate));
           const campaigns = rows.map((row: any) => ({
             campaignId: String(row.campaign.id),
             campaignName: row.campaign.name,
@@ -100,7 +116,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
             startDate: string;
             endDate: string;
           };
-          const rows = await customer.query(campaignPerformanceQuery(campaignId, startDate, endDate));
+          const rows = await getCustomer().query(campaignPerformanceQuery(campaignId, startDate, endDate));
           const daily = rows.map((row: any) => ({
             date: row.segments.date,
             campaignId: String(row.campaign.id),
@@ -143,7 +159,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
             endDate: string;
           };
           const limit = (toolParams.limit as number) || 100;
-          const rows = await customer.query(searchTermsQuery(campaignId, startDate, endDate, limit));
+          const rows = await getCustomer().query(searchTermsQuery(campaignId, startDate, endDate, limit));
           const terms = rows.map((row: any) => ({
             searchTerm: row.search_term_view.search_term,
             campaignName: row.campaign.name,
@@ -180,7 +196,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
           const defaults = parseDateRangeParam("LAST_30_DAYS");
           const startDate = (toolParams.startDate as string) || defaults.startDate;
           const endDate = (toolParams.endDate as string) || defaults.endDate;
-          const rows = await customer.query(keywordQualityQuery(startDate, endDate, campaignId));
+          const rows = await getCustomer().query(keywordQualityQuery(startDate, endDate, campaignId));
           const keywords = rows.map((row: any) => ({
             campaignName: row.campaign.name,
             adGroupName: row.ad_group.name,
@@ -237,6 +253,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
           };
 
           // Resolve campaign first
+          const customer = getCustomer();
           const campaignRows = await customer.query(resolveCampaignQuery(campaignId));
           if (campaignRows.length === 0) {
             return failure("googleads_add_negative_keywords", new Error(`Campaign '${campaignId}' not found.`));
@@ -306,6 +323,7 @@ export function getGoogleAdsAgentTools(params: { customerId: string }): AgentToo
           };
 
           // Resolve campaign first
+          const customer = getCustomer();
           const campaignRows = await customer.query(resolveCampaignQuery(campaignId));
           if (campaignRows.length === 0) {
             return failure("googleads_adjust_budget", new Error(`Campaign '${campaignId}' not found.`));

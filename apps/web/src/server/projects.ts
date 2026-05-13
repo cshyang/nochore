@@ -94,8 +94,15 @@ async function loadProjectView(projectId: string) {
   }
 
   try {
-    const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository } =
-      getProjectDeps(projectId);
+    const {
+      db,
+      agentRepository,
+      runRepository,
+      approvalRepository,
+      lessonRepository,
+      learnedRuleRepository,
+      agentConnectionBindingRepository,
+    } = getProjectDeps(projectId);
     let projectRow = db.select().from(projects).get();
     if (!projectRow) {
       // Self-heal: directory exists but no DB row (created by older version)
@@ -126,6 +133,7 @@ async function loadProjectView(projectId: string) {
           approvals: await approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
           lessonsCount: lessons.length,
           activeConnections: agent.toolConfig.requiredProviders,
+          connectionBindings: await agentConnectionBindingRepository.listByAgent(agent.id),
           learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
           learnedRules: await learnedRuleRepository.listAccepted(agent.id),
         });

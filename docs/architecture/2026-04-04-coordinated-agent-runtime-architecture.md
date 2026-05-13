@@ -403,7 +403,7 @@ That applies to:
 
 - `agent-executor.ts` defines the executor-neutral contract: prompt, workspace, tools, events, policy gate hook, and tokenized result
 - `agent-session.ts` depends on the neutral executor contract; policy, approvals, metric recording, learned rules, and correlation no longer know about the concrete pi-coding-agent adapter
-- `pi-runtime.ts` is now one swappable adapter behind `defaultAgentExecutor`
+- `flue-runtime.ts` is now the default adapter behind `defaultAgentExecutor`; `pi-runtime.ts` remains an explicit fallback
 - Shared tool names are executor-neutral: `AgentToolDefinition`, `getGoogleAdsAgentTools`, and `getComposioAgentTools`
 
 ### Shipped: Cleanup (2026-04-04)

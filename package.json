@@ -9,18 +9,20 @@
   "scripts": {
     "test": "npm --workspace @nochore/harness test && npm run test:web && npm run test:worker",
     "test:web": "vitest run apps/web/src/server/deps.test.ts apps/web/src/server/activity.test.ts apps/web/src/server/chat-memory.test.ts apps/web/src/server/models.test.ts apps/web/src/server/ui-message-stream.test.ts apps/web/src/lib/time-format.test.ts apps/web/src/lib/text-format.test.ts apps/web/src/lib/status-format.test.ts apps/web/src/lib/run-events.test.ts apps/web/src/lib/run-stats.test.ts",
-    "test:worker": "vitest run --exclude '.worktrees/**' services/worker/src/lib/agent-runtime.test.ts services/worker/src/lib/tool-provider.test.ts services/worker/src/lib/run-helpers.test.ts services/worker/src/triggers/agent-run.test.ts services/worker/src/triggers/agent-task-run.test.ts",
+    "test:worker": "vitest run --exclude '.worktrees/**' services/worker/src/lib/agent-runtime.test.ts services/worker/src/lib/agent-executor-selector.test.ts services/worker/src/lib/flue-runtime.test.ts services/worker/src/lib/tool-provider.test.ts services/worker/src/lib/run-helpers.test.ts services/worker/src/triggers/agent-run.test.ts services/worker/src/triggers/agent-task-run.test.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "format": "biome format --fix ."
   },
   "dependencies": {
-    "@composio/core": "^0.6.10",
-    "@composio/vercel": "^0.6.7",
+    "@composio/core": "0.9.0",
+    "@composio/vercel": "0.9.0",
+    "@flue/sdk": "0.4.1",
     "@mariozechner/pi-ai": "^0.70.2",
     "@mariozechner/pi-coding-agent": "^0.70.2",
     "@trigger.dev/sdk": "4.4.5",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "valibot": "^1.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",

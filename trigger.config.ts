@@ -1,8 +1,8 @@
-import { defineConfig } from "@trigger.dev/sdk/v3";
+import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
   project: "proj_vmlezgoianzbhanptfog",
-  runtime: "node",
+  runtime: "node-22",
   logLevel: "log",
   // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.
   // You can override this on an individual task.
@@ -20,10 +20,6 @@ export default defineConfig({
   },
   dirs: ["./services/worker/src/triggers"],
   build: {
-    external: [
-      "@composio/core",
-      "@composio/vercel",
-      "google-ads-api",
-    ],
+    external: ["@composio/core", "@composio/vercel", "google-ads-api"],
   },
 });

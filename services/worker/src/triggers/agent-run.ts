@@ -6,8 +6,8 @@ import {
   extractRunInsights,
   getAgentWorkspacePath,
 } from "@nochore/harness";
-import { logger, metadata, task } from "@trigger.dev/sdk/v3";
-import { buildPromptBundle, createAgentRuntime } from "../lib/agent-runtime";
+import { logger, metadata, task } from "@trigger.dev/sdk";
+import { buildPromptBundle, createAgentRuntime, resolveAgentConnectionContext } from "../lib/agent-runtime";
 import { runAgentSession } from "../lib/agent-session";
 import { createDelegateTaskTool } from "../lib/agent-task-coordinator";
 import { ApprovalCheckpointError, recordEvent } from "../lib/run-helpers";
@@ -26,16 +26,26 @@ export const agentRunTask = task({
 
     const runId = await ensureRunRecord(runtime, agent, payload.runId, payload.trigger);
     const eventIds: string[] = [];
+    const connectionContext = await resolveAgentConnectionContext({
+      db: runtime.db,
+      projectId: payload.projectId,
+      agent,
+    });
 
     try {
       await runtime.runRepository.markRunning(runId);
       metadata.set("status", "running");
 
-      const startPayload = { trigger: payload.trigger, providers: runtime.activeProviders };
+      const startPayload = { trigger: payload.trigger, providers: connectionContext.activeProviders };
       const startId = await recordEvent(runtime, runId, agent.id, "run_started", startPayload);
       eventIds.push(startId);
 
-      const promptBundle = await buildPromptBundle({ agent, trigger: payload.trigger });
+      const promptBundle = await buildPromptBundle({
+        agent,
+        trigger: payload.trigger,
+        providerConfigs: connectionContext.providerConfigs,
+        providerBindings: connectionContext.providerBindings,
+      });
       const promptPayload = {
         selectedSkills: promptBundle.selectedSkills.map((s) => s.id),
         systemLength: promptBundle.system.length,
@@ -46,8 +56,9 @@ export const agentRunTask = task({
 
       const providerTools = await listProviderTools({
         userId: runtime.userId,
-        activeProviders: runtime.activeProviders,
-        providerConfigs: runtime.providerConfigs,
+        activeProviders: connectionContext.activeProviders,
+        providerConfigs: connectionContext.providerConfigs,
+        providerBindings: connectionContext.providerBindings,
       });
 
       const workspacePath = getAgentWorkspacePath(payload.projectId, payload.agentId);
@@ -64,7 +75,7 @@ export const agentRunTask = task({
 
       logger.info("Lead prompt context assembled", {
         skills: promptBundle.selectedSkills.map((s) => s.id),
-        activeProviders: runtime.activeProviders,
+        activeProviders: connectionContext.activeProviders,
       });
 
       const executionResult = await runAgentSession({

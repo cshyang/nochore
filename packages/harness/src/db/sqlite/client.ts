@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { HarnessDb } from "../types";
@@ -20,13 +21,14 @@ const FULL_RESET_TABLES = [
   "run_events",
   "lessons",
   "agents",
+  "agent_connection_bindings",
   "connections",
   "projects",
 ] as const;
 
 const RUNTIME_RESET_TABLES = ["runs", "approvals", "work_items", "agent_tasks", "run_events"] as const;
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 
 const CREATE_DDL = `
   CREATE TABLE IF NOT EXISTS projects (
@@ -202,6 +204,26 @@ const CREATE_DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_connections_project_provider ON connections (project_id, provider);
 
+  CREATE TABLE IF NOT EXISTS agent_connection_bindings (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    connection_id TEXT NOT NULL,
+    resource_type TEXT,
+    resource_id TEXT,
+    resource_label TEXT,
+    alias TEXT NOT NULL,
+    purpose TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    config TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_connection_bindings_agent ON agent_connection_bindings (agent_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_connection_bindings_connection ON agent_connection_bindings (connection_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_connection_bindings_agent_alias ON agent_connection_bindings (agent_id, alias);
+
   CREATE TABLE IF NOT EXISTS agent_tasks (
     id TEXT PRIMARY KEY,
     parent_run_id TEXT NOT NULL,
@@ -269,6 +291,7 @@ function ensureSchema(sqlite: Database.Database, forceReset = false) {
       }
       sqlite.exec(CREATE_DDL);
       migrateAddColumns(sqlite);
+      migrateAgentConnectionBindings(sqlite);
       deleteEpisodicLessons(sqlite);
       renameDelegationToolConfig(sqlite);
       sqlite.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -282,6 +305,7 @@ function ensureSchema(sqlite: Database.Database, forceReset = false) {
 
   sqlite.exec(CREATE_DDL);
   migrateAddColumns(sqlite);
+  migrateAgentConnectionBindings(sqlite);
   renameDelegationToolConfig(sqlite);
 }
 
@@ -374,6 +398,119 @@ function migrateAddColumns(sqlite: Database.Database) {
   if (connectionCols.length > 0 && !connectionCols.some((c) => c.name === "authorized_by_user_id")) {
     sqlite.exec("ALTER TABLE connections ADD COLUMN authorized_by_user_id TEXT");
   }
+}
+
+function migrateAgentConnectionBindings(sqlite: Database.Database) {
+  if (
+    !tableExists(sqlite, "agent_connection_bindings") ||
+    !tableExists(sqlite, "agents") ||
+    !tableExists(sqlite, "connections")
+  ) {
+    return;
+  }
+
+  const agents = sqlite.prepare("SELECT id, tool_config FROM agents").all() as Array<{
+    id: string;
+    tool_config: string | null;
+  }>;
+  const activeConnections = sqlite
+    .prepare("SELECT id, provider, config, updated_at FROM connections WHERE status = 'active' ORDER BY updated_at ASC")
+    .all() as Array<{ id: string; provider: string; config: string | null; updated_at: number }>;
+  if (agents.length === 0 || activeConnections.length === 0) {
+    return;
+  }
+
+  const existing = sqlite
+    .prepare("SELECT agent_id, provider, connection_id, resource_id FROM agent_connection_bindings")
+    .all() as Array<{ agent_id: string; provider: string; connection_id: string; resource_id: string | null }>;
+  const existingKeys = new Set(
+    existing.map((row) => `${row.agent_id}:${row.provider}:${row.connection_id}:${row.resource_id ?? ""}`),
+  );
+  const insert = sqlite.prepare(
+    [
+      "INSERT OR IGNORE INTO agent_connection_bindings",
+      "(id, agent_id, provider, connection_id, resource_type, resource_id, resource_label, alias, purpose, is_default, status, config, created_at, updated_at)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)",
+    ].join(" "),
+  );
+  const now = Date.now();
+
+  for (const agent of agents) {
+    const requiredProviders = parseRequiredProviders(agent.tool_config);
+    for (const provider of requiredProviders) {
+      const connection = activeConnections.filter((row) => row.provider === provider).at(-1);
+      if (!connection) {
+        continue;
+      }
+      const connectionConfig = parseObjectJson(connection.config);
+      const resourceId = provider === "googleads" ? getGoogleAdsCustomerId(connectionConfig) : null;
+      const resourceLabel = provider === "googleads" && resourceId ? formatGoogleAdsCustomerId(resourceId) : null;
+      const resourceType = provider === "googleads" && resourceId ? "google_ads_customer" : null;
+      const key = `${agent.id}:${provider}:${connection.id}:${resourceId ?? ""}`;
+      if (existingKeys.has(key)) {
+        continue;
+      }
+      existingKeys.add(key);
+      insert.run(
+        crypto.randomUUID().slice(0, 12),
+        agent.id,
+        provider,
+        connection.id,
+        resourceType,
+        resourceId,
+        resourceLabel,
+        defaultBindingAlias(provider, resourceId),
+        "Migrated from required provider",
+        1,
+        JSON.stringify({ migratedFrom: "requiredProviders" }),
+        now,
+        now,
+      );
+    }
+  }
+}
+
+function parseRequiredProviders(value: string | null): string[] {
+  const parsed = parseObjectJson(value);
+  const required = parsed.requiredProviders;
+  if (!Array.isArray(required)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      required
+        .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>).provider : null))
+        .filter((provider): provider is string => typeof provider === "string" && provider.trim().length > 0),
+    ),
+  );
+}
+
+function parseObjectJson(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getGoogleAdsCustomerId(config: Record<string, unknown>): string | null {
+  const value = config.selectedCustomerId ?? config.customerId;
+  return typeof value === "string" && value.trim() ? value.replace(/\D/g, "") : null;
+}
+
+function formatGoogleAdsCustomerId(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function defaultBindingAlias(provider: string, resourceId: string | null): string {
+  if (provider === "googleads" && resourceId) {
+    return `googleads_${resourceId}`;
+  }
+  return provider;
 }
 
 function deleteEpisodicLessons(sqlite: Database.Database) {

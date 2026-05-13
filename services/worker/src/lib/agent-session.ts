@@ -1,8 +1,8 @@
 import { type AgentRecord, type AgentToolDefinition, MetricObservationSchema } from "@nochore/harness";
-import { logger } from "@trigger.dev/sdk/v3";
+import { logger } from "@trigger.dev/sdk";
 import type { AgentExecutionResult, AgentExecutor } from "./agent-executor";
+import { defaultAgentExecutor } from "./agent-executor-selector";
 import type { AgentRuntime } from "./agent-runtime";
-import { defaultAgentExecutor } from "./pi-runtime";
 import {
   createToolConfigLookup,
   evaluatePolicy,

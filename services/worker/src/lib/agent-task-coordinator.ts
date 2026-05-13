@@ -1,5 +1,5 @@
 import type { AgentRecord, AgentToolDefinition } from "@nochore/harness";
-import { metadata } from "@trigger.dev/sdk/v3";
+import { metadata } from "@trigger.dev/sdk";
 import { agentTaskRunTask } from "../triggers/agent-task-run";
 import type { AgentRuntime } from "./agent-runtime";
 import type { AgentTaskExecutionPayload, AgentTaskExecutionResult } from "./agent-task-execution";

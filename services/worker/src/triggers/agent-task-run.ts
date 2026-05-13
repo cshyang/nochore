@@ -1,4 +1,4 @@
-import { logger, metadata, task } from "@trigger.dev/sdk/v3";
+import { logger, metadata, task } from "@trigger.dev/sdk";
 import { createAgentRuntime } from "../lib/agent-runtime";
 import {
   type AgentTaskExecutionPayload,

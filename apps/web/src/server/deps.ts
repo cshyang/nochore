@@ -80,8 +80,16 @@ export async function getProjectView(projectId: string) {
     return null;
   }
 
-  const { db, agentRepository, runRepository, approvalRepository, lessonRepository, learnedRuleRepository, runEventRepository } =
-    getProjectDeps(projectId);
+  const {
+    db,
+    agentRepository,
+    runRepository,
+    approvalRepository,
+    lessonRepository,
+    learnedRuleRepository,
+    runEventRepository,
+    agentConnectionBindingRepository,
+  } = getProjectDeps(projectId);
   const agentRows = await agentRepository.listByProject(projectId);
   const agentNameById = new Map(agentRows.map((agent) => [agent.id, agent.name]));
   const agents = await Promise.all(
@@ -99,6 +107,7 @@ export async function getProjectView(projectId: string) {
         approvals: await approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
         lessonsCount: (await lessonRepository.listDurableByAgent(agent.id)).length,
         activeConnections: agent.toolConfig.requiredProviders,
+        connectionBindings: await agentConnectionBindingRepository.listByAgent(agent.id),
         learnedRuleSuggestions: await learnedRuleRepository.listSuggested(agent.id),
         learnedRules: await learnedRuleRepository.listAccepted(agent.id),
         metricEvents,

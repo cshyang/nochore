@@ -1,5 +1,6 @@
 import type { HarnessDb } from "../db/client";
 import { AgentRepository } from "./agent";
+import { AgentConnectionBindingRepository } from "./agent-connection-binding";
 import { AgentTaskRepository } from "./agent-task";
 import { ApprovalRepository } from "./approval";
 import { ConversationCheckpointRepository } from "./conversation-checkpoint";
@@ -14,6 +15,7 @@ import { RunRepository } from "./run";
 export function createProjectRepositories(db: HarnessDb) {
   return {
     agentRepository: new AgentRepository(db),
+    agentConnectionBindingRepository: new AgentConnectionBindingRepository(db),
     approvalRepository: new ApprovalRepository(db),
     conversationCheckpointRepository: new ConversationCheckpointRepository(db),
     conversationEventRepository: new ConversationEventRepository(db),

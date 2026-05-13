@@ -1,4 +1,4 @@
-import { logger } from "@trigger.dev/sdk/v3";
+import { logger } from "@trigger.dev/sdk";
 import type { AgentRuntime } from "./agent-runtime";
 
 export type RunEventType =

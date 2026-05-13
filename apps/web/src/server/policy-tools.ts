@@ -1,5 +1,5 @@
 import type { ToolConfigEntry } from "@nochore/harness";
-import { buildToolConfigEntry, connections, getGoogleAdsToolsForPi } from "@nochore/harness";
+import { buildToolConfigEntry, connections } from "@nochore/harness";
 import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { listComposioToolCatalogForProject } from "./connections-catalog";
@@ -24,25 +24,7 @@ async function buildPolicyToolCatalog(projectId: string): Promise<ToolConfigEntr
   const activeProviders = new Set(activeConnections.map((connection) => connection.provider));
   const entries: ToolConfigEntry[] = [];
 
-  if (activeProviders.has("googleads")) {
-    const googleAdsConnection = activeConnections.find((connection) => connection.provider === "googleads");
-    const config = parseConfig(googleAdsConnection?.config);
-    const customerId = typeof config.customerId === "string" && config.customerId ? config.customerId : "preview";
-
-    entries.push(
-      ...getGoogleAdsToolsForPi({ customerId }).map((tool) =>
-        buildToolConfigEntry({
-          toolName: tool.name,
-          slug: tool.name,
-          provider: "googleads",
-          title: tool.label,
-          description: tool.description,
-        }),
-      ),
-    );
-  }
-
-  const composioProviders = [...activeProviders].filter((provider) => provider !== "googleads");
+  const composioProviders = [...activeProviders];
   if (composioProviders.length > 0) {
     const composioTools = await listComposioToolCatalogForProject(projectId);
     entries.push(
@@ -64,16 +46,4 @@ async function buildPolicyToolCatalog(projectId: string): Promise<ToolConfigEntr
   return entries.sort((left, right) =>
     `${left.provider}:${left.title}`.localeCompare(`${right.provider}:${right.title}`),
   );
-}
-
-function parseConfig(value: string | null): Record<string, unknown> {
-  if (!value) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
 }

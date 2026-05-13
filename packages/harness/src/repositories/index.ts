@@ -4,6 +4,11 @@ export {
   type CreateAgentInput,
 } from "./agent";
 export {
+  type AgentConnectionBindingRecord,
+  AgentConnectionBindingRepository,
+  type UpsertAgentConnectionBindingInput,
+} from "./agent-connection-binding";
+export {
   AgentTaskRepository,
   type CreateAgentTaskInput,
 } from "./agent-task";

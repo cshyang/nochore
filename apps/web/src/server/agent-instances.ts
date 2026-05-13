@@ -248,6 +248,7 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
     approvals: await deps.approvalRepository.listByAgent(agent.id, ["pending", "expired"]),
     lessonsCount: (await deps.lessonRepository.listDurableByAgent(agent.id)).length,
     activeConnections: agent.toolConfig.requiredProviders,
+    connectionBindings: await deps.agentConnectionBindingRepository.listByAgent(agent.id),
     learnedRuleSuggestions: await deps.learnedRuleRepository.listSuggested(agent.id),
     learnedRules: await deps.learnedRuleRepository.listAccepted(agent.id),
     metricEvents,

@@ -16,6 +16,7 @@ import { activateConnection, pollComposioConnection } from "~/server/connections
 export const Route = createFileRoute("/$projectId/callback/composio")({
   validateSearch: (search: Record<string, unknown>) => ({
     provider: (search.provider as string) || "googleads",
+    connectionId: typeof search.connectionId === "string" ? search.connectionId : undefined,
     returnTo: (search.returnTo as string) || "",
     popup: (search.popup as string) === "true",
   }),
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/$projectId/callback/composio")({
 function ComposioCallbackPage() {
   const navigate = useNavigate();
   const { projectId } = Route.useParams();
-  const { provider, returnTo, popup: popupParam } = useSearch({ from: Route.id });
+  const { provider, connectionId, returnTo, popup: popupParam } = useSearch({ from: Route.id });
   // Detect popup mode: either from query param OR by checking if this window was opened as a popup
   const isPopup = popupParam || (typeof window !== "undefined" && window.opener !== null);
 
@@ -42,14 +43,14 @@ function ComposioCallbackPage() {
         attempts++;
         try {
           const result = (await pollComposioConnection({
-            data: { projectId, provider },
+            data: { projectId, provider, connectionId },
           })) as { connected: boolean; status: string };
 
           if (result.connected) {
             if (!cancelled) setStatus("success");
             // Notify opener window so it can refresh connection state
             try {
-              window.opener?.postMessage({ type: "composio:connected", provider }, "*");
+              window.opener?.postMessage({ type: "composio:connected", provider, connectionId }, "*");
             } catch {}
             setTimeout(() => {
               if (!cancelled) {
@@ -83,13 +84,13 @@ function ComposioCallbackPage() {
       if (!cancelled) {
         try {
           const activation = (await activateConnection({
-            data: { projectId, provider },
+            data: { projectId, provider, connectionId },
           })) as { success: boolean; error?: string };
 
           if (activation.success) {
             setStatus("success");
             try {
-              window.opener?.postMessage({ type: "composio:connected", provider }, "*");
+              window.opener?.postMessage({ type: "composio:connected", provider, connectionId }, "*");
             } catch {}
             setTimeout(() => {
               if (!cancelled) {
@@ -122,7 +123,7 @@ function ComposioCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, provider, returnTo, isPopup, navigate]);
+  }, [projectId, provider, connectionId, returnTo, isPopup, navigate]);
 
   const providerLabel = provider === "googleads" ? "Google Ads" : provider === "slack" ? "Slack" : provider;
 

@@ -13,6 +13,7 @@ export {
 export { createDb, type HarnessDb } from "../db/client";
 
 export {
+  agentConnectionBindings,
   agents,
   agentTasks,
   approvals,
@@ -27,6 +28,7 @@ export {
 export { createAiSdkModel, resolveAiSdkProvider } from "../llm/model";
 export { getProjectPersistence, openProjectDb } from "../persistence/index";
 export {
+  type AgentConnectionBindingRecord,
   type AgentRecord,
   createProjectRepositories,
   type LessonRecord,

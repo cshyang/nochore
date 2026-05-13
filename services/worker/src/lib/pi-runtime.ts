@@ -13,7 +13,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { getModel, getModels, getProviders, registerBuiltInApiProviders } from "@mariozechner/pi-ai";
 import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentToolDefinition } from "@nochore/harness";
-import { logger } from "@trigger.dev/sdk/v3";
+import { logger } from "@trigger.dev/sdk";
 import type { AgentExecutionResult, AgentExecutor, AgentExecutorConfig } from "./agent-executor";
 
 let providersRegistered = false;

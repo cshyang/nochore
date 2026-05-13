@@ -244,3 +244,28 @@ export const connections = sqliteTable(
   },
   (table) => [index("idx_connections_project_provider").on(table.projectId, table.provider)],
 );
+
+export const agentConnectionBindings = sqliteTable(
+  "agent_connection_bindings",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    provider: text("provider").notNull(),
+    connectionId: text("connection_id").notNull(),
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    resourceLabel: text("resource_label"),
+    alias: text("alias").notNull(),
+    purpose: text("purpose"),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    status: text("status").notNull().default("active"),
+    config: text("config"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_agent_connection_bindings_agent").on(table.agentId),
+    index("idx_agent_connection_bindings_connection").on(table.connectionId),
+    uniqueIndex("idx_agent_connection_bindings_agent_alias").on(table.agentId, table.alias),
+  ],
+);

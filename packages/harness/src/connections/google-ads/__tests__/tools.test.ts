@@ -12,6 +12,7 @@ vi.mock("../client", () => ({
   }),
 }));
 
+const { createGoogleAdsCustomer } = await import("../client");
 const { getGoogleAdsAgentTools } = await import("../tools");
 
 describe("getGoogleAdsAgentTools", () => {
@@ -21,6 +22,22 @@ describe("getGoogleAdsAgentTools", () => {
     mockQuery.mockReset().mockResolvedValue([]);
     mockMutate.mockReset().mockResolvedValue({ mutate_operation_responses: [] });
     tools = getGoogleAdsAgentTools({ customerId: "1073100792" });
+  });
+
+  it("passes connection-scoped credentials to the Google Ads client", async () => {
+    const credentialScopedTools = getGoogleAdsAgentTools({
+      customerId: "1073100792",
+      refreshToken: "refresh-token",
+      managerCustomerId: "9998887777",
+    });
+    const tool = credentialScopedTools.find((t) => t.name === "googleads_list_campaigns")!;
+    await tool.execute("call-credentials", {});
+
+    expect(createGoogleAdsCustomer).toHaveBeenLastCalledWith({
+      customerId: "1073100792",
+      refreshToken: "refresh-token",
+      managerCustomerId: "9998887777",
+    });
   });
 
   it("returns exactly 6 tools", () => {
@@ -119,6 +136,17 @@ describe("getGoogleAdsAgentTools", () => {
       expect(result.details.successful).toBe(false);
       expect(result.details.error).toBe("API quota exceeded");
       expect(result.content[0].text).toContain("Error executing googleads_list_campaigns");
+    });
+
+    it("explains invalid_grant as a refresh-token reauthorization issue", async () => {
+      mockQuery.mockRejectedValueOnce(new Error("invalid_grant"));
+
+      const tool = tools.find((t) => t.name === "googleads_list_campaigns")!;
+      const result = await tool.execute("call-invalid-grant", {});
+
+      expect(result.details.successful).toBe(false);
+      expect(result.details.error).toContain("refresh token is invalid or expired");
+      expect(result.content[0].text).toContain("Update this project's Google Ads connection refresh token");
     });
 
     it("write tool returns failure when campaign not found", async () => {

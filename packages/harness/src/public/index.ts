@@ -78,8 +78,9 @@ export {
   ToolConfigSchema,
   ToolModeSchema,
 } from "./domain";
-export type { AgentRecord, HarnessDb, LessonRecord } from "./infrastructure";
+export type { AgentConnectionBindingRecord, AgentRecord, HarnessDb, LessonRecord } from "./infrastructure";
 export {
+  agentConnectionBindings,
   agents,
   agentTasks,
   approvals,

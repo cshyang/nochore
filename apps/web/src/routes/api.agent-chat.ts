@@ -18,6 +18,7 @@ import {
   persistConversationMessages,
   resolveConversationThread,
 } from "~/server/chat-memory";
+import { buildChatProviderTools } from "~/server/chat-provider-tools";
 import { getAgentRow, getProjectDeps, listProjectConnections } from "~/server/deps";
 import { startAgentRun } from "~/server/orchestration";
 import { buildPersistentUIMessageStreamOptions } from "~/server/ui-message-stream";
@@ -55,14 +56,13 @@ export const Route = createFileRoute("/api/agent-chat")({
         const deps = getProjectDeps(projectId);
         const latestUserText = extractLatestUserText(rawMessages);
         const shouldCreateThread = createThreadOnFirstMessage && !threadId && latestUserText.length > 0;
-        const thread =
-          shouldCreateThread
-            ? await deps.conversationThreadRepository.createManualWebThread(agentId)
-            : await resolveConversationThread({
-                deps,
-                agentId,
-                requestedThreadId: threadId,
-              });
+        const thread = shouldCreateThread
+          ? await deps.conversationThreadRepository.createManualWebThread(agentId)
+          : await resolveConversationThread({
+              deps,
+              agentId,
+              requestedThreadId: threadId,
+            });
         const createdThreadId = shouldCreateThread ? thread.id : undefined;
 
         await persistConversationMessages({
@@ -80,7 +80,20 @@ export const Route = createFileRoute("/api/agent-chat")({
         });
 
         const projectConnections = listProjectConnections(projectId);
-        const connectedProviders = projectConnections.filter((c) => c.status === "active").map((c) => c.provider);
+        const connectionBindings = await deps.agentConnectionBindingRepository.listByAgent(agentId);
+        const connectedProviders =
+          connectionBindings.length > 0
+            ? connectionBindings.map((binding) =>
+                describeConnectionBinding(binding.provider, binding.alias, binding.resourceLabel, binding.resourceId),
+              )
+            : projectConnections
+                .filter((connection) => connection.status === "active" && typeof connection.provider === "string")
+                .map((connection) => describeConnectedProvider(connection.provider, connection.config));
+        const providerTools = await buildChatProviderTools({
+          userId: `nochore-${projectId}`,
+          connections: projectConnections,
+          bindings: connectionBindings,
+        });
 
         const system = [
           buildAgentChatSystemPrompt({
@@ -109,6 +122,7 @@ export const Route = createFileRoute("/api/agent-chat")({
             totalUsage = usage;
           },
           tools: {
+            ...providerTools,
             trigger_run: {
               description:
                 "Start a background run of this agent. Use when the user asks to run, analyze, check, or investigate something.",
@@ -318,32 +332,30 @@ export const Route = createFileRoute("/api/agent-chat")({
           },
         });
 
-        return result.toUIMessageStreamResponse(
-          {
-            ...buildPersistentUIMessageStreamOptions({
-              originalMessages: rawMessages as UIMessage[],
-              onFinish: async ({ messages, responseMessage }) => {
-                await persistConversationAfterResponse({
-                  deps,
-                  agent,
-                  thread,
-                  messages,
-                  responseMessage,
-                  model,
-                  totalUsage: totalUsage
-                    ? {
-                        inputTokens: totalUsage.inputTokens,
-                        outputTokens: totalUsage.outputTokens,
-                        totalTokens: totalUsage.totalTokens,
-                      }
-                    : undefined,
-                  latestUserText,
-                });
-              },
-            }),
-            messageMetadata: () => (createdThreadId ? { threadId: createdThreadId } : undefined),
-          },
-        );
+        return result.toUIMessageStreamResponse({
+          ...buildPersistentUIMessageStreamOptions({
+            originalMessages: rawMessages as UIMessage[],
+            onFinish: async ({ messages, responseMessage }) => {
+              await persistConversationAfterResponse({
+                deps,
+                agent,
+                thread,
+                messages,
+                responseMessage,
+                model,
+                totalUsage: totalUsage
+                  ? {
+                      inputTokens: totalUsage.inputTokens,
+                      outputTokens: totalUsage.outputTokens,
+                      totalTokens: totalUsage.totalTokens,
+                    }
+                  : undefined,
+                latestUserText,
+              });
+            },
+          }),
+          messageMetadata: () => (createdThreadId ? { threadId: createdThreadId } : undefined),
+        });
       },
     },
   },
@@ -366,4 +378,48 @@ function extractLatestUserText(messages: IncomingMessage[]): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function describeConnectedProvider(provider: string, configJson: string | null): string {
+  const config = parseConnectionConfig(configJson);
+  const selectedCustomerId = getGoogleAdsCustomerId(config);
+  if (provider === "googleads") {
+    return selectedCustomerId
+      ? `googleads (project account ${formatGoogleAdsCustomerId(selectedCustomerId)})`
+      : "googleads (project account not selected)";
+  }
+  return provider;
+}
+
+function describeConnectionBinding(
+  provider: string,
+  alias: string,
+  resourceLabel?: string,
+  resourceId?: string,
+): string {
+  if (provider === "googleads") {
+    const account = resourceLabel ?? (resourceId ? formatGoogleAdsCustomerId(resourceId) : null);
+    return account ? `googleads (${alias}: ${account})` : `googleads (${alias})`;
+  }
+  return `${provider} (${alias})`;
+}
+
+function parseConnectionConfig(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function getGoogleAdsCustomerId(config: Record<string, unknown>): string | null {
+  const value = config.selectedCustomerId ?? config.customerId;
+  return typeof value === "string" && value.trim() ? value.replace(/\D/g, "") : null;
+}
+
+function formatGoogleAdsCustomerId(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }

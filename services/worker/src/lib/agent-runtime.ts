@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   type AgentRecord,
+  agentConnectionBindings,
   connections,
   createAiSdkModel,
   createComposioClient,
@@ -16,11 +17,12 @@ import {
   WorkspaceStore,
 } from "@nochore/harness";
 import type { LanguageModel } from "ai";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 type AgentRepositories = Pick<
   ReturnType<typeof createProjectRepositories>,
   | "agentRepository"
+  | "agentConnectionBindingRepository"
   | "approvalRepository"
   | "conversationEventRepository"
   | "conversationThreadRepository"
@@ -37,6 +39,7 @@ export interface AgentRuntime extends AgentRepositories {
   userId: string;
   activeProviders: string[];
   providerConfigs: Record<string, Record<string, unknown>>;
+  providerBindings: AgentProviderBinding[];
 }
 
 export interface PromptBundle {
@@ -44,6 +47,26 @@ export interface PromptBundle {
   user: string;
   selectedSkills: PromptSkill[];
   workspaceKnowledge: string;
+}
+
+export interface AgentProviderBinding {
+  id: string;
+  provider: string;
+  alias: string;
+  connectionId: string;
+  composioConnectedAccountId?: string;
+  connector?: string;
+  resourceType?: string;
+  resourceId?: string;
+  resourceLabel?: string;
+  accountLabel?: string;
+  config: Record<string, unknown>;
+}
+
+export interface AgentConnectionContext {
+  activeProviders: string[];
+  providerConfigs: Record<string, Record<string, unknown>>;
+  providerBindings: AgentProviderBinding[];
 }
 
 export async function createModel(modelOverride?: string): Promise<LanguageModel> {
@@ -72,10 +95,16 @@ export async function createAgentRuntime(projectId: string): Promise<AgentRuntim
     userId: getComposioUserId(projectId),
     activeProviders: providers,
     providerConfigs: configs,
+    providerBindings: [],
   };
 }
 
-export async function buildPromptBundle(params: { agent: AgentRecord; trigger: RunTrigger }): Promise<PromptBundle> {
+export async function buildPromptBundle(params: {
+  agent: AgentRecord;
+  trigger: RunTrigger;
+  providerConfigs?: Record<string, Record<string, unknown>>;
+  providerBindings?: AgentProviderBinding[];
+}): Promise<PromptBundle> {
   const workspaceStore = new WorkspaceStore(getAgentWorkspacePath(params.agent.projectId, params.agent.id));
   const workspaceKnowledge = (await workspaceStore.readFile("KNOWLEDGE.md")) ?? "";
   const availableSkills = listPromptSkills({ productOnly: true });
@@ -108,6 +137,7 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
     `You are the autonomous operating loop for ${params.agent.name}.`,
     params.agent.description ? `Agent summary:\n${params.agent.description}` : "",
     params.agent.instructions ? `Instructions:\n${params.agent.instructions}` : "",
+    describeProviderConfigContext(params.providerBindings, params.providerConfigs),
     skillSections.length > 0 ? ["Selected skills:", ...skillSections].join("\n\n") : "Selected skills: none",
     workspaceKnowledge ? `Workspace knowledge:\n${workspaceKnowledge}` : "Workspace knowledge: none",
     [
@@ -164,6 +194,56 @@ export async function buildPromptBundle(params: { agent: AgentRecord; trigger: R
     selectedSkills,
     workspaceKnowledge,
   };
+}
+
+function describeProviderConfigContext(
+  providerBindings?: AgentProviderBinding[],
+  providerConfigs?: Record<string, Record<string, unknown>>,
+): string {
+  if (providerBindings && providerBindings.length > 0) {
+    const lines = providerBindings.map((binding) => {
+      if (binding.provider === "googleads") {
+        const resource =
+          binding.resourceLabel ?? (binding.resourceId ? formatGoogleAdsCustomerId(binding.resourceId) : null);
+        const account = binding.accountLabel ? ` via ${binding.accountLabel}` : "";
+        return resource
+          ? `- googleads: ${binding.alias} -> ${resource}${account}`
+          : `- googleads: ${binding.alias}${account}`;
+      }
+      const account = binding.accountLabel ? ` -> ${binding.accountLabel}` : "";
+      return `- ${binding.provider}: ${binding.alias}${account}`;
+    });
+    return ["Connected systems:", ...lines].join("\n");
+  }
+
+  if (!providerConfigs || Object.keys(providerConfigs).length === 0) {
+    return "";
+  }
+
+  const lines = Object.entries(providerConfigs)
+    .map(([provider, config]) => {
+      if (provider === "googleads") {
+        const customerId = getGoogleAdsCustomerId(config);
+        return customerId
+          ? `- googleads: project account ${formatGoogleAdsCustomerId(customerId)}`
+          : "- googleads: project account not selected";
+      }
+      return `- ${provider}: connected`;
+    })
+    .filter(Boolean);
+
+  return lines.length > 0 ? ["Connected systems:", ...lines].join("\n") : "";
+}
+
+function getGoogleAdsCustomerId(config: Record<string, unknown>): string | null {
+  const value = config.selectedCustomerId ?? config.customerId;
+  return typeof value === "string" && value.trim() ? value.replace(/\D/g, "") : null;
+}
+
+function formatGoogleAdsCustomerId(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function frameTrigger(trigger: RunTrigger, schedule?: string): string {
@@ -240,21 +320,184 @@ async function listActiveProvidersWithConfig(
   const rows = (
     db.select().from(connections).where(eq(connections.projectId, projectId)).all() as Array<{
       provider: string;
+      composioEntityId: string | null;
       config: string | null;
       status: string;
+      updatedAt: number;
     }>
-  ).filter((row) => row.status === "active");
+  )
+    .filter((row) => row.status === "active")
+    .sort((left, right) => left.updatedAt - right.updatedAt);
 
   const providers = Array.from(new Set(rows.map((row) => row.provider)));
   const configs: Record<string, Record<string, unknown>> = {};
   for (const row of rows) {
+    let config: Record<string, unknown> = {};
     if (row.config) {
       try {
-        configs[row.provider] = JSON.parse(row.config) as Record<string, unknown>;
+        config = JSON.parse(row.config) as Record<string, unknown>;
       } catch {
         // Invalid JSON in config — skip
       }
     }
+    if (row.composioEntityId) {
+      config.composioConnectedAccountId = row.composioEntityId;
+      config.connector = "composio";
+    }
+    configs[row.provider] = config;
   }
   return { providers, configs };
+}
+
+export async function resolveAgentConnectionContext(params: {
+  db: HarnessDb;
+  projectId: string;
+  agent: AgentRecord;
+}): Promise<AgentConnectionContext> {
+  const rows = params.db
+    .select({
+      binding: agentConnectionBindings,
+      connection: connections,
+    })
+    .from(agentConnectionBindings)
+    .innerJoin(connections, eq(agentConnectionBindings.connectionId, connections.id))
+    .where(
+      and(
+        eq(agentConnectionBindings.agentId, params.agent.id),
+        eq(agentConnectionBindings.status, "active"),
+        eq(connections.status, "active"),
+      ),
+    )
+    .all();
+
+  const explicitBindings = rows.map(({ binding, connection }) =>
+    toAgentProviderBinding({
+      binding,
+      connection,
+      purpose: "explicit",
+    }),
+  );
+
+  const providerBindings =
+    explicitBindings.length > 0
+      ? explicitBindings
+      : await resolveImplicitProviderBindings({
+          db: params.db,
+          projectId: params.projectId,
+          agent: params.agent,
+        });
+  const activeProviders = Array.from(new Set(providerBindings.map((binding) => binding.provider)));
+  const providerConfigs: Record<string, Record<string, unknown>> = {};
+  for (const binding of providerBindings) {
+    if (!providerConfigs[binding.provider] || binding.config.isDefault === true || binding.config.isDefault === 1) {
+      providerConfigs[binding.provider] = binding.config;
+    }
+  }
+
+  return { activeProviders, providerConfigs, providerBindings };
+}
+
+async function resolveImplicitProviderBindings(params: {
+  db: HarnessDb;
+  projectId: string;
+  agent: AgentRecord;
+}): Promise<AgentProviderBinding[]> {
+  const requiredProviders = params.agent.toolConfig.requiredProviders.map((requirement) => requirement.provider);
+  if (requiredProviders.length === 0) {
+    return [];
+  }
+  const activeRows = (
+    params.db.select().from(connections).where(eq(connections.projectId, params.projectId)).all() as Array<
+      typeof connections.$inferSelect
+    >
+  )
+    .filter((row) => row.status === "active" && requiredProviders.includes(row.provider))
+    .sort((left, right) => left.updatedAt - right.updatedAt);
+
+  const latestByProvider = new Map<string, typeof connections.$inferSelect>();
+  for (const row of activeRows) {
+    latestByProvider.set(row.provider, row);
+  }
+
+  return [...latestByProvider.values()].map((connection) =>
+    toAgentProviderBinding({
+      binding: null,
+      connection,
+      purpose: "implicit_required_provider",
+    }),
+  );
+}
+
+function toAgentProviderBinding(params: {
+  binding: typeof agentConnectionBindings.$inferSelect | null;
+  connection: typeof connections.$inferSelect;
+  purpose: string;
+}): AgentProviderBinding {
+  const connectionConfig = parseConfig(params.connection.config);
+  const bindingConfig = parseConfig(params.binding?.config ?? null);
+  const resourceId =
+    params.binding?.resourceId ??
+    (params.connection.provider === "googleads" ? getGoogleAdsCustomerId(connectionConfig) : null);
+  const resourceLabel =
+    params.binding?.resourceLabel ??
+    (params.connection.provider === "googleads" && resourceId ? formatGoogleAdsCustomerId(resourceId) : null);
+  const alias = params.binding?.alias ?? defaultBindingAlias(params.connection.provider, resourceId);
+  const accountLabel = getConnectionAccountLabel(params.connection, connectionConfig);
+  const config = {
+    ...connectionConfig,
+    ...bindingConfig,
+    connectionId: params.connection.id,
+    bindingId: params.binding?.id ?? null,
+    alias,
+    accountLabel,
+    isDefault: params.binding?.isDefault ?? true,
+    purpose: params.binding?.purpose ?? params.purpose,
+    ...(params.connection.composioEntityId
+      ? { composioConnectedAccountId: params.connection.composioEntityId, connector: "composio" }
+      : {}),
+    ...(resourceId ? { selectedCustomerId: resourceId, resourceId } : {}),
+    ...(resourceLabel ? { selectedCustomerLabel: resourceLabel, resourceLabel } : {}),
+    ...(params.binding?.resourceType ? { resourceType: params.binding.resourceType } : {}),
+  };
+
+  return {
+    id: params.binding?.id ?? `implicit:${params.connection.id}`,
+    provider: params.connection.provider,
+    alias,
+    connectionId: params.connection.id,
+    composioConnectedAccountId: params.connection.composioEntityId ?? undefined,
+    connector: params.connection.composioEntityId ? "composio" : "direct",
+    resourceType:
+      params.binding?.resourceType ?? (params.connection.provider === "googleads" ? "google_ads_customer" : undefined),
+    resourceId: resourceId ?? undefined,
+    resourceLabel: resourceLabel ?? undefined,
+    accountLabel,
+    config,
+  };
+}
+
+function parseConfig(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getConnectionAccountLabel(
+  connection: typeof connections.$inferSelect,
+  config: Record<string, unknown>,
+): string | undefined {
+  const value = config.accountLabel ?? config.email ?? config.loginEmail ?? config.selectedCustomerLabel;
+  if (typeof value === "string" && value.trim()) return value;
+  return connection.composioEntityId ?? undefined;
+}
+
+function defaultBindingAlias(provider: string, resourceId: string | null): string {
+  if (provider === "googleads" && resourceId) {
+    return `googleads_${resourceId.replace(/\D/g, "")}`;
+  }
+  return provider;
 }

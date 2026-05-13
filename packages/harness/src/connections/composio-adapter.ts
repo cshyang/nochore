@@ -9,6 +9,7 @@ export interface ComposioRawTool {
   slug: string;
   name: string;
   description: string;
+  inputParameters?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   parameters?: Record<string, unknown>;
 }
@@ -29,7 +30,12 @@ export interface ComposioCatalogEntry {
 }
 
 export interface ComposioAdapter {
-  execute(params: { userId: string; toolSlug: string; args: Record<string, unknown> }): Promise<ComposioExecuteResult>;
+  execute(params: {
+    userId: string;
+    toolSlug: string;
+    args: Record<string, unknown>;
+    connectedAccountId?: string;
+  }): Promise<ComposioExecuteResult>;
 
   getRawTools(params: {
     userId: string;
@@ -54,9 +60,10 @@ export async function createComposioAdapter(opts?: { apiKey?: string }): Promise
   const catalogClient = (composio as unknown as ComposioCatalogClient).client;
 
   return {
-    async execute({ userId, toolSlug, args }) {
+    async execute({ userId, toolSlug, args, connectedAccountId }) {
       return (await composio.tools.execute(toolSlug, {
         userId,
+        ...(connectedAccountId ? { connectedAccountId } : {}),
         arguments: args,
         dangerouslySkipVersionCheck: true,
       })) as ComposioExecuteResult;

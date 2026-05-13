@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createDb, createTestDb } from "../client";
 import {
+  agentConnectionBindings,
   agents,
   agentTasks,
   approvals,
@@ -453,9 +454,39 @@ describe("simplified schema", () => {
       expect(legacyTable).toBeUndefined();
       expect(approvalColumns.some((column) => column.name === "agent_task_id")).toBe(true);
       expect(approvalColumns.some((column) => column.name === "work_item_id")).toBe(false);
-      expect(version).toBe(4);
+      expect(version).toBe(5);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("stores agent connection bindings for project-level connection grants", () => {
+    const db = createTestDb();
+    const now = Date.now();
+
+    db.insert(agentConnectionBindings)
+      .values({
+        id: "binding_001",
+        agentId: "agent_001",
+        provider: "googleads",
+        connectionId: "conn_001",
+        resourceType: "google_ads_customer",
+        resourceId: "1073100792",
+        resourceLabel: "107-310-0792",
+        alias: "googleads_1073100792",
+        purpose: "Primary Google Ads account",
+        isDefault: true,
+        status: "active",
+        config: JSON.stringify({ source: "user" }),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const row = db.select().from(agentConnectionBindings).where(eq(agentConnectionBindings.id, "binding_001")).get();
+    expect(row?.provider).toBe("googleads");
+    expect(row?.connectionId).toBe("conn_001");
+    expect(row?.resourceId).toBe("1073100792");
+    expect(row?.alias).toBe("googleads_1073100792");
   });
 });

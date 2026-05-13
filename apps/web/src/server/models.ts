@@ -1,4 +1,5 @@
 import type {
+  AgentConnectionBindingRecord,
   AgentRecord,
   AgentTaskRecord,
   ApprovalRecord,
@@ -107,6 +108,7 @@ export function buildAgentView(params: {
   approvals: ApprovalRecord[];
   lessonsCount: number;
   activeConnections: Array<{ provider: string; reason?: string | null }>;
+  connectionBindings?: AgentConnectionBindingRecord[];
   learnedRuleSuggestions?: LearnedPolicyRule[];
   learnedRules?: LearnedPolicyRule[];
   metricEvents?: RunEvent[];
@@ -160,6 +162,7 @@ export function buildAgentView(params: {
       provider: connection.provider,
       reason: connection.reason ?? "",
     })),
+    connectionBindings: (params.connectionBindings ?? []).map(buildAgentConnectionBindingView),
     toolConfig: {
       globalApprovalRequired: params.agent.toolConfig.globalApprovalRequired ?? false,
       requiredProviders: params.agent.toolConfig.requiredProviders.map((provider) => ({
@@ -186,7 +189,7 @@ export function buildConnectionView(row: typeof connections.$inferSelect): Conne
   let parsedConfig: Record<string, unknown> | undefined;
   if (row.config) {
     try {
-      parsedConfig = JSON.parse(row.config);
+      parsedConfig = redactConnectionConfig(JSON.parse(row.config));
     } catch {
       // Invalid JSON — skip
     }
@@ -200,7 +203,72 @@ export function buildConnectionView(row: typeof connections.$inferSelect): Conne
     connectedAccountId: row.composioEntityId ?? null,
     config: parsedConfig,
     authorizedByUserId: row.authorizedByUserId ?? null,
+    label: buildConnectionLabel(row.provider, parsedConfig, row.composioEntityId),
+    accountLabel: getAccountLabel(parsedConfig, row.composioEntityId),
+    connector: row.composioEntityId ? "composio" : "direct",
+    resourceSummary: buildResourceSummary(row.provider, parsedConfig),
   };
+}
+
+function buildAgentConnectionBindingView(binding: AgentConnectionBindingRecord) {
+  return {
+    id: binding.id,
+    agentId: binding.agentId,
+    provider: binding.provider,
+    connectionId: binding.connectionId,
+    resourceType: binding.resourceType,
+    resourceId: binding.resourceId,
+    resourceLabel: binding.resourceLabel,
+    alias: binding.alias,
+    purpose: binding.purpose,
+    isDefault: binding.isDefault,
+    status: binding.status,
+    config: binding.config,
+  };
+}
+
+function redactConnectionConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const redacted = { ...config };
+  for (const key of Object.keys(redacted)) {
+    if (/token|secret|password/i.test(key)) {
+      redacted[key] = "";
+      redacted[`${key}Configured`] = true;
+    }
+  }
+  return redacted;
+}
+
+function buildConnectionLabel(
+  provider: string,
+  config: Record<string, unknown> | undefined,
+  connectedAccountId: string | null,
+): string {
+  const accountLabel = getAccountLabel(config, connectedAccountId);
+  return accountLabel ? `${provider}: ${accountLabel}` : provider;
+}
+
+function getAccountLabel(
+  config: Record<string, unknown> | undefined,
+  connectedAccountId: string | null,
+): string | null {
+  const value = config?.accountLabel ?? config?.email ?? config?.loginEmail ?? config?.selectedCustomerLabel;
+  return typeof value === "string" && value.trim() ? value : connectedAccountId;
+}
+
+function buildResourceSummary(provider: string, config: Record<string, unknown> | undefined): string | null {
+  if (provider === "googleads") {
+    const value = config?.selectedCustomerId ?? config?.customerId;
+    if (typeof value === "string" && value.trim()) {
+      return `Google Ads customer ${formatGoogleAdsCustomerId(value)}`;
+    }
+  }
+  return null;
+}
+
+function formatGoogleAdsCustomerId(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 export function buildProjectView(params: {

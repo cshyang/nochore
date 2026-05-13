@@ -1,22 +1,22 @@
-import { type AgentToolDefinition, getGoogleAdsAgentTools } from "@nochore/harness";
-import { logger } from "@trigger.dev/sdk/v3";
+import type { AgentToolDefinition } from "@nochore/harness";
+import { logger } from "@trigger.dev/sdk";
+import type { AgentProviderBinding } from "./agent-runtime";
 import { getComposioAgentTools } from "./composio-agent-tools";
 
 export interface ToolProviderContext {
   userId: string;
   activeProviders: string[];
   providerConfigs: Record<string, Record<string, unknown>>;
+  providerBindings?: AgentProviderBinding[];
 }
 
 interface ToolProviderDeps {
   getComposioAgentTools: typeof getComposioAgentTools;
-  getGoogleAdsAgentTools: typeof getGoogleAdsAgentTools;
   warn: (message: string) => void;
 }
 
 const defaultDeps: ToolProviderDeps = {
   getComposioAgentTools,
-  getGoogleAdsAgentTools,
   warn: (message) => logger.warn(message),
 };
 
@@ -27,24 +27,15 @@ export async function listProviderTools(
   deps: ToolProviderDeps = defaultDeps,
 ): Promise<AgentToolDefinition[]> {
   const tools: AgentToolDefinition[] = [];
-  const composioProviders = context.activeProviders.filter((provider) => provider !== "googleads");
-
-  if (context.activeProviders.includes("googleads")) {
-    // Google Ads stays on the direct connector until the Composio integration is reliable enough
-    // to collapse this branch back into the generic provider flow.
-    const customerId = context.providerConfigs.googleads?.customerId;
-    if (typeof customerId === "string" && customerId.length > 0) {
-      tools.push(...deps.getGoogleAdsAgentTools({ customerId }));
-    } else {
-      deps.warn("Google Ads connection active but no customerId in config - skipping tools");
-    }
-  }
+  const composioProviders = context.activeProviders;
 
   if (composioProviders.length > 0) {
     tools.push(
       ...(await deps.getComposioAgentTools({
         userId: context.userId,
         toolkits: composioProviders,
+        providerConfigs: context.providerConfigs,
+        providerBindings: context.providerBindings,
       })),
     );
   }

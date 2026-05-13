@@ -1,5 +1,5 @@
 import type { AgentRecord } from "@nochore/harness";
-import { metadata, wait } from "@trigger.dev/sdk/v3";
+import { metadata, wait } from "@trigger.dev/sdk";
 import type { AgentRuntime } from "./agent-runtime";
 import { recordEvent } from "./event-recording";
 

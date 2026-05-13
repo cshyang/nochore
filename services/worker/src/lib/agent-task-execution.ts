@@ -1,8 +1,8 @@
 import { type AgentRecord, type AgentToolDefinition, getAgentWorkspacePath } from "@nochore/harness";
-import { logger, metadata } from "@trigger.dev/sdk/v3";
+import { logger, metadata } from "@trigger.dev/sdk";
 import type { AgentExecutor } from "./agent-executor";
 import type { AgentRuntime } from "./agent-runtime";
-import { buildAgentTaskPrompt } from "./agent-runtime";
+import { buildAgentTaskPrompt, resolveAgentConnectionContext } from "./agent-runtime";
 import { type AgentSessionSpec, runAgentSession } from "./agent-session";
 import { ApprovalCheckpointError } from "./run-helpers";
 import { buildAgentTaskToolEnvelope } from "./tool-envelope";
@@ -81,11 +81,18 @@ export async function runAgentTaskExecution(spec: AgentTaskExecutionSpec): Promi
   try {
     const providerTools =
       spec.providerTools ??
-      (await listProviderTools({
-        userId: spec.runtime.userId,
-        activeProviders: spec.runtime.activeProviders,
-        providerConfigs: spec.runtime.providerConfigs,
-      }));
+      (await resolveAgentConnectionContext({
+        db: spec.runtime.db,
+        projectId: spec.projectId,
+        agent: spec.agent,
+      }).then((connectionContext) =>
+        listProviderTools({
+          userId: spec.runtime.userId,
+          activeProviders: connectionContext.activeProviders,
+          providerConfigs: connectionContext.providerConfigs,
+          providerBindings: connectionContext.providerBindings,
+        }),
+      ));
     const taskTools = buildAgentTaskToolEnvelope(providerTools);
     const workspacePath = getAgentWorkspacePath(spec.projectId, spec.agentId);
     const taskPrompt = buildAgentTaskExecutionPrompt({

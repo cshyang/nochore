@@ -19,7 +19,7 @@ trigger.config.ts      → trigger.dev config (root, points to services/worker/)
 ### Tech Stack
 
 - **Vercel AI SDK** (`ai` + `@ai-sdk/anthropic`) — all LLM calls (pipeline + chat)
-- **trigger.dev v3** — durable pipeline orchestration, cron, checkpoint/resume
+- **Trigger.dev v4** — durable pipeline orchestration, cron, checkpoint/resume
 - **Zod** — all validation (types, tool schemas, skill outputs)
 - **SQLite via Drizzle ORM** — operational state (runs, events, lessons, chat, approvals)
 - **Composio SDK** (`@composio/vercel`) — OAuth + API integrations (native tools, not MCP)
@@ -66,10 +66,12 @@ Key directories inside `apps/web/src/`:
 - `lib/agent-task-coordinator.ts` — AgentTask coordinator; owns `delegate_task`, task creation, `triggerAndWait`, task events, and best-effort failure handling
 - `lib/agent-task-execution.ts` — AgentTask execution contract; owns task-specific prompt/tool scope and typed task results
 - `lib/agent-executor.ts` — Neutral executor contract for swappable agent runtime adapters
+- `lib/agent-executor-selector.ts` — Chooses the executor via `AGENT_EXECUTOR=flue|pi` (default: `flue`)
 - `lib/agent-session.ts` — Shared executor-neutral session kernel (events, policy gate, approvals, metrics)
 - `lib/tool-envelope.ts` — Lead/task tool envelope builders and reserved-name validation
 - `lib/run-helpers.ts` — Shared runtime helper barrel
-- `lib/pi-runtime.ts` — pi-coding-agent adapter implementing `defaultAgentExecutor`
+- `lib/flue-runtime.ts` — Default Flue executor adapter and helper wrappers
+- `lib/pi-runtime.ts` — Deprecated pi-coding-agent fallback adapter, used only with `AGENT_EXECUTOR=pi`
 
 ## Key Documents
 

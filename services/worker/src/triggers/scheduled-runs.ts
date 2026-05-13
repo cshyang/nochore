@@ -1,4 +1,4 @@
-import { schedules } from "@trigger.dev/sdk/v3";
+import { schedules } from "@trigger.dev/sdk";
 import { agentRunTask } from "./agent-run";
 
 // ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ import { agentRunTask } from "./agent-run";
  * Schedules are created dynamically when agents are configured:
  *
  * ```ts
- * import { schedules } from "@trigger.dev/sdk/v3";
+ * import { schedules } from "@trigger.dev/sdk";
  *
  * await schedules.create({
  *   task: "scheduled-agent-run",
