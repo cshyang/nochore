@@ -33,7 +33,7 @@ function ProjectIndexPage() {
           to: "/$projectId/agents/$agentId",
           params: { projectId: project.id, agentId: id },
           search: {
-            tab: options?.tab,
+            tab: (options?.tab ?? "chat") as "runs" | "chat" | "learned" | "settings",
             runId: options?.runId,
             pendingActionId: options?.pendingActionId,
           },

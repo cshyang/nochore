@@ -54,7 +54,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
   validateSearch: (
     search: Record<string, unknown>,
   ): {
-    tab?: "runs" | "chat" | "learned" | "settings";
+    tab: "runs" | "chat" | "learned" | "settings";
     workItemId?: string;
     runId?: string;
     threadId?: string;
@@ -63,7 +63,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
     tab:
       search.tab === "runs" || search.tab === "chat" || search.tab === "learned" || search.tab === "settings"
         ? search.tab
-        : undefined,
+        : "chat",
     runId: typeof search.runId === "string" ? search.runId : undefined,
     workItemId: typeof search.workItemId === "string" ? search.workItemId : undefined,
     threadId: typeof search.threadId === "string" ? search.threadId : undefined,
@@ -301,7 +301,7 @@ function AgentDetailPage() {
       void navigate({
         to: "/$projectId/agents/$agentId",
         params: { projectId, agentId },
-        search: (prev) => ({ ...prev, workItemId: undefined, runId: runId ?? undefined }),
+        search: (prev) => ({ ...prev, tab: prev.tab ?? "chat", workItemId: undefined, runId: runId ?? undefined }),
         replace: true,
       });
     },
@@ -315,6 +315,7 @@ function AgentDetailPage() {
         params: { projectId, agentId },
         search: (prev) => ({
           ...prev,
+          tab: prev.tab ?? "chat",
           workItemId: workItemId ?? undefined,
           runId: runId ?? undefined,
         }),

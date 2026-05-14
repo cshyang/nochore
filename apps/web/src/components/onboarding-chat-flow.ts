@@ -40,7 +40,7 @@ export function useOnboardingChatFlow(params: {
         navigate({
           to: "/$projectId/agents/$agentId",
           params: { projectId: params.projectId, agentId },
-          search: { tab: undefined, runId: undefined, pendingActionId: undefined },
+          search: { tab: "chat" as const, runId: undefined, pendingActionId: undefined },
         });
       }, 1500);
     },
