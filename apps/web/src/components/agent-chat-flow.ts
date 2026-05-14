@@ -3,8 +3,8 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
-import type { AgentView, RunView } from "~/lib/types";
 import { isRequestInputPart } from "~/components/onboarding-chat-messages";
+import type { AgentView, RunView } from "~/lib/types";
 
 type ChatMessageMetadata = {
   threadId?: string;
@@ -35,7 +35,7 @@ export function useAgentChatFlow(params: {
   agent: AgentView;
   runs: RunView[];
   initialMessages?: UIMessage[];
-  onRunTriggered?: (runId: string, triggerRunId: string) => void;
+  onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   onThreadCreated?: (threadId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -75,8 +75,9 @@ export function useAgentChatFlow(params: {
     messageMetadataSchema: ChatMessageMetadataSchema,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onFinish: ({ message }) => {
-      if (params.draftThreadOpen && message.metadata?.threadId) {
-        params.onThreadCreated?.(message.metadata.threadId);
+      const metadata = message.metadata as { threadId?: string } | undefined;
+      if (params.draftThreadOpen && metadata?.threadId) {
+        params.onThreadCreated?.(metadata.threadId);
       }
 
       for (const part of message.parts) {
@@ -86,9 +87,9 @@ export function useAgentChatFlow(params: {
           (type === "dynamic-tool" && record.toolName === "trigger_run") ||
           (typeof type === "string" && type.startsWith("tool-") && type.includes("trigger_run"));
         if (!isTriggerRun || record.state !== "output-available") continue;
-        const output = record.output as { runId?: string; triggerRunId?: string } | undefined;
+        const output = record.output as { runId?: string; triggerRunId?: string; workItemId?: string } | undefined;
         if (output?.runId && output.triggerRunId) {
-          params.onRunTriggered?.(output.runId, output.triggerRunId);
+          params.onRunTriggered?.(output.runId, output.triggerRunId, output.workItemId);
           return;
         }
       }
@@ -166,12 +167,9 @@ export function useAgentChatFlow(params: {
         const answers = value.split("\n");
         for (let index = 0; index < pendingToolParts.length; index += 1) {
           const toolCallId = pendingToolParts[index].toolCallId as string;
-          const input = pendingToolParts[index].input as
-            | { options?: unknown[]; allowCustom?: boolean }
-            | undefined;
+          const input = pendingToolParts[index].input as { options?: unknown[]; allowCustom?: boolean } | undefined;
           const answer = answers[index] ?? "_skipped";
-          const isTextOnly =
-            (!input?.options || (input.options as unknown[]).length === 0) && input?.allowCustom;
+          const isTextOnly = (!input?.options || (input.options as unknown[]).length === 0) && input?.allowCustom;
 
           addToolOutput({
             tool: "request_input" as never,

@@ -39,25 +39,32 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
       type="button"
       onClick={onClick}
       style={{
-        background: COLORS.surface,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: RADIUS.sm,
-        padding: 16,
+        // Raised card with hairline top-edge highlight — depth via luminance + inset
+        // highlight, no drop shadow (per design system: "depth via color, not shadows").
+        // Larger radius + stronger border + roomier padding follow the Codex card recipe:
+        // make the card read as a physical object, not a text container.
+        background: COLORS.cardRaised,
+        border: `1px solid ${COLORS.borderStrong}`,
+        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+        borderRadius: RADIUS.lg,
+        padding: 20,
         cursor: "pointer",
-        transition: `border-color ${transition}`,
+        transition: `background ${transition}, border-color ${transition}`,
         textAlign: "left",
         width: "100%",
         display: "flex",
         flexDirection: "column",
         gap: 8,
         fontFamily: "inherit",
-        minHeight: 120,
+        minHeight: 132,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = COLORS.borderStrong;
+        e.currentTarget.style.background = COLORS.cardRaisedHover;
+        e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.18)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = COLORS.border;
+        e.currentTarget.style.background = COLORS.cardRaised;
+        e.currentTarget.style.borderColor = COLORS.borderStrong;
       }}
     >
       {/* Row 1: Status dot + name + draft badge */}

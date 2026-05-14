@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { RunSummary, RunTrigger } from "@nochore/harness";
 import {
   type AgentRecord,
@@ -7,6 +8,7 @@ import {
   getAgentWorkspacePath,
 } from "@nochore/harness";
 import { logger, metadata, task } from "@trigger.dev/sdk";
+import type { UIMessage } from "ai";
 import { buildPromptBundle, createAgentRuntime, resolveAgentConnectionContext } from "../lib/agent-runtime";
 import { runAgentSession } from "../lib/agent-session";
 import { createDelegateTaskTool } from "../lib/agent-task-coordinator";
@@ -25,6 +27,13 @@ export const agentRunTask = task({
     }
 
     const runId = await ensureRunRecord(runtime, agent, payload.runId, payload.trigger);
+    const workItem = await ensureWorkItemForRun(runtime, agent, runId, payload.trigger);
+    await runtime.workItemRepository.markRunning(workItem.id);
+    await runtime.agentSessionRepository.update(workItem.sessionId, {
+      status: "working",
+      activeWorkItemId: workItem.id,
+      lastActiveAt: new Date(),
+    });
     const eventIds: string[] = [];
     const connectionContext = await resolveAgentConnectionContext({
       db: runtime.db,
@@ -72,6 +81,36 @@ export const agentRunTask = task({
           eventIds,
         }),
       });
+      const contextSnapshotId = await runtime.contextSnapshotRepository.create({
+        sessionId: workItem.sessionId,
+        agentId: agent.id,
+        workItemId: workItem.id,
+        kind: workItem.kind === "scheduled_check" ? "scheduled_check" : "work_item",
+        messagesVersion: `trigger:${payload.trigger.type}`,
+        memoryVersion: `lessons:${(await runtime.lessonRepository.listByAgent(agent.id)).length}`,
+        toolBindingsVersion: hashVersion(
+          "tools",
+          allTools
+            .map((tool) => tool.name)
+            .sort()
+            .join(","),
+        ),
+        policyVersion: hashVersion("policy", JSON.stringify(agent.toolConfig)),
+        promptHash: hashVersion("prompt", promptBundle.system),
+        payload: {
+          executor: process.env.AGENT_EXECUTOR ?? "flue",
+          triggerType: payload.trigger.type,
+          systemLength: promptBundle.system.length,
+          userLength: promptBundle.user.length,
+          selectedSkills: promptBundle.selectedSkills.map((skill) => skill.id),
+          toolNames: allTools.map((tool) => tool.name).sort(),
+          activeProviders: connectionContext.activeProviders,
+        },
+      });
+      await runtime.agentSessionRepository.update(workItem.sessionId, {
+        lastContextSnapshotId: contextSnapshotId,
+        lastActiveAt: new Date(),
+      });
 
       logger.info("Lead prompt context assembled", {
         skills: promptBundle.selectedSkills.map((s) => s.id),
@@ -110,8 +149,17 @@ export const agentRunTask = task({
       const completeId = await recordEvent(runtime, runId, agent.id, "run_completed", completePayload);
       eventIds.push(completeId);
       metadata.set("status", "completed");
+      await runtime.workItemRepository.complete(workItem.id, new Date(), {
+        runId,
+        summary,
+      });
+      await runtime.agentSessionRepository.update(workItem.sessionId, {
+        status: "idle",
+        activeWorkItemId: null,
+        lastActiveAt: new Date(),
+      });
 
-      await recordRunResultInConversation(runtime, agent.id, summary);
+      await recordRunResultInConversation(runtime, agent.id, runId, summary, payload.trigger);
 
       const durableLessons = await runtime.lessonRepository.listDurableByAgent(agent.id);
       const existingInsights = durableLessons
@@ -177,6 +225,8 @@ export const agentRunTask = task({
           agentId: agent.id,
           error,
           eventIds,
+          workItemId: workItem.id,
+          sessionId: workItem.sessionId,
         });
         logger.info("Agent run stopped", { runId, agentId: agent.id, reason: message, cause: error.stopCause });
         return { runId, agentId: agent.id, stopped: true };
@@ -196,7 +246,16 @@ export const agentRunTask = task({
       eventIds.push(failId);
       metadata.set("status", "failed");
       await runtime.runRepository.fail(runId, new Date(), message, summary);
-      await recordRunResultInConversation(runtime, agent.id, summary);
+      await runtime.workItemRepository.fail(workItem.id, new Date(), message, {
+        runId,
+        summary,
+      });
+      await runtime.agentSessionRepository.update(workItem.sessionId, {
+        status: "failed",
+        activeWorkItemId: null,
+        lastActiveAt: new Date(),
+      });
+      await recordRunResultInConversation(runtime, agent.id, runId, summary, payload.trigger);
       logger.error("Agent run failed", { runId, agentId: agent.id, error: message });
       throw error;
     }
@@ -209,6 +268,8 @@ export async function stopRunForApproval(params: {
   agentId: string;
   error: ApprovalCheckpointError;
   eventIds: string[];
+  workItemId?: string;
+  sessionId?: string;
   metadataApi?: { set: (key: string, value: string) => void };
 }) {
   const stopPayload = {
@@ -220,6 +281,16 @@ export async function stopRunForApproval(params: {
   const stopId = await recordEvent(params.runtime, params.runId, params.agentId, "run_stopped", stopPayload);
   params.eventIds.push(stopId);
   await params.runtime.runRepository.stop(params.runId, new Date(), params.error.message);
+  if (params.workItemId) {
+    await params.runtime.workItemRepository.setStatus(params.workItemId, "waiting_for_approval");
+  }
+  if (params.sessionId) {
+    await params.runtime.agentSessionRepository.update(params.sessionId, {
+      status: "waiting_for_approval",
+      activeWorkItemId: params.workItemId ?? null,
+      lastActiveAt: new Date(),
+    });
+  }
   (params.metadataApi ?? metadata).set("status", "stopped");
 }
 
@@ -250,26 +321,128 @@ async function ensureRunRecord(
   });
 }
 
-async function recordRunResultInConversation(
+async function ensureWorkItemForRun(
+  runtime: Awaited<ReturnType<typeof createAgentRuntime>>,
+  agent: AgentRecord,
+  runId: string,
+  trigger: RunTrigger,
+) {
+  const existing = await runtime.workItemRepository.getByRunId(runId);
+  if (existing) {
+    return existing;
+  }
+
+  const session = await runtime.agentSessionRepository.getOrCreateForContext({
+    projectId: agent.projectId,
+    agentId: agent.id,
+    contextKey: defaultRunContextKey(agent.id, trigger),
+    status: "idle",
+  });
+  const id = await runtime.workItemRepository.create({
+    sessionId: session.id,
+    agentId: agent.id,
+    kind: trigger.type === "cron" ? "scheduled_check" : "run",
+    status: "queued",
+    runId,
+    title: trigger.type === "cron" ? "Scheduled check" : "Agent run",
+    input: {
+      triggerType: trigger.type,
+      triggerTimestamp: trigger.timestamp.toISOString(),
+      metadata: trigger.metadata ?? {},
+    },
+  });
+  return (await runtime.workItemRepository.getById(id))!;
+}
+
+function defaultRunContextKey(agentId: string, trigger: RunTrigger): string {
+  const threadId = typeof trigger.metadata?.threadId === "string" ? trigger.metadata.threadId : undefined;
+  if (threadId) {
+    return `web:${threadId}`;
+  }
+  return `agent:${agentId}:${trigger.type}`;
+}
+
+function hashVersion(prefix: string, value: string): string {
+  return `${prefix}:sha256:${crypto.createHash("sha256").update(value).digest("hex")}`;
+}
+
+export async function recordRunResultInConversation(
   runtime: Awaited<ReturnType<typeof createAgentRuntime>>,
   agentId: string,
+  runId: string,
   summary: RunSummary,
+  trigger?: RunTrigger,
 ) {
-  const thread = await runtime.conversationThreadRepository.getOrCreatePrimary(agentId);
-  await runtime.conversationEventRepository.append({
-    threadId: thread.id,
-    agentId,
-    source: "run",
-    role: "system",
-    eventType: "run_result",
-    payload: {
-      status: summary.status,
-      headline: summary.headline,
-      details: summary.details,
-      finalText: summary.finalText,
+  const thread = await resolveRunResultThread(runtime, agentId, trigger);
+  const createdAt = new Date();
+  const messageId = `run-result:${runId}`;
+  const message: UIMessage = {
+    id: messageId,
+    role: "assistant",
+    parts: [{ type: "text", text: formatRunResultMessage(summary) }],
+  };
+
+  await runtime.conversationEventRepository.upsertMessages([
+    {
+      threadId: thread.id,
+      agentId,
+      source: "run",
+      message,
+      createdAt,
     },
-    createdAt: new Date(),
-  });
+  ]);
+  await runtime.conversationEventRepository.upsertStructuredEvents([
+    {
+      threadId: thread.id,
+      agentId,
+      source: "run",
+      role: "system",
+      eventType: "run_result",
+      eventKey: `run:${runId}:result`,
+      messageId,
+      payload: {
+        messageId,
+        runId,
+        status: summary.status,
+        headline: summary.headline,
+        details: summary.details,
+        finalText: summary.finalText,
+      },
+      createdAt: new Date(createdAt.getTime() + 1),
+    },
+  ]);
+  await runtime.conversationThreadRepository.touch(thread.id, createdAt);
+}
+
+async function resolveRunResultThread(
+  runtime: Awaited<ReturnType<typeof createAgentRuntime>>,
+  agentId: string,
+  trigger?: RunTrigger,
+) {
+  const threadId = typeof trigger?.metadata?.threadId === "string" ? trigger.metadata.threadId : undefined;
+  if (threadId) {
+    const thread = await runtime.conversationThreadRepository.getById(threadId);
+    if (thread?.agentId === agentId) {
+      return thread;
+    }
+  }
+
+  return runtime.conversationThreadRepository.getOrCreatePrimary(agentId);
+}
+
+function formatRunResultMessage(summary: RunSummary): string {
+  const sections = [summary.headline.trim()];
+  const finalText = summary.finalText?.trim();
+  if (finalText && finalText !== summary.headline.trim()) {
+    sections.push(finalText);
+  } else if (!finalText && summary.details && summary.details.length > 0) {
+    const visibleDetails = summary.details.filter((detail) => !detail.startsWith("Events recorded:"));
+    if (visibleDetails.length > 0) {
+      sections.push(visibleDetails.join("\n"));
+    }
+  }
+
+  return sections.filter(Boolean).join("\n\n");
 }
 
 function buildSummary(params: {

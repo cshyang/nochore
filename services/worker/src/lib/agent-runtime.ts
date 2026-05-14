@@ -23,14 +23,18 @@ type AgentRepositories = Pick<
   ReturnType<typeof createProjectRepositories>,
   | "agentRepository"
   | "agentConnectionBindingRepository"
+  | "agentSessionRepository"
   | "approvalRepository"
   | "conversationEventRepository"
   | "conversationThreadRepository"
+  | "contextSnapshotRepository"
   | "learnedRuleRepository"
   | "lessonRepository"
   | "runEventRepository"
   | "runRepository"
+  | "sandboxLeaseRepository"
   | "agentTaskRepository"
+  | "workItemRepository"
 >;
 
 export interface AgentRuntime extends AgentRepositories {
@@ -83,14 +87,18 @@ export async function createAgentRuntime(projectId: string): Promise<AgentRuntim
   return {
     db,
     agentRepository: repositories.agentRepository,
+    agentSessionRepository: repositories.agentSessionRepository,
     approvalRepository: repositories.approvalRepository,
     conversationEventRepository: repositories.conversationEventRepository,
     conversationThreadRepository: repositories.conversationThreadRepository,
+    contextSnapshotRepository: repositories.contextSnapshotRepository,
     learnedRuleRepository: repositories.learnedRuleRepository,
     lessonRepository: repositories.lessonRepository,
     runEventRepository: repositories.runEventRepository,
     runRepository: repositories.runRepository,
+    sandboxLeaseRepository: repositories.sandboxLeaseRepository,
     agentTaskRepository: repositories.agentTaskRepository,
+    workItemRepository: repositories.workItemRepository,
     composio,
     userId: getComposioUserId(projectId),
     activeProviders: providers,
@@ -327,6 +335,7 @@ async function listActiveProvidersWithConfig(
     }>
   )
     .filter((row) => row.status === "active")
+    .filter(isUsableConnectionRow)
     .sort((left, right) => left.updatedAt - right.updatedAt);
 
   const providers = Array.from(new Set(rows.map((row) => row.provider)));
@@ -412,6 +421,7 @@ async function resolveImplicitProviderBindings(params: {
     >
   )
     .filter((row) => row.status === "active" && requiredProviders.includes(row.provider))
+    .filter(isUsableConnectionRow)
     .sort((left, right) => left.updatedAt - right.updatedAt);
 
   const latestByProvider = new Map<string, typeof connections.$inferSelect>();
@@ -484,6 +494,18 @@ function parseConfig(value: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function isUsableConnectionRow(
+  row: typeof connections.$inferSelect | { provider: string; composioEntityId: string | null; config: string | null },
+): boolean {
+  if (row.provider !== "googleads") {
+    return true;
+  }
+
+  const config = parseConfig(row.config);
+  const customerId = config.selectedCustomerId ?? config.customerId;
+  return typeof customerId === "string" && customerId.trim().length > 0;
 }
 
 function getConnectionAccountLabel(

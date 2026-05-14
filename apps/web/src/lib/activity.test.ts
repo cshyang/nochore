@@ -26,7 +26,7 @@ const baseAgent: AgentView = {
 describe("activity view helpers", () => {
   it("formats combined approval and active run counts", () => {
     expect(formatAgentActivitySummary({ pendingApprovalCount: 1, activeRunCount: 2 })).toBe(
-      "1 approval, 2 active runs",
+      "1 approval, 2 active work items",
     );
     expect(formatAgentActivitySummary({ pendingApprovalCount: 0, activeRunCount: 0 })).toBeNull();
   });
@@ -39,6 +39,7 @@ describe("activity view helpers", () => {
       activeRunCount: 2,
       pendingApprovalCount: 1,
       activeRunId: "run_2",
+      activeWorkItemId: "work_2",
       runs: [
         {
           id: "run_2",
@@ -52,6 +53,21 @@ describe("activity view helpers", () => {
           tasks: [],
         },
       ],
+      workItems: [
+        {
+          id: "work_2",
+          sessionId: "session_1",
+          agentId: "agent_1",
+          kind: "run",
+          status: "waiting_for_approval",
+          runId: "run_2",
+          title: "Manual run",
+          createdAt: new Date(Date.now() - 30_000).toISOString(),
+          startedAt: new Date(Date.now() - 30_000).toISOString(),
+          childWorkItems: [],
+        },
+      ],
+      sessions: [],
     };
 
     const merged = mergeAgentViewWithActivity(baseAgent, activity);

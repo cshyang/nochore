@@ -27,7 +27,11 @@ export interface SettingsConnectionCardProps {
   onSetConnectionApproval: (mode: ApprovalMode) => void;
   onSetToolApproval: (toolName: string, mode: ApprovalMode) => void;
   onListGoogleAdsAccounts?: (connectionId?: string) => Promise<{ accounts?: GoogleAdsAccountOption[]; error?: string }>;
-  onSetConnectionConfig?: (provider: string, config: Record<string, unknown>) => Promise<void> | void;
+  onSetConnectionConfig?: (
+    provider: string,
+    config: Record<string, unknown>,
+    connectionId?: string,
+  ) => Promise<void> | void;
   onSetAgentConnectionBinding?: (binding: {
     provider: string;
     connectionId: string;
@@ -76,6 +80,8 @@ export function SettingsConnectionCard({
 
   const isBuiltin = connection.provider === "builtin";
   const hasGoogleAdsAccountSelector = connection.provider === "googleads" && Boolean(connection.connectedAccountId);
+  const configuredGoogleAdsCustomerId = getConfiguredGoogleAdsCustomerId(connection.config, binding);
+  const needsGoogleAdsCustomer = connection.provider === "googleads" && !configuredGoogleAdsCustomerId;
   const connectionMode = deriveConnectionMode(tools);
   const ruleCount = scopedRules.length + scopedSuggestions.length;
   const hasConnectionActions = connection.provider !== "builtin";
@@ -111,14 +117,16 @@ export function SettingsConnectionCard({
                   </>
                 ) : (
                   <>
-                    <span style={{ color: COLORS.green }}>●</span> Connected · authorized by{" "}
-                    {connection.authorizedByUserId ?? "you"}
+                    <span style={{ color: needsGoogleAdsCustomer ? COLORS.orange : COLORS.green }}>●</span>{" "}
+                    {needsGoogleAdsCustomer
+                      ? "OAuth connected · choose a Google Ads customer"
+                      : `Connected · authorized by ${connection.authorizedByUserId ?? "you"}`}
                   </>
                 )}
                 {connection.accountLabel ? ` · ${connection.accountLabel}` : ""}
                 {tools.length > 0 ? ` · ${tools.length} tool${tools.length === 1 ? "" : "s"}` : ""}
-                {hasGoogleAdsAccountSelector && getConfiguredGoogleAdsCustomerId(connection.config, binding)
-                  ? ` · ${formatGoogleAdsCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding)!)}`
+                {hasGoogleAdsAccountSelector && configuredGoogleAdsCustomerId
+                  ? ` · ${formatGoogleAdsCustomerId(configuredGoogleAdsCustomerId)}`
                   : ""}
               </div>
             </div>
@@ -210,29 +218,34 @@ export function SettingsConnectionCard({
               binding={binding}
               expanded={expanded}
               onLoadAccounts={onListGoogleAdsAccounts}
-              onSave={(customerId, label) =>
-                onSetAgentConnectionBinding
-                  ? onSetAgentConnectionBinding({
-                      provider: connection.provider,
-                      connectionId: connection.id,
-                      resourceType: "google_ads_customer",
-                      resourceId: customerId,
-                      resourceLabel: label,
-                      alias: `googleads_${customerId.replace(/\D/g, "")}`,
-                      purpose: "Primary Google Ads account for this agent",
-                      isDefault: true,
-                    })
-                  : onSetConnectionConfig?.(connection.provider, {
-                      selectedCustomerId: customerId,
-                      selectedCustomerLabel: label,
-                      selectedCustomerSource: "user",
-                    })
-              }
+              onSave={async (customerId, label) => {
+                await onSetConnectionConfig?.(
+                  connection.provider,
+                  {
+                    selectedCustomerId: customerId,
+                    selectedCustomerLabel: label,
+                    selectedCustomerSource: "user",
+                  },
+                  connection.id,
+                );
+                if (onSetAgentConnectionBinding) {
+                  await onSetAgentConnectionBinding({
+                    provider: connection.provider,
+                    connectionId: connection.id,
+                    resourceType: "google_ads_customer",
+                    resourceId: customerId,
+                    resourceLabel: label,
+                    alias: `googleads_${customerId.replace(/\D/g, "")}`,
+                    purpose: "Primary Google Ads account for this agent",
+                    isDefault: true,
+                  });
+                }
+              }}
             />
           ) : null}
 
           {tools.length > 0 ? (
-            <div style={{ display: "grid" }}>
+            <div style={{ display: "grid", minHeight: 0 }}>
               <div
                 style={{
                   padding: "12px 16px 6px",
@@ -242,7 +255,9 @@ export function SettingsConnectionCard({
                   gap: 8,
                 }}
               >
-                <SectionLabel>{isBuiltin ? "Capabilities" : "Tools"}</SectionLabel>
+                <SectionLabel>
+                  {isBuiltin ? "Capabilities" : "Tools"} ({tools.length})
+                </SectionLabel>
                 {canBulkSet ? (
                   <BulkApprovalControl
                     onApply={(mode) => onSetConnectionApproval(mode)}
@@ -251,15 +266,26 @@ export function SettingsConnectionCard({
                   />
                 ) : null}
               </div>
-              {tools.map((tool, index) => (
-                <ToolApprovalRow
-                  key={tool.toolName}
-                  tool={tool}
-                  readOnly={isBuiltin}
-                  isLast={index === tools.length - 1}
-                  onChange={(mode) => onSetToolApproval(tool.toolName, mode)}
-                />
-              ))}
+              <div
+                style={{
+                  maxHeight: "min(520px, 52vh)",
+                  overflowY: "auto",
+                  overscrollBehavior: "contain",
+                  scrollbarGutter: "stable",
+                  borderTop: tools.length > 8 ? `1px solid ${COLORS.border}` : "none",
+                  borderBottom: tools.length > 8 ? `1px solid ${COLORS.border}` : "none",
+                }}
+              >
+                {tools.map((tool, index) => (
+                  <ToolApprovalRow
+                    key={tool.toolName}
+                    tool={tool}
+                    readOnly={isBuiltin}
+                    isLast={index === tools.length - 1}
+                    onChange={(mode) => onSetToolApproval(tool.toolName, mode)}
+                  />
+                ))}
+              </div>
             </div>
           ) : null}
 
@@ -382,7 +408,7 @@ function GoogleAdsAccountSelector({
 
   return (
     <div style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
-      <SectionLabel>Project account</SectionLabel>
+      <SectionLabel>Google Ads customer</SectionLabel>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <label
           htmlFor={`connection-${connection.id}-googleads-account`}
@@ -429,7 +455,7 @@ function GoogleAdsAccountSelector({
           ))}
         </select>
         <span style={{ fontSize: TYPE.scale.xs, color: saving ? COLORS.accent : COLORS.textDim }}>
-          {saving ? "Saving..." : selectedAccount ? "Selected" : ""}
+          {saving ? "Saving..." : selectedAccount ? "Saved" : ""}
         </span>
       </div>
       {error ? <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>{error}</div> : null}
@@ -620,18 +646,24 @@ function ToolApprovalRow({
         padding: "10px 16px",
         borderBottom: isLast ? "none" : `1px solid ${COLORS.border}`,
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "space-between",
         gap: 12,
       }}
     >
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, paddingTop: 3 }}>
         <div style={{ fontSize: TYPE.scale.sm, fontWeight: TYPE.weight.medium, color: COLORS.text }}>{tool.title}</div>
         {tool.description ? (
-          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 2 }}>{tool.description}</div>
+          <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginTop: 2, overflowWrap: "anywhere" }}>
+            {tool.description}
+          </div>
         ) : null}
       </div>
-      {readOnly ? null : <ApprovalSegmented value={tool.approvalMode} onChange={onChange} compact />}
+      {readOnly ? null : (
+        <div style={{ flexShrink: 0 }}>
+          <ApprovalSegmented value={tool.approvalMode} onChange={onChange} compact />
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { AgentRecord } from "@nochore/harness";
 import { describe, expect, it, vi } from "vitest";
 import { createDelegateTaskTool, handleStoppedAgentTask } from "../lib/agent-task-coordinator";
 import { ApprovalCheckpointError } from "../lib/run-helpers";
-import { stopRunForApproval } from "./agent-run";
+import { recordRunResultInConversation, stopRunForApproval } from "./agent-run";
 import type { AgentTaskRunResult } from "./agent-task-run";
 
 function createEventRuntime() {
@@ -73,6 +73,11 @@ function createCoordinatorRuntime(options: { initialTaskCount?: number } = {}) {
           runStatuses.push(`${id}:running`);
         },
       },
+      workItemRepository: {
+        async getByRunId() {
+          return null;
+        },
+      },
     },
     getEvents: harness.getEvents,
     getCreatedTasks: () => createdTasks,
@@ -132,6 +137,164 @@ describe("stopRunForApproval", () => {
     ]);
     expect(eventIds).toEqual(["evt_1"]);
     expect(metadataStatuses).toEqual(["stopped"]);
+  });
+});
+
+describe("recordRunResultInConversation", () => {
+  it("posts a visible run result to the originating chat thread", async () => {
+    const upsertMessages = vi.fn(async () => []);
+    const upsertStructuredEvents = vi.fn(async () => []);
+    const touch = vi.fn(async () => {});
+    const runtime = {
+      conversationThreadRepository: {
+        async getById(id: string) {
+          return {
+            id,
+            agentId: "agent_123",
+            scope: "manual",
+            channelKind: "web",
+            title: "Investigation",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            consecutiveCompactionFailures: 0,
+          };
+        },
+        getOrCreatePrimary: vi.fn(),
+        touch,
+      },
+      conversationEventRepository: {
+        upsertMessages,
+        upsertStructuredEvents,
+      },
+    };
+
+    await recordRunResultInConversation(
+      runtime as never,
+      "agent_123",
+      "run_123",
+      {
+        status: "completed",
+        headline: "Found wasted spend",
+        finalText: "Pause the duplicate keyword and lower bids on broad terms.",
+        details: ["Tool calls executed: google_ads_search"],
+      },
+      {
+        type: "chat",
+        timestamp: new Date("2026-01-01T00:00:00.000Z"),
+        metadata: { threadId: "thread_chat" },
+      },
+    );
+
+    expect(runtime.conversationThreadRepository.getOrCreatePrimary).not.toHaveBeenCalled();
+    expect(upsertMessages).toHaveBeenCalledWith([
+      expect.objectContaining({
+        threadId: "thread_chat",
+        agentId: "agent_123",
+        source: "run",
+        message: {
+          id: "run-result:run_123",
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: "Found wasted spend\n\nPause the duplicate keyword and lower bids on broad terms.",
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(upsertStructuredEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        threadId: "thread_chat",
+        agentId: "agent_123",
+        source: "run",
+        role: "system",
+        eventType: "run_result",
+        eventKey: "run:run_123:result",
+        messageId: "run-result:run_123",
+        payload: expect.objectContaining({
+          runId: "run_123",
+          status: "completed",
+          headline: "Found wasted spend",
+        }),
+      }),
+    ]);
+    expect(touch.mock.calls[0]?.[0]).toBe("thread_chat");
+  });
+
+  it("falls back to the primary inbox when the trigger thread is missing or mismatched", async () => {
+    const upsertMessages = vi.fn(async () => []);
+    const upsertStructuredEvents = vi.fn(async () => []);
+    const touch = vi.fn(async () => {});
+    const getOrCreatePrimary = vi.fn(async () => ({
+      id: "thread_primary",
+      agentId: "agent_123",
+      scope: "primary",
+      channelKind: "web",
+      title: "Main chat",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      consecutiveCompactionFailures: 0,
+    }));
+    const runtime = {
+      conversationThreadRepository: {
+        async getById() {
+          return {
+            id: "thread_other_agent",
+            agentId: "agent_other",
+            scope: "manual",
+            channelKind: "web",
+            title: "Other",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            consecutiveCompactionFailures: 0,
+          };
+        },
+        getOrCreatePrimary,
+        touch,
+      },
+      conversationEventRepository: {
+        upsertMessages,
+        upsertStructuredEvents,
+      },
+    };
+
+    await recordRunResultInConversation(
+      runtime as never,
+      "agent_123",
+      "run_456",
+      {
+        status: "failed",
+        headline: "Growth Agent failed",
+        details: ["Error: Missing credentials"],
+      },
+      {
+        type: "chat",
+        timestamp: new Date("2026-01-01T00:00:00.000Z"),
+        metadata: { threadId: "thread_other_agent" },
+      },
+    );
+
+    expect(getOrCreatePrimary).toHaveBeenCalledWith("agent_123");
+    expect(upsertMessages.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      threadId: "thread_primary",
+      message: {
+        id: "run-result:run_456",
+        role: "assistant",
+        parts: [{ type: "text", text: "Growth Agent failed\n\nError: Missing credentials" }],
+      },
+    });
+    expect(upsertStructuredEvents.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      threadId: "thread_primary",
+      eventKey: "run:run_456:result",
+      payload: {
+        runId: "run_456",
+        status: "failed",
+        headline: "Growth Agent failed",
+        details: ["Error: Missing credentials"],
+      },
+    });
+    expect(touch.mock.calls[0]?.[0]).toBe("thread_primary");
   });
 });
 

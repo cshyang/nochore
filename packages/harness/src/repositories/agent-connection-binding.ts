@@ -54,11 +54,26 @@ export class AgentConnectionBindingRepository {
   async upsert(input: UpsertAgentConnectionBindingInput): Promise<string> {
     const now = Date.now();
     const alias = input.alias ?? defaultAlias(input.provider, input.resourceId ?? null);
-    const existing = this.db
+    const existingRows = this.db
       .select()
       .from(agentConnectionBindings)
-      .where(and(eq(agentConnectionBindings.agentId, input.agentId), eq(agentConnectionBindings.alias, alias)))
-      .get();
+      .where(
+        and(eq(agentConnectionBindings.agentId, input.agentId), eq(agentConnectionBindings.provider, input.provider)),
+      )
+      .all() as Array<typeof agentConnectionBindings.$inferSelect>;
+    const resourceType = input.resourceType ?? null;
+    const existing =
+      (input.id ? existingRows.find((row) => row.id === input.id) : null) ??
+      (input.isDefault !== false
+        ? existingRows.find(
+            (row) =>
+              row.isDefault &&
+              row.status === "active" &&
+              row.connectionId === input.connectionId &&
+              row.resourceType === resourceType,
+          )
+        : null) ??
+      existingRows.find((row) => row.alias === alias);
 
     if (existing) {
       this.db
@@ -66,9 +81,10 @@ export class AgentConnectionBindingRepository {
         .set({
           provider: input.provider,
           connectionId: input.connectionId,
-          resourceType: input.resourceType ?? null,
+          resourceType,
           resourceId: input.resourceId ?? null,
           resourceLabel: input.resourceLabel ?? null,
+          alias,
           purpose: input.purpose ?? existing.purpose,
           isDefault: input.isDefault ?? existing.isDefault,
           status: input.status ?? existing.status,

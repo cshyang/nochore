@@ -1,6 +1,9 @@
 import { createComposioAdapter } from "@nochore/harness";
 import { TOOLKIT_CATALOG_PROVIDER_SLUGS } from "../lib/provider-metadata";
 
+const COMPOSIO_TOOL_CATALOG_PAGE_SIZE = 1000;
+const COMPOSIO_TOOL_CATALOG_MAX_ITEMS_PER_PROVIDER = 5000;
+
 export interface ComposioToolMeta {
   slug: string;
   name: string;
@@ -11,14 +14,21 @@ export interface ComposioToolMeta {
   tags: string[];
 }
 
-export async function listComposioToolCatalogForProject(_projectId: string): Promise<ComposioToolMeta[]> {
+export async function listComposioToolCatalogForProject(
+  _projectId: string,
+  providers: readonly string[] = TOOLKIT_CATALOG_PROVIDER_SLUGS,
+): Promise<ComposioToolMeta[]> {
   try {
     const adapter = await createComposioAdapter();
 
     const results = await Promise.all(
-      TOOLKIT_CATALOG_PROVIDER_SLUGS.map((provider) =>
+      providers.map((provider) =>
         adapter
-          .listToolkitCatalog({ toolkitSlug: provider, limit: 50 })
+          .listToolkitCatalog({
+            toolkitSlug: provider,
+            limit: COMPOSIO_TOOL_CATALOG_PAGE_SIZE,
+            maxItems: COMPOSIO_TOOL_CATALOG_MAX_ITEMS_PER_PROVIDER,
+          })
           .then((items) =>
             items.map((tool) => ({
               slug: tool.slug,

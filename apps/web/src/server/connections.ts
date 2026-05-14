@@ -270,7 +270,7 @@ export const listConnections = createServerFn({ method: "GET" })
     return jsonSafe(
       rows.map((row) => {
         const summary = summaryBySlug.get(row.provider);
-        return buildConnectionView(row, {
+        return buildConnectionView(normalizeConnectionRowForView(row), {
           logo: summary?.logo ?? null,
           providerName: summary?.name ?? null,
         });
@@ -281,6 +281,10 @@ export const listConnections = createServerFn({ method: "GET" })
 export const createDirectConnection = createServerFn({ method: "POST" })
   .inputValidator((input: { projectId: string; provider: string; config?: Record<string, unknown> }) => input)
   .handler(async ({ data }) => {
+    if (data.provider === "googleads" && !hasGoogleAdsCustomerConfig(data.config ?? {})) {
+      return jsonSafe({ success: false, error: "Google Ads requires OAuth or a selected customer account." });
+    }
+
     const { db } = getProjectDeps(data.projectId);
 
     // Check if an active connection already exists for this provider
@@ -308,19 +312,26 @@ export const createDirectConnection = createServerFn({ method: "POST" })
   });
 
 export const updateConnectionConfig = createServerFn({ method: "POST" })
-  .inputValidator((input: { projectId: string; provider: string; config: Record<string, unknown> }) => input)
+  .inputValidator(
+    (input: { projectId: string; provider: string; config: Record<string, unknown>; connectionId?: string }) => input,
+  )
   .handler(async ({ data }) => {
     const { db } = getProjectDeps(data.projectId);
-    const latest = getLatestConnection(db, data.projectId, data.provider, "active");
-    if (!latest) {
+    const connection = data.connectionId
+      ? db.select().from(connections).where(eq(connections.id, data.connectionId)).get()
+      : getLatestConnection(db, data.projectId, data.provider, "active");
+    if (!connection || connection.projectId !== data.projectId || connection.provider !== data.provider) {
       return jsonSafe({ success: false, error: "No active connection found" });
     }
+    if (connection.status !== "active") {
+      return jsonSafe({ success: false, error: "Connection is not active" });
+    }
 
-    const existing = latest.config ? JSON.parse(latest.config) : {};
+    const existing = parseConnectionConfig(connection.config);
     const merged = { ...existing, ...data.config };
     db.update(connections)
       .set({ config: JSON.stringify(merged), updatedAt: Date.now() })
-      .where(eq(connections.id, latest.id))
+      .where(eq(connections.id, connection.id))
       .run();
 
     return jsonSafe({ success: true });
@@ -491,6 +502,34 @@ function listConnectionsForProvider(db: ProjectDb, projectId: string, provider: 
     : and(eq(connections.projectId, projectId), eq(connections.provider, provider));
 
   return db.select().from(connections).where(filter).all();
+}
+
+function normalizeConnectionRowForView(row: typeof connections.$inferSelect): typeof connections.$inferSelect {
+  if (row.provider !== "googleads" || row.status !== "active" || row.composioEntityId) {
+    return row;
+  }
+
+  const config = parseConnectionConfig(row.config);
+  if (hasGoogleAdsCustomerConfig(config)) {
+    return row;
+  }
+
+  return { ...row, status: "disconnected" };
+}
+
+function parseConnectionConfig(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function hasGoogleAdsCustomerConfig(config: Record<string, unknown>): boolean {
+  const value = config.selectedCustomerId ?? config.customerId;
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function setConnectionStatus(db: ProjectDb, connectionId: string, status: string) {

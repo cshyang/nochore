@@ -11,6 +11,7 @@ import type {
   RunView,
   SkillView,
   ToolConfigEntryView,
+  WorkItemView,
 } from "./types";
 
 const ProviderRequirementViewSchema = z.object({
@@ -166,6 +167,93 @@ const RunViewSchema = z.object({
 
 const RunActivityStateViewSchema = RunViewSchema;
 
+const AgentSessionActivityViewSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  agentId: z.string(),
+  conversationThreadId: z.string().optional(),
+  contextKey: z.string(),
+  status: z.enum(["idle", "thinking", "working", "waiting_for_input", "waiting_for_approval", "failed", "closed"]),
+  currentSandboxLeaseId: z.string().optional(),
+  lastContextSnapshotId: z.string().optional(),
+  activeWorkItemId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastActiveAt: z.string().optional(),
+});
+
+const ContextSnapshotActivityViewSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  agentId: z.string(),
+  workItemId: z.string().optional(),
+  conversationThreadId: z.string().optional(),
+  kind: z.string(),
+  messagesVersion: z.string().optional(),
+  memoryVersion: z.string().optional(),
+  toolBindingsVersion: z.string().optional(),
+  policyVersion: z.string().optional(),
+  promptHash: z.string(),
+  executor: z.string().optional(),
+  model: z.string().optional(),
+  provider: z.string().optional(),
+  messageCount: z.number().optional(),
+  memoryCount: z.number().optional(),
+  toolBindingCount: z.number().optional(),
+  policyRuleCount: z.number().optional(),
+  createdAt: z.string(),
+});
+
+const SandboxLeaseActivityViewSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  provider: z.string(),
+  providerHandle: z.string().optional(),
+  status: z.string(),
+  startedAt: z.string(),
+  stoppedAt: z.string().optional(),
+});
+
+const WorkItemKindSchema = z.enum(["chat_turn", "run", "delegated_task", "scheduled_check", "external_event"]);
+const WorkItemStatusSchema = z.enum([
+  "queued",
+  "running",
+  "waiting_for_input",
+  "waiting_for_approval",
+  "waiting_for_tasks",
+  "stopped",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+const WorkItemChildViewSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  agentId: z.string(),
+  kind: WorkItemKindSchema,
+  status: WorkItemStatusSchema,
+  parentWorkItemId: z.string().optional(),
+  runId: z.string().optional(),
+  agentTaskId: z.string().optional(),
+  triggerRunId: z.string().optional(),
+  title: z.string().optional(),
+  createdAt: z.string(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const WorkItemViewSchema = WorkItemChildViewSchema.extend({
+  input: z.record(z.string(), z.unknown()).optional(),
+  result: z.record(z.string(), z.unknown()).optional(),
+  run: RunActivityStateViewSchema.optional(),
+  childWorkItems: z.array(WorkItemChildViewSchema).default([]),
+  session: AgentSessionActivityViewSchema.optional(),
+  latestSnapshot: ContextSnapshotActivityViewSchema.optional(),
+  currentSandboxLease: SandboxLeaseActivityViewSchema.optional(),
+});
+
 const SkillViewSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -279,7 +367,10 @@ const AgentActivityStateViewSchema = z.object({
   activeRunCount: z.number(),
   pendingApprovalCount: z.number(),
   activeRunId: z.string().nullable(),
+  activeWorkItemId: z.string().nullable().default(null),
   runs: z.array(RunActivityStateViewSchema).default([]),
+  workItems: z.array(WorkItemViewSchema).default([]),
+  sessions: z.array(AgentSessionActivityViewSchema).default([]),
 });
 
 const ProjectNeedsInputViewSchema = z.object({
@@ -361,4 +452,8 @@ export function parseProjectActivityStateView(value: unknown): ProjectActivitySt
 
 export function parseRunActivityStateViews(value: unknown): RunActivityStateView[] {
   return parseArraySchema(RunActivityStateViewSchema, value);
+}
+
+export function parseWorkItemViews(value: unknown): WorkItemView[] {
+  return parseArraySchema(WorkItemViewSchema, value);
 }

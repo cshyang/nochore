@@ -9,6 +9,10 @@ const FULL_RESET_TABLES = [
   "action_executions",
   "pending_actions",
   "agent_events",
+  "sandbox_leases",
+  "context_snapshots",
+  "work_items",
+  "agent_sessions",
   "conversation_checkpoints",
   "conversation_events",
   "conversation_threads",
@@ -16,7 +20,6 @@ const FULL_RESET_TABLES = [
   "approvals",
   "learned_policy_rules",
   "suggestion_suppressions",
-  "work_items",
   "agent_tasks",
   "run_events",
   "lessons",
@@ -28,7 +31,7 @@ const FULL_RESET_TABLES = [
 
 const RUNTIME_RESET_TABLES = ["runs", "approvals", "work_items", "agent_tasks", "run_events"] as const;
 
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 
 const CREATE_DDL = `
   CREATE TABLE IF NOT EXISTS projects (
@@ -119,6 +122,78 @@ const CREATE_DDL = `
     updated_at INTEGER NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_checkpoints_thread_kind ON conversation_checkpoints (thread_id, kind);
+
+  CREATE TABLE IF NOT EXISTS agent_sessions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    conversation_thread_id TEXT,
+    context_key TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'idle',
+    current_sandbox_lease_id TEXT,
+    last_context_snapshot_id TEXT,
+    active_work_item_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_active_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_updated ON agent_sessions (agent_id, updated_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_sessions_context_key ON agent_sessions (agent_id, context_key);
+  CREATE INDEX IF NOT EXISTS idx_agent_sessions_thread ON agent_sessions (conversation_thread_id);
+
+  CREATE TABLE IF NOT EXISTS work_items (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    parent_work_item_id TEXT,
+    run_id TEXT,
+    agent_task_id TEXT,
+    trigger_run_id TEXT,
+    title TEXT,
+    input TEXT,
+    result TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    started_at INTEGER,
+    completed_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_work_items_session_created ON work_items (session_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_work_items_agent_created ON work_items (agent_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_work_items_run ON work_items (run_id);
+  CREATE INDEX IF NOT EXISTS idx_work_items_agent_task ON work_items (agent_task_id);
+
+  CREATE TABLE IF NOT EXISTS context_snapshots (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    work_item_id TEXT,
+    conversation_thread_id TEXT,
+    kind TEXT NOT NULL,
+    messages_version TEXT,
+    memory_version TEXT,
+    tool_bindings_version TEXT,
+    policy_version TEXT,
+    prompt_hash TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_context_snapshots_session_created ON context_snapshots (session_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_context_snapshots_work_item ON context_snapshots (work_item_id);
+
+  CREATE TABLE IF NOT EXISTS sandbox_leases (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_handle TEXT,
+    status TEXT NOT NULL,
+    metadata TEXT,
+    started_at INTEGER NOT NULL,
+    stopped_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_sandbox_leases_session_started ON sandbox_leases (session_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_sandbox_leases_provider_handle ON sandbox_leases (provider, provider_handle);
 
   CREATE TABLE IF NOT EXISTS run_events (
     id TEXT PRIMARY KEY,

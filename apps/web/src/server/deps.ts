@@ -66,7 +66,12 @@ export function getAgentRow(projectId: string, agentId: string): AgentRow | null
 
 export function listProjectConnections(projectId: string) {
   const { db } = getProjectDeps(projectId);
-  return db.select().from(connections).where(eq(connections.projectId, projectId)).all();
+  return db
+    .select()
+    .from(connections)
+    .where(eq(connections.projectId, projectId))
+    .all()
+    .map(normalizeConnectionRowForRuntime);
 }
 
 export function getProjectRow(projectId: string) {
@@ -95,9 +100,7 @@ export async function getProjectView(projectId: string) {
   const agents = await Promise.all(
     agentRows.map(async (agent) => {
       const metricEvents = agent.primaryMetric
-        ? (await runEventRepository.listByAgent(agent.id, 500)).filter(
-            (e) => e.type === "metric_observed",
-          )
+        ? (await runEventRepository.listByAgent(agent.id, 500)).filter((e) => e.type === "metric_observed")
         : [];
 
       return buildAgentView({
@@ -120,6 +123,7 @@ export async function getProjectView(projectId: string) {
     .from(connections)
     .where(eq(connections.projectId, projectId))
     .all()
+    .map(normalizeConnectionRowForRuntime)
     .filter((connection) => connection.status === "active").length;
 
   return buildProjectView({
@@ -141,6 +145,30 @@ function getDb(projectId: string) {
     dbCache.set(projectId, openProjectDb(projectId));
   }
   return dbCache.get(projectId)!;
+}
+
+function normalizeConnectionRowForRuntime(row: typeof connections.$inferSelect): typeof connections.$inferSelect {
+  if (row.provider !== "googleads" || row.status !== "active" || row.composioEntityId) {
+    return row;
+  }
+
+  const config = parseConnectionConfig(row.config);
+  const customerId = config.selectedCustomerId ?? config.customerId;
+  if (typeof customerId === "string" && customerId.trim()) {
+    return row;
+  }
+
+  return { ...row, status: "disconnected" };
+}
+
+function parseConnectionConfig(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function recoverMissingAgentRows(projectId: string, db: HarnessDb) {

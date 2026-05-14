@@ -10,7 +10,6 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: "Google Ads",
     icon: "📊",
     defaultReason: "Read campaign performance and adjust paid media execution",
-    connectionType: "direct",
   },
   meta: {
     name: "Meta Ads",

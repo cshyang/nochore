@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "../../db/client";
-import { projects } from "../../db/schema";
+import { agentConnectionBindings, projects } from "../../db/schema";
 import { AgentRepository } from "../agent";
+import { AgentSessionRepository } from "../agent-session";
 import { AgentTaskRepository } from "../agent-task";
 import { ApprovalRepository } from "../approval";
 import { createProjectRepositories } from "../bundle";
+import { ContextSnapshotRepository } from "../context-snapshot";
 import { ConversationCheckpointRepository } from "../conversation-checkpoint";
 import { ConversationEventRepository } from "../conversation-event";
 import { ConversationThreadRepository } from "../conversation-thread";
 import { RunEventRepository } from "../event";
 import { LessonRepository } from "../lesson";
 import { RunRepository } from "../run";
+import { SandboxLeaseRepository } from "../sandbox-lease";
+import { WorkItemRepository } from "../work-item";
 
 describe("simplified repositories", () => {
   it("creates a concrete repository bundle for one project database", () => {
@@ -21,6 +25,43 @@ describe("simplified repositories", () => {
     expect(repositories.approvalRepository).toBeInstanceOf(ApprovalRepository);
     expect(repositories.conversationCheckpointRepository).toBeInstanceOf(ConversationCheckpointRepository);
     expect(repositories.runRepository).toBeInstanceOf(RunRepository);
+    expect(repositories.agentSessionRepository).toBeInstanceOf(AgentSessionRepository);
+    expect(repositories.contextSnapshotRepository).toBeInstanceOf(ContextSnapshotRepository);
+    expect(repositories.sandboxLeaseRepository).toBeInstanceOf(SandboxLeaseRepository);
+    expect(repositories.workItemRepository).toBeInstanceOf(WorkItemRepository);
+  });
+
+  it("replaces the default connection binding when the selected resource changes", async () => {
+    const db = createTestDb();
+    const repositories = createProjectRepositories(db);
+
+    await repositories.agentConnectionBindingRepository.upsert({
+      agentId: "agent_001",
+      provider: "googleads",
+      connectionId: "conn_001",
+      resourceType: "google_ads_customer",
+      resourceId: "1073100792",
+      resourceLabel: "107-310-0792",
+      alias: "googleads_1073100792",
+      isDefault: true,
+      config: { source: "user" },
+    });
+    await repositories.agentConnectionBindingRepository.upsert({
+      agentId: "agent_001",
+      provider: "googleads",
+      connectionId: "conn_001",
+      resourceType: "google_ads_customer",
+      resourceId: "2330397593",
+      resourceLabel: "233-039-7593",
+      alias: "googleads_2330397593",
+      isDefault: true,
+      config: { source: "user" },
+    });
+
+    const rows = db.select().from(agentConnectionBindings).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resourceId).toBe("2330397593");
+    expect(rows[0].alias).toBe("googleads_2330397593");
   });
 
   it("creates, loads, and updates agents", async () => {
@@ -475,5 +516,97 @@ describe("simplified repositories", () => {
     const events = await eventRepo.listStructuredEventsByThread(thread.id);
     expect(events).toHaveLength(2);
     expect(events.map((event) => event.eventType)).toEqual(["tool_call", "tool_output"]);
+  });
+
+  it("tracks agent sessions, work items, context snapshots, and sandbox leases", async () => {
+    const db = createTestDb();
+    const sessions = new AgentSessionRepository(db);
+    const workItems = new WorkItemRepository(db);
+    const snapshots = new ContextSnapshotRepository(db);
+    const leases = new SandboxLeaseRepository(db);
+
+    const session = await sessions.getOrCreateForContext({
+      projectId: "proj_001",
+      agentId: "agent_001",
+      conversationThreadId: "thread_001",
+      contextKey: "web:thread_001",
+    });
+    const duplicate = await sessions.getOrCreateForContext({
+      projectId: "proj_001",
+      agentId: "agent_001",
+      conversationThreadId: "thread_001",
+      contextKey: "web:thread_001",
+    });
+    expect(duplicate.id).toBe(session.id);
+
+    const workItemId = await workItems.create({
+      sessionId: session.id,
+      agentId: "agent_001",
+      kind: "chat_turn",
+      status: "running",
+      title: "Answer chat message",
+      input: { messageId: "msg_001" },
+    });
+    const childWorkItemId = await workItems.create({
+      sessionId: session.id,
+      agentId: "agent_001",
+      kind: "delegated_task",
+      status: "queued",
+      parentWorkItemId: workItemId,
+      title: "Inspect account data",
+    });
+    const snapshotId = await snapshots.create({
+      sessionId: session.id,
+      agentId: "agent_001",
+      workItemId,
+      conversationThreadId: "thread_001",
+      kind: "chat_turn",
+      messagesVersion: "2",
+      memoryVersion: "lessons:0",
+      toolBindingsVersion: "tools:request_input",
+      policyVersion: "agent-tool-config",
+      promptHash: "sha256:test",
+      payload: { systemLength: 42 },
+    });
+    const leaseId = await leases.create({
+      sessionId: session.id,
+      provider: "inline",
+      status: "ready",
+      metadata: { executor: "ai-sdk" },
+    });
+
+    await sessions.update(session.id, {
+      status: "thinking",
+      activeWorkItemId: workItemId,
+      lastContextSnapshotId: snapshotId,
+      currentSandboxLeaseId: leaseId,
+    });
+    await workItems.complete(workItemId, new Date("2026-04-01T10:00:00Z"), { ok: true });
+
+    const updatedSession = await sessions.getById(session.id);
+    const completed = await workItems.getById(workItemId);
+    const latestSnapshots = await snapshots.listBySession(session.id);
+    const workItemSnapshots = await snapshots.listByWorkItem(workItemId);
+    const agentWorkItems = await workItems.listByAgent("agent_001");
+    const childWorkItems = await workItems.listChildren(workItemId);
+    const childWorkItemsByParents = await workItems.listChildrenByParents([workItemId]);
+    const sessionLeases = await leases.listBySession(session.id);
+
+    expect(updatedSession?.activeWorkItemId).toBe(workItemId);
+    expect(updatedSession?.lastContextSnapshotId).toBe(snapshotId);
+    expect(updatedSession?.currentSandboxLeaseId).toBe(leaseId);
+    expect(completed?.status).toBe("completed");
+    expect(completed?.result).toEqual({ ok: true });
+    expect(latestSnapshots[0]?.payload).toEqual({ systemLength: 42 });
+    expect(workItemSnapshots[0]?.id).toBe(snapshotId);
+    expect(agentWorkItems.map((item) => item.id)).toContain(childWorkItemId);
+    expect(childWorkItems[0]?.id).toBe(childWorkItemId);
+    expect(childWorkItemsByParents[0]?.id).toBe(childWorkItemId);
+    expect(sessionLeases[0]?.metadata).toEqual({ executor: "ai-sdk" });
+
+    await workItems.cancel(childWorkItemId, new Date("2026-04-01T10:01:00Z"), "Cancelled by user");
+    const cancelled = await workItems.getById(childWorkItemId);
+    expect(cancelled?.status).toBe("cancelled");
+    expect(cancelled?.error).toBe("Cancelled by user");
   });
 });

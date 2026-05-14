@@ -82,6 +82,23 @@ export async function runDelegatedAgentTask(
     role: params.role,
     title: params.task.slice(0, 200),
   });
+  const parentWorkItem = await params.runtime.workItemRepository.getByRunId(params.runId);
+  const taskWorkItemId = parentWorkItem
+    ? await params.runtime.workItemRepository.create({
+        sessionId: parentWorkItem.sessionId,
+        agentId: params.agent.id,
+        kind: "delegated_task",
+        status: "queued",
+        parentWorkItemId: parentWorkItem.id,
+        agentTaskId: taskId,
+        title: `${params.role}: ${params.task.slice(0, 160)}`,
+        input: {
+          role: params.role,
+          task: params.task,
+          context: params.context,
+        },
+      })
+    : undefined;
 
   const startPayload = {
     role: params.role,
@@ -95,6 +112,9 @@ export async function runDelegatedAgentTask(
   params.eventIds.push(startId);
 
   await params.runtime.runRepository.markWaitingForTasks(params.runId);
+  if (taskWorkItemId) {
+    await params.runtime.workItemRepository.markRunning(taskWorkItemId);
+  }
   metadataApi.set("status", "waiting_for_tasks");
 
   try {
@@ -113,6 +133,7 @@ export async function runDelegatedAgentTask(
       return recordFailedAgentTask({
         ...params,
         taskId,
+        workItemId: taskWorkItemId,
         error: String(result.error ?? "Agent task failed"),
         metadataApi,
       });
@@ -128,6 +149,7 @@ export async function runDelegatedAgentTask(
         taskId,
         result: output,
         eventIds: params.eventIds,
+        workItemId: taskWorkItemId,
       });
     }
 
@@ -151,6 +173,13 @@ export async function runDelegatedAgentTask(
       completePayload,
     );
     params.eventIds.push(completeId);
+    if (taskWorkItemId) {
+      await params.runtime.workItemRepository.complete(taskWorkItemId, new Date(), {
+        summary: output.result.summary,
+        rawText: output.result.rawText,
+        durationMs: output.durationMs,
+      });
+    }
 
     return {
       content: [{ type: "text", text: output.result.summary || output.result.rawText || "(No output)" }],
@@ -164,6 +193,7 @@ export async function runDelegatedAgentTask(
     return recordFailedAgentTask({
       ...params,
       taskId,
+      workItemId: taskWorkItemId,
       error: err instanceof Error ? err.message : String(err),
       metadataApi,
     });
@@ -178,6 +208,7 @@ export async function handleStoppedAgentTask(params: {
   taskId: string;
   result: Extract<AgentTaskExecutionResult, { status: "stopped" }>;
   eventIds: string[];
+  workItemId?: string;
 }): Promise<never> {
   const stopPayload = {
     role: params.role,
@@ -192,6 +223,9 @@ export async function handleStoppedAgentTask(params: {
   };
   const eventId = await recordEvent(params.runtime, params.runId, params.agentId, "task_completed", stopPayload);
   params.eventIds.push(eventId);
+  if (params.workItemId) {
+    await params.runtime.workItemRepository.setStatus(params.workItemId, "waiting_for_approval");
+  }
   throw new ApprovalCheckpointError(
     params.result.reason ?? "An agent task stopped awaiting human input",
     params.result.cause === "approval_expired" ? "expired" : "rejected",
@@ -206,6 +240,7 @@ async function recordFailedAgentTask(
   params: DelegateTaskToolSpec & {
     role: string;
     taskId: string;
+    workItemId?: string;
     error: string;
     metadataApi: MetadataApi;
   },
@@ -213,6 +248,9 @@ async function recordFailedAgentTask(
   await params.runtime.runRepository.markRunning(params.runId);
   params.metadataApi.set("status", "running");
   await params.runtime.agentTaskRepository.fail(params.taskId, new Date(), params.error);
+  if (params.workItemId) {
+    await params.runtime.workItemRepository.fail(params.workItemId, new Date(), params.error);
+  }
   const failPayload = {
     role: params.role,
     success: false,

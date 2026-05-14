@@ -12,7 +12,7 @@ export const sendChat = createServerFn({ method: "POST" })
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    const { runId, triggerRunId } = await startAgentRun({
+    const { runId, triggerRunId, workItemId } = await startAgentRun({
       agentId,
       projectId,
       trigger: {
@@ -26,6 +26,7 @@ export const sendChat = createServerFn({ method: "POST" })
       response: "Queued a background run for this request.",
       startedRunId: runId,
       triggerRunId,
+      workItemId,
       toolActivitySummary: [],
     });
   });

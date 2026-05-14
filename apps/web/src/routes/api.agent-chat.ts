@@ -8,9 +8,10 @@
 import { createAiSdkModel } from "@nochore/harness";
 import { createFileRoute } from "@tanstack/react-router";
 import type { LanguageModelUsage, UIMessage } from "ai";
-import { stepCountIs, streamText } from "ai";
+import { stepCountIs } from "ai";
 import { z } from "zod";
 import { buildAgentChatSystemPrompt } from "~/server/agent-chat-prompt";
+import { beginChatTurn, completeChatTurn, failChatTurn } from "~/server/agent-session-core";
 import {
   assembleConversation,
   isSyntheticMessageId,
@@ -20,6 +21,7 @@ import {
 } from "~/server/chat-memory";
 import { buildChatProviderTools } from "~/server/chat-provider-tools";
 import { getAgentRow, getProjectDeps, listProjectConnections } from "~/server/deps";
+import { executeInlineAgent } from "~/server/inline-agent-executor";
 import { startAgentRun } from "~/server/orchestration";
 import { buildPersistentUIMessageStreamOptions } from "~/server/ui-message-stream";
 
@@ -109,8 +111,22 @@ export const Route = createFileRoute("/api/agent-chat")({
           .filter((section) => section.trim().length > 0)
           .join("\n\n");
 
+        const chatTurn = await beginChatTurn({
+          deps,
+          projectId,
+          agent,
+          threadId: thread.id,
+          rawMessages: rawMessages as UIMessage[],
+          system,
+          memoryContext: assembled.memoryContext,
+          providerTools,
+          connectionBindingCount: connectionBindings.length,
+          latestUserText,
+        });
+
         let totalUsage: LanguageModelUsage | undefined;
-        const result = streamText({
+        let chatTurnFailed = false;
+        const result = executeInlineAgent({
           model,
           system,
           messages: assembled.modelMessages,
@@ -121,6 +137,10 @@ export const Route = createFileRoute("/api/agent-chat")({
           onFinish: async ({ totalUsage: usage }) => {
             totalUsage = usage;
           },
+          onError: async ({ error }) => {
+            chatTurnFailed = true;
+            await failChatTurn(deps, chatTurn, error);
+          },
           tools: {
             ...providerTools,
             trigger_run: {
@@ -130,16 +150,24 @@ export const Route = createFileRoute("/api/agent-chat")({
                 reason: z.string().describe("Brief explanation of why this run was triggered"),
               }),
               execute: async (input: { reason: string }) => {
-                const { runId, triggerRunId } = await startAgentRun({
+                const { runId, triggerRunId, workItemId } = await startAgentRun({
                   agentId,
                   projectId,
+                  sessionId: chatTurn.sessionId,
+                  parentWorkItemId: chatTurn.workItemId,
                   trigger: {
                     type: "chat",
                     timestamp: new Date(),
-                    metadata: { reason: input.reason },
+                    metadata: {
+                      reason: input.reason,
+                      threadId: thread.id,
+                      sessionId: chatTurn.sessionId,
+                      parentWorkItemId: chatTurn.workItemId,
+                      contextSnapshotId: chatTurn.contextSnapshotId,
+                    },
                   },
                 });
-                return { runId, triggerRunId, status: "queued" as const };
+                return { runId, triggerRunId, workItemId, status: "queued" as const };
               },
             },
 
@@ -352,6 +380,14 @@ export const Route = createFileRoute("/api/agent-chat")({
                   : undefined,
                 latestUserText,
               });
+              if (!chatTurnFailed) {
+                await completeChatTurn(deps, chatTurn, {
+                  responseMessageId: responseMessage.id,
+                  inputTokens: totalUsage?.inputTokens,
+                  outputTokens: totalUsage?.outputTokens,
+                  totalTokens: totalUsage?.totalTokens,
+                });
+              }
             },
           }),
           messageMetadata: () => (createdThreadId ? { threadId: createdThreadId } : undefined),

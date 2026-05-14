@@ -66,132 +66,97 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
     <div style={{ animation: "fadeIn 0.3s ease" }}>
       <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }`}</style>
 
-      {/* Project header */}
-      <div style={{ marginBottom: SPACE[6] }}>
-        <div style={{ display: "flex", alignItems: "center", gap: SPACE[4], marginBottom: SPACE[4] }}>
-          {/* Identity tile — gives the header a real anchor */}
-          <div
+      {/* Project header — quiet anchor. Identity + status sit in one tight row so the
+          agent grid below gets the visual weight. Connections moved to the page bottom
+          as ambient infrastructure (see Connected services section). */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: SPACE[3],
+          marginBottom: SPACE[5],
+        }}
+      >
+        <span aria-hidden style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
+          {project.icon}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: RADIUS.sm,
-              background: COLORS.surface,
-              border: `1px solid ${COLORS.border}`,
-              display: "grid",
-              placeItems: "center",
-              fontSize: 22,
-              lineHeight: 1,
-              flexShrink: 0,
+              fontSize: TYPE.scale.lg,
+              fontWeight: TYPE.weight.semibold,
+              fontFamily: TYPE.display,
+              letterSpacing: TYPE.tracking.tight,
+              color: COLORS.text,
+              margin: 0,
+              lineHeight: TYPE.leading.tight,
             }}
-            aria-hidden
           >
-            {project.icon}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1
-              style={{
-                fontSize: TYPE.scale.xl,
-                fontWeight: TYPE.weight.semibold,
-                fontFamily: TYPE.display,
-                letterSpacing: TYPE.tracking.tight,
-                color: COLORS.text,
-                margin: 0,
-                lineHeight: TYPE.leading.tight,
-              }}
-            >
-              {project.name}
-            </h1>
-            <ProjectStatusSnapshot
-              runningCount={runningCount}
-              attentionCount={attentionCount}
-              agentCount={project.agents.length}
-              connectionCount={project.connectionCount}
-            />
-          </div>
-          {onDeleteProject &&
-            (confirmDelete ? (
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: COLORS.textDim }}>Delete project?</span>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: COLORS.textSecondary,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    padding: "4px 8px",
-                  }}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  onClick={onDeleteProject}
-                  style={{
-                    background: COLORS.redDim,
-                    border: `1px solid ${COLORS.red}`,
-                    color: COLORS.red,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    padding: "4px 10px",
-                    borderRadius: RADIUS.md,
-                  }}
-                >
-                  Yes, delete
-                </button>
-              </div>
-            ) : (
+            {project.name}
+          </h1>
+          <ProjectStatusSnapshot
+            runningCount={runningCount}
+            attentionCount={attentionCount}
+            agentCount={project.agents.length}
+            connectionCount={project.connectionCount}
+          />
+        </div>
+        {onDeleteProject &&
+          (confirmDelete ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: COLORS.textDim }}>Delete project?</span>
               <button
                 type="button"
-                onClick={() => setConfirmDelete(true)}
+                onClick={() => setConfirmDelete(false)}
                 style={{
                   background: "none",
                   border: "none",
-                  color: COLORS.textDim,
+                  color: COLORS.textSecondary,
                   fontSize: 12,
                   cursor: "pointer",
                   fontFamily: "inherit",
                   padding: "4px 8px",
-                  transition,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
               >
-                Delete
+                No
               </button>
-            ))}
-        </div>
-        {/* Connected services — Composio toolkit logo + humanized provider name + account
-            metadata when we have something more useful than the opaque Composio ID. */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-          {activeConnections.length > 0 ? (
-            activeConnections.map((c) => <ConnectionChip key={c.id} connection={c} />)
+              <button
+                type="button"
+                onClick={onDeleteProject}
+                style={{
+                  background: COLORS.redDim,
+                  border: `1px solid ${COLORS.red}`,
+                  color: COLORS.red,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  padding: "4px 10px",
+                  borderRadius: RADIUS.md,
+                }}
+              >
+                Yes, delete
+              </button>
+            </div>
           ) : (
-            <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>No systems connected</span>
-          )}
-          <button
-            type="button"
-            style={{
-              background: "none",
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: RADIUS.pill,
-              padding: "4px 10px",
-              fontSize: TYPE.scale.xs,
-              color: COLORS.textSecondary,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: `border-color ${transition}`,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = COLORS.accent)}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
-          >
-            + Connect
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              style={{
+                background: "none",
+                border: "none",
+                color: COLORS.textDim,
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                padding: "4px 8px",
+                transition,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.red)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
+            >
+              Delete
+            </button>
+          ))}
       </div>
 
       {project.agents.length === 0 ? (
@@ -423,65 +388,141 @@ export function ProjectHome({ project, connections, onSelectAgent, onNewAgent, o
             </div>
           )}
 
-          {/* Agent grid — only when there are non-draft agents. Section header carries the "new agent" affordance,
-              auto-fit grid lets a single agent fill the row instead of leaving a dead column. */}
+          {/* Agent grid — the main event. "+ New agent" is a ghost slot inside the grid
+              rather than a header button: action lives where you'd reach for it. The label
+              only appears when needed to disambiguate from the "Finish setup" drafts above. */}
           {regularAgents.length > 0 && (
             <>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: SPACE[3],
-                  marginBottom: SPACE[3],
-                }}
-              >
+              {incompleteDrafts.length > 0 && (
                 <div
                   style={{
                     fontSize: TYPE.scale.xs,
                     color: COLORS.textDim,
                     textTransform: "uppercase",
                     letterSpacing: TYPE.tracking.wide,
+                    marginBottom: SPACE[3],
                   }}
                 >
-                  {incompleteDrafts.length > 0 ? "Active agents" : "All agents"}
+                  Active agents
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onNewAgent?.()}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: COLORS.textSecondary,
-                    fontSize: TYPE.scale.xs,
-                    fontWeight: TYPE.weight.medium,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    padding: "2px 0",
-                    transition: `color ${transition}`,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.accent)}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textSecondary)}
-                >
-                  + New agent
-                </button>
-              </div>
+              )}
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",
-                  gap: SPACE[3],
+                  gap: SPACE[4],
                 }}
               >
                 {regularAgents.map((agent) => (
                   <AgentCard key={agent.id} agent={agent} onClick={() => onSelectAgent(agent.id)} />
                 ))}
+                {onNewAgent && <NewAgentSlot onClick={onNewAgent} />}
               </div>
             </>
           )}
+
+          {/* Connected services — ambient infrastructure at the bottom of the page.
+              Same chip components as before, now living where they belong: below the work,
+              not competing with it for header real-estate. */}
+          <div
+            style={{
+              marginTop: SPACE[8],
+              paddingTop: SPACE[5],
+              borderTop: `1px solid ${COLORS.border}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: TYPE.scale.xs,
+                color: COLORS.textDim,
+                textTransform: "uppercase",
+                letterSpacing: TYPE.tracking.wide,
+                marginBottom: SPACE[3],
+              }}
+            >
+              Connected
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {activeConnections.length > 0 ? (
+                activeConnections.map((c) => <ConnectionChip key={c.id} connection={c} />)
+              ) : (
+                <span style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>No systems connected</span>
+              )}
+              <button
+                type="button"
+                style={{
+                  background: "none",
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: RADIUS.pill,
+                  padding: "6px 14px",
+                  fontSize: TYPE.scale.sm,
+                  fontWeight: TYPE.weight.medium,
+                  color: COLORS.textSecondary,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: `border-color ${transition}, color ${transition}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.accent;
+                  e.currentTarget.style.color = COLORS.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.border;
+                  e.currentTarget.style.color = COLORS.textSecondary;
+                }}
+              >
+                + Connect
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Ghost slot that lives at the end of the agent grid. Matches AgentCard footprint
+ * (same minHeight, padding, radius) so the grid stays rhythmic — empty action sits
+ * where the eye expects it instead of in a separate "New agent" button up top.
+ */
+function NewAgentSlot({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "transparent",
+        border: `1px dashed ${COLORS.borderStrong}`,
+        borderRadius: RADIUS.lg,
+        padding: 20,
+        cursor: "pointer",
+        transition: `border-color ${transition}, color ${transition}, background ${transition}`,
+        textAlign: "center",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        fontFamily: "inherit",
+        minHeight: 132,
+        color: COLORS.textDim,
+        fontSize: TYPE.scale.sm,
+        fontWeight: TYPE.weight.medium,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = COLORS.accent;
+        e.currentTarget.style.color = COLORS.accent;
+        e.currentTarget.style.background = COLORS.accentSurface;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = COLORS.borderStrong;
+        e.currentTarget.style.color = COLORS.textDim;
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      + New agent
+    </button>
   );
 }
 
@@ -506,13 +547,13 @@ function ConnectionChip({ connection }: { connection: ConnectionView }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
+        gap: 8,
         background: COLORS.surfaceHover,
         borderRadius: RADIUS.pill,
-        padding: "3px 10px 3px 4px",
-        fontSize: TYPE.scale.xs,
+        padding: "5px 12px 5px 6px",
+        fontSize: TYPE.scale.sm,
         color: COLORS.textSecondary,
-        maxWidth: 260,
+        maxWidth: 280,
       }}
     >
       <ConnectionLogo logo={connection.logo} fallbackInitial={displayName.charAt(0).toUpperCase()} />
@@ -534,11 +575,13 @@ function ConnectionChip({ connection }: { connection: ConnectionView }) {
           </span>
           <span
             style={{
+              // Account label stays smaller + dim so the hierarchy is provider → account.
+              fontSize: TYPE.scale.xs,
               color: COLORS.textDim,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              maxWidth: 140,
+              maxWidth: 160,
             }}
           >
             {account}
@@ -557,14 +600,14 @@ function ConnectionLogo({ logo, fallbackInitial }: { logo: string | null | undef
       <img
         src={logo}
         alt=""
-        width={16}
-        height={16}
+        width={20}
+        height={20}
         loading="lazy"
         onError={() => setErrored(true)}
         style={{
-          width: 16,
-          height: 16,
-          borderRadius: 3,
+          width: 20,
+          height: 20,
+          borderRadius: 4,
           background: COLORS.bgRaised,
           objectFit: "contain",
           flexShrink: 0,
@@ -581,12 +624,12 @@ function ConnectionLogo({ logo, fallbackInitial }: { logo: string | null | undef
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        width: 16,
-        height: 16,
-        borderRadius: 3,
+        width: 20,
+        height: 20,
+        borderRadius: 4,
         background: COLORS.bgRaised,
         color: COLORS.textDim,
-        fontSize: 9,
+        fontSize: 10,
         fontWeight: TYPE.weight.semibold,
         flexShrink: 0,
       }}

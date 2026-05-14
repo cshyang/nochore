@@ -21,12 +21,16 @@ async function buildPolicyToolCatalog(projectId: string): Promise<ToolConfigEntr
     .all()
     .filter((connection) => connection.status === "active");
 
-  const activeProviders = new Set(activeConnections.map((connection) => connection.provider));
+  const activeProviders: Set<string> = new Set(
+    activeConnections
+      .map((connection) => connection.provider)
+      .filter((provider): provider is string => typeof provider === "string" && provider.length > 0),
+  );
   const entries: ToolConfigEntry[] = [];
 
   const composioProviders = [...activeProviders];
   if (composioProviders.length > 0) {
-    const composioTools = await listComposioToolCatalogForProject(projectId);
+    const composioTools = await listComposioToolCatalogForProject(projectId, composioProviders);
     entries.push(
       ...composioTools
         .filter((tool) => activeProviders.has(tool.provider))

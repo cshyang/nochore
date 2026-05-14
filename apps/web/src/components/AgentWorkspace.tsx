@@ -33,7 +33,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onSetAgentConnectionBinding,
     requiredProviders = [],
     activeRunId,
+    activeWorkItemId,
     onCancelRun,
+    onCancelWorkItem,
     cancelling,
     runError,
     onApprove,
@@ -49,6 +51,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const projectConnections = props.projectConnections ?? [];
   const policyToolCatalog = props.policyToolCatalog ?? [];
   const runs = props.runs ?? [];
+  const workItems = props.workItems ?? [];
   const conversation = props.conversation;
   const conversationThreads = props.conversationThreads ?? [];
   const activeThreadId = props.activeThreadId ?? conversation?.threadId;
@@ -60,24 +63,42 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const previousAgentIdRef = useRef(agent.id);
   const notifiedChatRunRef = useRef<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(props.initialRunId ?? null);
+  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(
+    props.initialWorkItemId ?? resolveWorkItemIdForRun(workItems, props.initialRunId) ?? props.initialRunId ?? null,
+  );
   const [goingLive, setGoingLive] = useState(false);
   const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(false);
   const [chatApprovalContext, setChatApprovalContext] = useState<PendingActionView | null>(null);
   const [chatTriggeredRunId, setChatTriggeredRunId] = useState<string | null>(null);
 
-  // User-initiated run selection: update local state AND propagate to the
-  // route so the URL's ?runId= stays in sync (reloadable, shareable, back/forward).
-  // Do NOT use this from effects that sync state *from* props.initialRunId —
-  // that would round-trip and write the URL over itself.
+  // User-initiated activity selection: update local state AND propagate to the
+  // route so the URL's ?workItemId= stays in sync.
   const onSelectRunProp = props.onSelectRun;
+  const onSelectWorkItemProp = props.onSelectWorkItem;
   const onTabChangeProp = props.onTabChange;
+  const selectWorkItem = useCallback(
+    (workItemId: string | null) => {
+      setSelectedWorkItemId(workItemId);
+      const runId = workItemId ? (workItems.find((workItem) => workItem.id === workItemId)?.runId ?? null) : null;
+      if (onSelectWorkItemProp) {
+        onSelectWorkItemProp(workItemId, runId);
+      } else {
+        onSelectRunProp?.(runId);
+      }
+    },
+    [onSelectRunProp, onSelectWorkItemProp, workItems],
+  );
   const selectRun = useCallback(
     (runId: string | null) => {
-      setSelectedRunId(runId);
+      const workItemId = resolveWorkItemIdForRun(workItems, runId);
+      if (workItemId) {
+        selectWorkItem(workItemId);
+        return;
+      }
+      setSelectedWorkItemId(runId);
       onSelectRunProp?.(runId);
     },
-    [onSelectRunProp],
+    [onSelectRunProp, selectWorkItem, workItems],
   );
   const changeTab = useCallback(
     (nextTab: WorkspaceTab) => {
@@ -88,28 +109,40 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   );
 
   useEffect(() => {
-    if (!selectedRunId && runs.length > 0) {
-      selectRun(runs[0].id);
+    if (!selectedWorkItemId && workItems.length > 0) {
+      selectWorkItem(workItems[0].id);
     }
-  }, [runs, selectedRunId, selectRun]);
+  }, [selectedWorkItemId, selectWorkItem, workItems]);
 
   useEffect(() => {
     if (previousAgentIdRef.current !== agent.id) {
       previousAgentIdRef.current = agent.id;
       setTab(props.initialTab ?? "chat");
-      setSelectedRunId(props.initialRunId ?? null);
+      setSelectedWorkItemId(
+        props.initialWorkItemId ?? resolveWorkItemIdForRun(workItems, props.initialRunId) ?? props.initialRunId ?? null,
+      );
       setChatApprovalContext(resolvePendingApproval(runs, props.initialPendingActionId));
       setChatTriggeredRunId(null);
       notifiedChatRunRef.current = null;
     }
-  }, [agent.id, props.initialPendingActionId, props.initialRunId, props.initialTab, runs]);
+  }, [
+    agent.id,
+    props.initialPendingActionId,
+    props.initialRunId,
+    props.initialTab,
+    props.initialWorkItemId,
+    runs,
+    workItems,
+  ]);
 
   useEffect(() => {
-    if (!props.initialRunId) {
+    if (!props.initialWorkItemId && !props.initialRunId) {
       return;
     }
-    setSelectedRunId(props.initialRunId);
-  }, [props.initialRunId]);
+    setSelectedWorkItemId(
+      props.initialWorkItemId ?? resolveWorkItemIdForRun(workItems, props.initialRunId) ?? props.initialRunId ?? null,
+    );
+  }, [props.initialRunId, props.initialWorkItemId, workItems]);
 
   useEffect(() => {
     if (!props.initialPendingActionId) return;
@@ -235,7 +268,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
 
     setShowFirstRunPrompt(false);
     const result = await onRunNow?.();
-    if (result?.runId) {
+    if (result?.workItemId) {
+      selectWorkItem(result.workItemId);
+    } else if (result?.runId) {
       selectRun(result.runId);
     }
   };
@@ -281,15 +316,15 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           agent={agent}
           isDraft={isDraft}
           runAction={
-            activeRunId && onCancelRun ? (
+            (activeWorkItemId || activeRunId) && (onCancelWorkItem || onCancelRun) ? (
               <Button
                 variant="secondary"
-                onClick={onCancelRun}
+                onClick={onCancelWorkItem ?? onCancelRun}
                 disabled={cancelling}
                 style={{ borderColor: COLORS.red, color: COLORS.red }}
               >
                 <Stop size={13} weight="bold" />
-                {cancelling ? "Cancelling..." : "Cancel run"}
+                {cancelling ? "Cancelling..." : "Cancel work"}
               </Button>
             ) : wrappedOnRunNow ? (
               <Button variant="secondary" onClick={wrappedOnRunNow}>
@@ -320,7 +355,9 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               setShowFirstRunPrompt(false);
               void (async () => {
                 const result = await onRunNow?.();
-                if (result?.runId) {
+                if (result?.workItemId) {
+                  selectWorkItem(result.workItemId);
+                } else if (result?.runId) {
                   selectRun(result.runId);
                 }
               })();
@@ -332,9 +369,11 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
             <AgentWorkspaceActivityPane
               runs={runs}
-              selectedRunId={selectedRunId}
-              onSelectRun={selectRun}
+              workItems={workItems}
+              selectedWorkItemId={selectedWorkItemId}
+              onSelectWorkItem={selectWorkItem}
               activeRunId={activeRunId}
+              activeWorkItemId={activeWorkItemId}
               runError={runError}
               onRunNow={wrappedOnRunNow}
               checklistItems={checklistItems}
@@ -392,11 +431,15 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               onCreateThread={props.onCreateThread}
               onDeleteThread={props.onDeleteThread}
               onThreadCreated={props.onThreadCreated}
-              onRunTriggered={(runId, triggerRunId) => {
-                selectRun(runId);
+              onRunTriggered={(runId, triggerRunId, workItemId) => {
+                if (workItemId) {
+                  selectWorkItem(workItemId);
+                } else {
+                  selectRun(runId);
+                }
                 setChatTriggeredRunId(runId);
                 notifiedChatRunRef.current = null;
-                onRunTriggered?.(runId, triggerRunId);
+                onRunTriggered?.(runId, triggerRunId, workItemId);
               }}
               registerRunCompleteHandler={(handler) => {
                 chatRunCompleteRef.current = handler;
@@ -435,4 +478,14 @@ function resolvePendingApproval(
   }
 
   return null;
+}
+
+function resolveWorkItemIdForRun(
+  workItems: NonNullable<AgentWorkspaceProps["workItems"]>,
+  runId?: string | null,
+): string | null {
+  if (!runId) {
+    return null;
+  }
+  return workItems.find((workItem) => workItem.runId === runId)?.id ?? null;
 }

@@ -1,17 +1,14 @@
-import type {
-  AgentActivityStateView,
-  AgentView,
-  ProjectActivityStateView,
-  ProjectView,
-} from "~/lib/types";
+import type { AgentActivityStateView, AgentView, ProjectActivityStateView, ProjectView } from "~/lib/types";
 
 export function mergeAgentViewWithActivity(agent: AgentView, activity: AgentActivityStateView | null): AgentView {
   if (!activity) {
     return agent;
   }
 
+  const latestWorkItem = activity.workItems[0];
   const latestRun = activity.runs[0];
-  const lastRunAt = latestRun ? new Date(latestRun.startedAt).getTime() : agent.lastRunAt;
+  const latestTimestamp = latestWorkItem?.startedAt ?? latestWorkItem?.createdAt ?? latestRun?.startedAt;
+  const lastRunAt = latestTimestamp ? new Date(latestTimestamp).getTime() : agent.lastRunAt;
 
   return {
     ...agent,
@@ -24,7 +21,10 @@ export function mergeAgentViewWithActivity(agent: AgentView, activity: AgentActi
   };
 }
 
-export function mergeProjectViewWithActivity(project: ProjectView, activity: ProjectActivityStateView | null): ProjectView {
+export function mergeProjectViewWithActivity(
+  project: ProjectView,
+  activity: ProjectActivityStateView | null,
+): ProjectView {
   if (!activity) {
     return project;
   }
@@ -65,7 +65,7 @@ export function formatAgentActivitySummary(params: {
   }
 
   if (params.activeRunCount > 0) {
-    parts.push(`${params.activeRunCount} active run${params.activeRunCount === 1 ? "" : "s"}`);
+    parts.push(`${params.activeRunCount} active work item${params.activeRunCount === 1 ? "" : "s"}`);
   }
 
   return parts.length > 0 ? parts.join(", ") : null;

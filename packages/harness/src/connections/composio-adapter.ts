@@ -44,16 +44,27 @@ export interface ComposioAdapter {
     important?: boolean;
   }): Promise<ComposioRawTool[]>;
 
-  listToolkitCatalog(params: { toolkitSlug: string; limit?: number }): Promise<ComposioCatalogEntry[]>;
+  listToolkitCatalog(params: {
+    toolkitSlug: string;
+    limit?: number;
+    maxItems?: number;
+  }): Promise<ComposioCatalogEntry[]>;
 }
 
 interface ComposioCatalogClient {
   client: {
     tools: {
-      list(input: { toolkit_slug: string; limit: number }): Promise<{ items?: ComposioCatalogEntry[] }>;
+      list(input: {
+        toolkit_slug: string;
+        limit: number;
+        cursor?: string;
+      }): Promise<{ items?: ComposioCatalogEntry[]; next_cursor?: string | null }>;
     };
   };
 }
+
+const MAX_COMPOSIO_PAGE_SIZE = 1000;
+const DEFAULT_COMPOSIO_CATALOG_MAX_ITEMS = 5000;
 
 export async function createComposioAdapter(opts?: { apiKey?: string }): Promise<ComposioAdapter> {
   const composio = await createComposioClient(opts?.apiKey);
@@ -78,9 +89,22 @@ export async function createComposioAdapter(opts?: { apiKey?: string }): Promise
       })) as ComposioRawTool[];
     },
 
-    async listToolkitCatalog({ toolkitSlug, limit = 50 }) {
-      const result = await catalogClient.tools.list({ toolkit_slug: toolkitSlug, limit });
-      return result.items ?? [];
+    async listToolkitCatalog({
+      toolkitSlug,
+      limit = MAX_COMPOSIO_PAGE_SIZE,
+      maxItems = DEFAULT_COMPOSIO_CATALOG_MAX_ITEMS,
+    }) {
+      const pageSize = Math.min(Math.max(limit, 1), MAX_COMPOSIO_PAGE_SIZE);
+      const items: ComposioCatalogEntry[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const result = await catalogClient.tools.list({ toolkit_slug: toolkitSlug, limit: pageSize, cursor });
+        items.push(...(result.items ?? []));
+        cursor = result.next_cursor ?? undefined;
+      } while (cursor && items.length < maxItems);
+
+      return items.slice(0, maxItems);
     },
   };
 }

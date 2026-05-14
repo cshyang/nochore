@@ -9,6 +9,10 @@ export {
   type UpsertAgentConnectionBindingInput,
 } from "./agent-connection-binding";
 export {
+  AgentSessionRepository,
+  type CreateAgentSessionInput,
+} from "./agent-session";
+export {
   AgentTaskRepository,
   type CreateAgentTaskInput,
 } from "./agent-task";
@@ -26,6 +30,10 @@ export {
   ConversationThreadRepository,
   type CreateConversationThreadInput,
 } from "./conversation-thread";
+export {
+  ContextSnapshotRepository,
+  type CreateContextSnapshotInput,
+} from "./context-snapshot";
 export {
   type CreateRunEventInput,
   RunEventRepository,
@@ -45,3 +53,11 @@ export {
   type CreateRunInput,
   RunRepository,
 } from "./run";
+export {
+  type CreateSandboxLeaseInput,
+  SandboxLeaseRepository,
+} from "./sandbox-lease";
+export {
+  type CreateWorkItemInput,
+  WorkItemRepository,
+} from "./work-item";

@@ -16,7 +16,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { getProjectDeps } from "./deps";
 import { buildAgentView } from "./models";
-import { cancelAgentRun, startAgentRun } from "./orchestration";
+import { cancelAgentRun, cancelAgentWorkItem, startAgentRun } from "./orchestration";
 import { jsonSafe } from "./serializable";
 
 type AgentStatus = "draft" | "live";
@@ -126,23 +126,30 @@ export const launchAgentInstance = createServerFn({ method: "POST" })
     }
 
     await agentRepository.update(agentId, { status: "live" });
-    const { runId, triggerRunId } = await queueManualRun(projectId, agentId, "launch");
+    const { runId, triggerRunId, workItemId } = await queueManualRun(projectId, agentId, "launch");
 
-    return jsonSafe({ launched: true, runId, triggerRunId, queued: true });
+    return jsonSafe({ launched: true, runId, triggerRunId, workItemId, queued: true });
   });
 
 export const triggerAgentInstanceManualRun = createServerFn({ method: "POST" })
   .inputValidator((input: { agentId: string; projectId: string }) => input)
   .handler(async ({ data: { agentId, projectId } }) => {
-    const { runId, triggerRunId } = await queueManualRun(projectId, agentId, "run_now");
+    const { runId, triggerRunId, workItemId } = await queueManualRun(projectId, agentId, "run_now");
 
-    return jsonSafe({ triggered: true, runId, triggerRunId, status: "queued", ok: true });
+    return jsonSafe({ triggered: true, runId, triggerRunId, workItemId, status: "queued", ok: true });
   });
 
 export const cancelAgentInstanceRun = createServerFn({ method: "POST" })
   .inputValidator((input: { runId: string; triggerRunId: string; projectId: string }) => input)
   .handler(async ({ data: { runId, triggerRunId, projectId } }) => {
     await cancelAgentRun({ runId, triggerRunId, projectId });
+    return jsonSafe({ cancelled: true, ok: true });
+  });
+
+export const cancelAgentInstanceWorkItem = createServerFn({ method: "POST" })
+  .inputValidator((input: { workItemId: string; projectId: string }) => input)
+  .handler(async ({ data: { workItemId, projectId } }) => {
+    await cancelAgentWorkItem({ workItemId, projectId });
     return jsonSafe({ cancelled: true, ok: true });
   });
 
@@ -236,9 +243,7 @@ async function loadAgentView(projectId: string, agentId: string) {
 async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
   // Only fetch metric events if the agent has a primaryMetric configured.
   const metricEvents = agent.primaryMetric
-    ? (await deps.runEventRepository.listByAgent(agent.id, 500)).filter(
-        (e) => e.type === "metric_observed",
-      )
+    ? (await deps.runEventRepository.listByAgent(agent.id, 500)).filter((e) => e.type === "metric_observed")
     : [];
 
   return buildAgentView({
@@ -257,6 +262,7 @@ async function buildAgentViewModel(deps: ProjectDeps, agent: AgentRecord) {
 
 export {
   cancelAgentInstanceRun as cancelRun,
+  cancelAgentInstanceWorkItem as cancelWorkItem,
   deleteAgentInstance as deleteAgent,
   getAgentInstance as getAgent,
   launchAgentInstance as launchAgent,

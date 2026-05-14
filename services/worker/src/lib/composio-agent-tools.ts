@@ -11,6 +11,7 @@ import { logger } from "@trigger.dev/sdk";
 import type { AgentProviderBinding } from "./agent-runtime";
 
 let _adapter: Promise<ComposioAdapter> | null = null;
+const COMPOSIO_RAW_TOOL_LIMIT = 1000;
 
 function getAdapter(): Promise<ComposioAdapter> {
   if (!_adapter) {
@@ -32,7 +33,7 @@ export async function getComposioAgentTools(params: {
     userId: params.userId,
     toolkits: params.toolkits,
     important: false,
-    limit: 100,
+    limit: COMPOSIO_RAW_TOOL_LIMIT,
   });
 
   logger.info("Composio tools fetched for agent execution", {

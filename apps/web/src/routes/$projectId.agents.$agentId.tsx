@@ -15,7 +15,14 @@ import {
   parseToolConfigEntryViews,
 } from "~/lib/view-models";
 import { getAgentActivityState } from "~/server/activity";
-import { cancelRun, deleteAgent, getAgent, triggerManualRun, updateAgentConfig } from "~/server/agent-instances";
+import {
+  cancelRun,
+  cancelWorkItem,
+  deleteAgent,
+  getAgent,
+  triggerManualRun,
+  updateAgentConfig,
+} from "~/server/agent-instances";
 import { approveAction, rejectAction } from "~/server/approvals";
 import { deleteConversationThread, getConversationState, listConversationThreads } from "~/server/chat";
 import {
@@ -48,6 +55,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
     search: Record<string, unknown>,
   ): {
     tab?: "runs" | "chat" | "learned" | "settings";
+    workItemId?: string;
     runId?: string;
     threadId?: string;
     pendingActionId?: string;
@@ -57,6 +65,7 @@ export const Route = createFileRoute("/$projectId/agents/$agentId")({
         ? search.tab
         : undefined,
     runId: typeof search.runId === "string" ? search.runId : undefined,
+    workItemId: typeof search.workItemId === "string" ? search.workItemId : undefined,
     threadId: typeof search.threadId === "string" ? search.threadId : undefined,
     pendingActionId: typeof search.pendingActionId === "string" ? search.pendingActionId : undefined,
   }),
@@ -140,7 +149,10 @@ function AgentDetailPage() {
       activeRunCount: staticAgent?.activeRunCount ?? 0,
       pendingApprovalCount: staticAgent?.pendingCount ?? 0,
       activeRunId: null,
+      activeWorkItemId: null,
       runs: [],
+      workItems: [],
+      sessions: [],
     },
   });
   const agent = useMemo(
@@ -148,6 +160,7 @@ function AgentDetailPage() {
     [activity, staticAgent],
   );
   const runs = activity.runs;
+  const workItems = activity.workItems;
 
   // Build provider logo map from Composio toolkit summaries
   const toolkitSummaries = (loaderData.toolkitSummaries ?? []) as Array<{
@@ -276,13 +289,35 @@ function AgentDetailPage() {
   const [runError, setRunError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const activeRun = activity.activeRunId ? (runs.find((run) => run.id === activity.activeRunId) ?? null) : null;
+  const activeWorkItem = activity.activeWorkItemId
+    ? (workItems.find((workItem) => workItem.id === activity.activeWorkItemId) ?? null)
+    : null;
+  const selectedWorkItemId =
+    search.workItemId ??
+    (search.runId ? (workItems.find((workItem) => workItem.runId === search.runId)?.id ?? null) : null);
 
   const handleSelectRun = useCallback(
     (runId: string | null) => {
       void navigate({
         to: "/$projectId/agents/$agentId",
         params: { projectId, agentId },
-        search: (prev) => ({ ...prev, runId: runId ?? undefined }),
+        search: (prev) => ({ ...prev, workItemId: undefined, runId: runId ?? undefined }),
+        replace: true,
+      });
+    },
+    [agentId, navigate, projectId],
+  );
+
+  const handleSelectWorkItem = useCallback(
+    (workItemId: string | null, runId?: string | null) => {
+      void navigate({
+        to: "/$projectId/agents/$agentId",
+        params: { projectId, agentId },
+        search: (prev) => ({
+          ...prev,
+          workItemId: workItemId ?? undefined,
+          runId: runId ?? undefined,
+        }),
         replace: true,
       });
     },
@@ -381,6 +416,26 @@ function AgentDetailPage() {
     }
   }, [activeRun, cancelling, projectId, router]);
 
+  const handleCancelWorkItem = useCallback(async () => {
+    if (!activeWorkItem || cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelWorkItem({
+        data: { workItemId: activeWorkItem.id, projectId },
+      });
+      void router.invalidate();
+    } catch {
+      if (activeWorkItem.runId && activeWorkItem.triggerRunId) {
+        await cancelRun({
+          data: { runId: activeWorkItem.runId, triggerRunId: activeWorkItem.triggerRunId, projectId },
+        });
+        void router.invalidate();
+      }
+    } finally {
+      setCancelling(false);
+    }
+  }, [activeWorkItem, cancelling, projectId, router]);
+
   if (!project || !agent) {
     return <div>Agent not found.</div>;
   }
@@ -391,7 +446,7 @@ function AgentDetailPage() {
     setRunError(null);
     try {
       const result = await triggerManualRun({ data: { agentId, projectId } });
-      const data = result as { runId?: string; triggerRunId?: string };
+      const data = result as { runId?: string; triggerRunId?: string; workItemId?: string };
       void router.invalidate();
       return data;
     } catch (err) {
@@ -422,6 +477,7 @@ function AgentDetailPage() {
       activeThreadId={activeThreadId}
       draftThreadOpen={draftThreadOpen}
       initialTab={search.tab}
+      initialWorkItemId={selectedWorkItemId}
       initialRunId={search.runId ?? null}
       initialPendingActionId={search.pendingActionId ?? null}
       onTabChange={(tab) => {
@@ -442,11 +498,14 @@ function AgentDetailPage() {
         });
       }}
       onSelectRun={handleSelectRun}
+      onSelectWorkItem={handleSelectWorkItem}
       onSelectThread={handleSelectThread}
       onCreateThread={handleCreateThread}
       onDeleteThread={handleDeleteThread}
       activeRunId={activity.activeRunId}
+      activeWorkItemId={activity.activeWorkItemId}
       onCancelRun={handleCancelRun}
+      onCancelWorkItem={handleCancelWorkItem}
       cancelling={cancelling}
       runError={runError}
       onBack={() => navigate({ to: "/$projectId", params: { projectId } })}
@@ -457,12 +516,14 @@ function AgentDetailPage() {
       onListGoogleAdsAccounts={async (connectionId) =>
         coerceGoogleAdsAccountListResult(await listGoogleAdsAccounts({ data: { projectId, connectionId } }))
       }
-      onSetConnectionConfig={async (provider, config) => {
-        await updateConnectionConfig({ data: { projectId, provider, config } });
+      onSetConnectionConfig={async (provider, config, connectionId) => {
+        const result = await updateConnectionConfig({ data: { projectId, provider, config, connectionId } });
+        assertMutationSuccess(result, "Could not save connection settings");
         void router.invalidate();
       }}
       onSetAgentConnectionBinding={async (binding) => {
-        await upsertAgentConnectionBinding({ data: { projectId, agentId, ...binding } });
+        const result = await upsertAgentConnectionBinding({ data: { projectId, agentId, ...binding } });
+        assertMutationSuccess(result, "Could not save account selection");
         void router.invalidate();
       }}
       providerLogos={providerLogos}
@@ -489,6 +550,7 @@ function AgentDetailPage() {
         void router.invalidate();
       }}
       runs={runs}
+      workItems={workItems}
       conversation={conversation ?? undefined}
       onRunTriggered={async (_runId, _triggerRunId) => {
         void router.invalidate();
@@ -542,4 +604,11 @@ function coerceGoogleAdsAccountListResult(value: unknown): GoogleAdsAccountListR
     accounts,
     error: typeof record.error === "string" ? record.error : undefined,
   };
+}
+
+function assertMutationSuccess(value: unknown, fallback: string) {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  if (record.success === false) {
+    throw new Error(typeof record.error === "string" ? record.error : fallback);
+  }
 }

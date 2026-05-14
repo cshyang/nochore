@@ -56,6 +56,7 @@ const INTERNAL_TOOL_NAMES = new Set([
   "inspect_connections",
   "list_connected_tools",
 ]);
+const COMPOSIO_RAW_TOOL_LIMIT = 1000;
 
 export async function buildChatProviderTools(params: {
   userId: string;
@@ -144,7 +145,7 @@ async function loadProviderTools(
     userId,
     toolkits: providers,
     important: false,
-    limit: 150,
+    limit: COMPOSIO_RAW_TOOL_LIMIT,
   });
 
   return rawTools.flatMap((tool) => {
@@ -303,7 +304,7 @@ function resolveChatProviderBindings(connections: ConnectionRow[], bindings: Bin
     return explicit;
   }
 
-  return connections.map((connection) => {
+  return connections.filter(isUsableImplicitConnection).map((connection) => {
     const config = parseConfig(connection.config);
     const resourceId = connection.provider === "googleads" ? getSelectedCustomerId(config) : undefined;
     const resourceLabel = resourceId ? formatGoogleAdsCustomerId(resourceId) : undefined;
@@ -326,6 +327,13 @@ function resolveChatProviderBindings(connections: ConnectionRow[], bindings: Bin
       resourceLabel,
     };
   });
+}
+
+function isUsableImplicitConnection(connection: ConnectionRow): boolean {
+  if (connection.provider !== "googleads") {
+    return true;
+  }
+  return Boolean(getSelectedCustomerId(parseConfig(connection.config)));
 }
 
 function getAccountLabel(connection: ConnectionRow, config: Record<string, unknown>): string | undefined {

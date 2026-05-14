@@ -3,15 +3,17 @@ import { useEffect, useMemo } from "react";
 import type { ChecklistItem } from "~/components/agent-workspace-chrome";
 import { Button } from "~/components/Button";
 import { RunDetail } from "~/components/RunDetail";
-import { RunList } from "~/components/RunList";
+import { humanizeWorkItemKind, WorkItemList } from "~/components/WorkItemList";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
-import type { LearnedRuleView, PendingActionView, RunView } from "~/lib/types";
+import type { LearnedRuleView, PendingActionView, RunView, WorkItemView } from "~/lib/types";
 
 interface AgentWorkspaceActivityPaneProps {
   runs: RunView[];
-  selectedRunId: string | null;
-  onSelectRun: (runId: string) => void;
+  workItems: WorkItemView[];
+  selectedWorkItemId: string | null;
+  onSelectWorkItem: (workItemId: string) => void;
   activeRunId?: string | null;
+  activeWorkItemId?: string | null;
   runError?: string | null;
   onRunNow?: () => void | Promise<void>;
   checklistItems?: ChecklistItem[];
@@ -31,9 +33,10 @@ interface AgentWorkspaceActivityPaneProps {
 
 export function AgentWorkspaceActivityPane({
   runs,
-  selectedRunId,
-  onSelectRun,
-  activeRunId,
+  workItems,
+  selectedWorkItemId,
+  onSelectWorkItem,
+  activeWorkItemId,
   runError,
   onRunNow,
   checklistItems,
@@ -49,29 +52,32 @@ export function AgentWorkspaceActivityPane({
   agentName,
   nextRunAt,
 }: AgentWorkspaceActivityPaneProps) {
-  const displayRuns = useMemo(() => {
-    if (!selectedRunId || runs.some((run) => run.id === selectedRunId)) {
-      return runs;
+  const displayWorkItems = useMemo(() => {
+    if (!selectedWorkItemId || workItems.some((workItem) => workItem.id === selectedWorkItemId)) {
+      return workItems;
     }
 
-    const placeholder: RunView = {
-      id: selectedRunId,
+    const placeholder: WorkItemView = {
+      id: selectedWorkItemId,
+      sessionId: "pending",
       agentId: runs[0]?.agentId ?? "",
-      triggerType: "manual",
-      status: activeRunId === selectedRunId ? "running" : "queued",
-      hasActionableApprovals: false,
-      startedAt: new Date().toISOString(),
-      events: [],
-      approvals: [],
-      tasks: [],
+      kind: "run",
+      status: activeWorkItemId === selectedWorkItemId ? "running" : "queued",
+      title: "Pending work",
+      createdAt: new Date().toISOString(),
+      childWorkItems: [],
     };
 
-    return [placeholder, ...runs];
-  }, [activeRunId, runs, selectedRunId]);
+    return [placeholder, ...workItems];
+  }, [activeWorkItemId, runs, selectedWorkItemId, workItems]);
 
-  const selectedRun = displayRuns.find((run) => run.id === selectedRunId) ?? displayRuns[0] ?? null;
+  const selectedWorkItem =
+    displayWorkItems.find((workItem) => workItem.id === selectedWorkItemId) ?? displayWorkItems[0] ?? null;
+  const selectedRun = selectedWorkItem?.run ?? null;
   const hasJumpToLive =
-    Boolean(activeRunId) && selectedRun?.id !== activeRunId && displayRuns.some((run) => run.id === activeRunId);
+    Boolean(activeWorkItemId) &&
+    selectedWorkItem?.id !== activeWorkItemId &&
+    displayWorkItems.some((workItem) => workItem.id === activeWorkItemId);
 
   // Arrow-key navigation between runs. Scoped to window because the effect
   // only mounts while the Runs tab is active — switching to Chat/Settings
@@ -85,18 +91,19 @@ export function AgentWorkspaceActivityPane({
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
         return;
       }
-      if (displayRuns.length === 0) return;
-      const idx = displayRuns.findIndex((r) => r.id === selectedRunId);
+      if (displayWorkItems.length === 0) return;
+      const idx = displayWorkItems.findIndex((workItem) => workItem.id === selectedWorkItemId);
       const current = idx === -1 ? 0 : idx;
-      const nextIdx = e.key === "ArrowUp" ? Math.max(0, current - 1) : Math.min(displayRuns.length - 1, current + 1);
+      const nextIdx =
+        e.key === "ArrowUp" ? Math.max(0, current - 1) : Math.min(displayWorkItems.length - 1, current + 1);
       if (nextIdx !== current) {
         e.preventDefault();
-        onSelectRun(displayRuns[nextIdx].id);
+        onSelectWorkItem(displayWorkItems[nextIdx].id);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [displayRuns, selectedRunId, onSelectRun]);
+  }, [displayWorkItems, selectedWorkItemId, onSelectWorkItem]);
 
   return (
     <div className="aw-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0 }}>
@@ -164,11 +171,11 @@ export function AgentWorkspaceActivityPane({
       ) : null}
 
       <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
-        <RunList
-          runs={displayRuns}
-          selectedRunId={selectedRun?.id ?? null}
-          onSelect={onSelectRun}
-          activeRunId={activeRunId}
+        <WorkItemList
+          workItems={displayWorkItems}
+          selectedWorkItemId={selectedWorkItem?.id ?? null}
+          onSelect={onSelectWorkItem}
+          activeWorkItemId={activeWorkItemId}
         />
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowX: "hidden", overflowY: "auto" }}>
           {hasJumpToLive ? (
@@ -186,29 +193,224 @@ export function AgentWorkspaceActivityPane({
               }}
             >
               <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
-                A newer live run is in progress. Stay here or jump to the current run.
+                Newer live work is in progress. Stay here or jump to the current item.
               </div>
-              <Button size="sm" variant="secondary" onClick={() => activeRunId && onSelectRun(activeRunId)}>
-                Jump to live run
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => activeWorkItemId && onSelectWorkItem(activeWorkItemId)}
+              >
+                Jump to live work
               </Button>
             </div>
           ) : null}
-          <RunDetail
-            run={selectedRun}
-            hasRuns={displayRuns.length > 0}
-            onRunNow={onRunNow}
-            checklistItems={checklistItems}
-            onGoLive={onGoLive}
-            goingLive={goingLive}
-            onApprove={onApprove}
-            onReject={onReject}
-            onAskChat={onAskChat}
-            priorRuns={displayRuns}
-            agentName={agentName}
-            nextRunAt={nextRunAt}
-          />
+          {selectedWorkItem ? <WorkItemDiagnostics workItem={selectedWorkItem} /> : null}
+          {selectedRun ? (
+            <RunDetail
+              run={selectedRun}
+              hasRuns={displayWorkItems.length > 0}
+              onRunNow={onRunNow}
+              checklistItems={checklistItems}
+              onGoLive={onGoLive}
+              goingLive={goingLive}
+              onApprove={onApprove}
+              onReject={onReject}
+              onAskChat={onAskChat}
+              priorRuns={runs}
+              agentName={agentName}
+              nextRunAt={nextRunAt}
+            />
+          ) : selectedWorkItem ? (
+            <WorkItemDetail workItem={selectedWorkItem} />
+          ) : (
+            <RunDetail
+              run={null}
+              hasRuns={false}
+              onRunNow={onRunNow}
+              checklistItems={checklistItems}
+              onGoLive={onGoLive}
+              goingLive={goingLive}
+              onApprove={onApprove}
+              onReject={onReject}
+              onAskChat={onAskChat}
+              priorRuns={runs}
+              agentName={agentName}
+              nextRunAt={nextRunAt}
+            />
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkItemDiagnostics({ workItem }: { workItem: WorkItemView }) {
+  const session = workItem.session;
+  const snapshot = workItem.latestSnapshot;
+  const sandbox = workItem.currentSandboxLease;
+
+  if (!session && !snapshot && !sandbox) {
+    return null;
+  }
+
+  const rows = [
+    session ? ["Session", session.id] : null,
+    session ? ["Context", session.contextKey] : null,
+    session ? ["Session status", session.status] : null,
+    session?.activeWorkItemId ? ["Active work", session.activeWorkItemId] : null,
+    session?.currentSandboxLeaseId ? ["Sandbox lease", session.currentSandboxLeaseId] : null,
+    sandbox ? ["Sandbox", `${sandbox.provider} / ${sandbox.status}`] : null,
+    snapshot ? ["Snapshot", snapshot.id] : null,
+    snapshot ? ["Snapshot kind", snapshot.kind] : null,
+    snapshot?.executor ? ["Executor", snapshot.executor] : null,
+    snapshot?.model ? ["Model", snapshot.model] : null,
+    snapshot?.provider ? ["Provider", snapshot.provider] : null,
+    snapshot ? ["Prompt hash", snapshot.promptHash] : null,
+    snapshot?.messageCount != null ? ["Messages", String(snapshot.messageCount)] : null,
+    snapshot?.memoryCount != null ? ["Memory refs", String(snapshot.memoryCount)] : null,
+    snapshot?.toolBindingCount != null ? ["Tools", String(snapshot.toolBindingCount)] : null,
+    snapshot?.policyRuleCount != null ? ["Policy rules", String(snapshot.policyRuleCount)] : null,
+  ].filter((row): row is [string, string] => row != null);
+
+  return (
+    <div
+      style={{
+        margin: "0 20px 12px",
+        padding: "12px 14px",
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: RADIUS.sm,
+        background: COLORS.surface,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            fontSize: TYPE.scale.xs,
+            color: COLORS.textDim,
+            textTransform: "uppercase",
+            letterSpacing: TYPE.tracking.wide,
+            fontWeight: TYPE.weight.semibold,
+          }}
+        >
+          Session context
+        </div>
+        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{humanizeWorkItemKind(workItem.kind)}</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+        {rows.map(([label, value]) => (
+          <div key={label} style={{ minWidth: 0 }}>
+            <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim, marginBottom: 2 }}>{label}</div>
+            <div
+              style={{
+                fontSize: TYPE.scale.xs,
+                color: COLORS.textSecondary,
+                fontFamily: TYPE.mono,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={value}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkItemDetail({ workItem }: { workItem: WorkItemView }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, padding: "24px 20px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          marginBottom: 18,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: TYPE.scale.xs,
+              color: COLORS.textDim,
+              textTransform: "uppercase",
+              letterSpacing: TYPE.tracking.wide,
+              marginBottom: 6,
+            }}
+          >
+            {humanizeWorkItemKind(workItem.kind)}
+          </div>
+          <h2 style={{ margin: 0, fontSize: TYPE.scale.lg, fontFamily: TYPE.display, color: COLORS.text }}>
+            {workItem.title ?? humanizeWorkItemKind(workItem.kind)}
+          </h2>
+        </div>
+        <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>{workItem.status}</div>
+      </div>
+      {workItem.error ? (
+        <div
+          style={{
+            padding: 14,
+            border: `1px solid ${COLORS.redBorder}`,
+            borderRadius: RADIUS.sm,
+            background: COLORS.redSubtle,
+            color: COLORS.red,
+            fontSize: TYPE.scale.sm,
+            marginBottom: 16,
+          }}
+        >
+          {workItem.error}
+        </div>
+      ) : null}
+      {workItem.childWorkItems.length > 0 ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          <div
+            style={{
+              fontSize: TYPE.scale.xs,
+              color: COLORS.textDim,
+              textTransform: "uppercase",
+              letterSpacing: TYPE.tracking.wide,
+            }}
+          >
+            Child work
+          </div>
+          {workItem.childWorkItems.map((child) => (
+            <div
+              key={child.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "10px 12px",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: RADIUS.sm,
+                background: COLORS.surface,
+              }}
+            >
+              <div style={{ fontSize: TYPE.scale.sm, color: COLORS.text }}>
+                {child.title ?? humanizeWorkItemKind(child.kind)}
+              </div>
+              <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textDim }}>{child.status}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary }}>
+          No run timeline is attached to this work item.
+        </div>
+      )}
     </div>
   );
 }

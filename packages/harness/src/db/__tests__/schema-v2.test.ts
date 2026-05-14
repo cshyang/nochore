@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createDb, createTestDb } from "../client";
 import {
   agentConnectionBindings,
+  agentSessions,
   agents,
   agentTasks,
   approvals,
@@ -14,11 +15,14 @@ import {
   conversationCheckpoints,
   conversationEvents,
   conversationThreads,
+  contextSnapshots,
   learnedPolicyRules,
   lessons,
   projects,
   runEvents,
   runs,
+  sandboxLeases,
+  workItems,
 } from "../schema";
 
 describe("simplified schema", () => {
@@ -226,6 +230,74 @@ describe("simplified schema", () => {
     expect(checkpointRow?.summaryVersion).toBe(2);
   });
 
+  it("stores agent session core records around conversation context", () => {
+    const db = createTestDb();
+    const now = Date.now();
+
+    db.insert(agentSessions)
+      .values({
+        id: "session_001",
+        projectId: "proj_001",
+        agentId: "agent_001",
+        conversationThreadId: "thread_001",
+        contextKey: "web:thread_001",
+        status: "thinking",
+        activeWorkItemId: "work_001",
+        createdAt: now,
+        updatedAt: now,
+        lastActiveAt: now,
+      })
+      .run();
+    db.insert(workItems)
+      .values({
+        id: "work_001",
+        sessionId: "session_001",
+        agentId: "agent_001",
+        kind: "chat_turn",
+        status: "running",
+        input: JSON.stringify({ messageId: "msg_001" }),
+        createdAt: now,
+        startedAt: now,
+      })
+      .run();
+    db.insert(contextSnapshots)
+      .values({
+        id: "snapshot_001",
+        sessionId: "session_001",
+        agentId: "agent_001",
+        workItemId: "work_001",
+        conversationThreadId: "thread_001",
+        kind: "chat_turn",
+        messagesVersion: "2",
+        memoryVersion: "lessons:0",
+        toolBindingsVersion: "tools:request_input",
+        policyVersion: "agent-tool-config",
+        promptHash: "sha256:test",
+        payload: JSON.stringify({ systemLength: 42 }),
+        createdAt: now,
+      })
+      .run();
+    db.insert(sandboxLeases)
+      .values({
+        id: "lease_001",
+        sessionId: "session_001",
+        provider: "inline",
+        status: "ready",
+        metadata: JSON.stringify({ executor: "ai-sdk" }),
+        startedAt: now,
+      })
+      .run();
+
+    expect(db.select().from(agentSessions).where(eq(agentSessions.id, "session_001")).get()?.contextKey).toBe(
+      "web:thread_001",
+    );
+    expect(db.select().from(workItems).where(eq(workItems.id, "work_001")).get()?.kind).toBe("chat_turn");
+    expect(db.select().from(contextSnapshots).where(eq(contextSnapshots.id, "snapshot_001")).get()?.promptHash).toBe(
+      "sha256:test",
+    );
+    expect(db.select().from(sandboxLeases).where(eq(sandboxLeases.id, "lease_001")).get()?.provider).toBe("inline");
+  });
+
   it("allows multiple manual conversation threads while keeping one primary thread per agent", () => {
     const db = createTestDb();
     const now = Date.now();
@@ -414,7 +486,8 @@ describe("simplified schema", () => {
 
       const legacy = new Database(dbPath);
       legacy.exec(`
-        CREATE TABLE IF NOT EXISTS work_items (id TEXT PRIMARY KEY);
+        DROP TABLE IF EXISTS work_items;
+        CREATE TABLE work_items (id TEXT PRIMARY KEY);
         INSERT INTO work_items (id) VALUES ('work_legacy');
         PRAGMA user_version = 3;
       `);
@@ -444,17 +517,17 @@ describe("simplified schema", () => {
       expect(ruleRow?.toolName).toBe("delegate_task");
 
       const sqlite = new Database(dbPath, { readonly: true });
-      const legacyTable = sqlite
+      const workItemTable = sqlite
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'work_items'")
         .get();
       const approvalColumns = sqlite.prepare("PRAGMA table_info(approvals)").all() as Array<{ name: string }>;
       const version = sqlite.pragma("user_version", { simple: true });
       sqlite.close();
 
-      expect(legacyTable).toBeUndefined();
+      expect(workItemTable).toBeDefined();
       expect(approvalColumns.some((column) => column.name === "agent_task_id")).toBe(true);
       expect(approvalColumns.some((column) => column.name === "work_item_id")).toBe(false);
-      expect(version).toBe(5);
+      expect(version).toBe(6);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

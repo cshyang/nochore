@@ -9,6 +9,25 @@ export type RunStatus =
   | "completed"
   | "failed"
   | "cancelled";
+export type AgentSessionStatus =
+  | "idle"
+  | "thinking"
+  | "working"
+  | "waiting_for_input"
+  | "waiting_for_approval"
+  | "failed"
+  | "closed";
+export type WorkItemKind = "chat_turn" | "run" | "delegated_task" | "scheduled_check" | "external_event";
+export type WorkItemStatus =
+  | "queued"
+  | "running"
+  | "waiting_for_input"
+  | "waiting_for_approval"
+  | "waiting_for_tasks"
+  | "stopped"
+  | "completed"
+  | "failed"
+  | "cancelled";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "blocked" | "expired";
 export type RunEventType =
   | "run_started"
@@ -191,6 +210,80 @@ export interface RunView {
 
 export interface RunActivityStateView extends RunView {}
 
+export interface AgentSessionActivityView {
+  id: string;
+  projectId: string;
+  agentId: string;
+  conversationThreadId?: string;
+  contextKey: string;
+  status: AgentSessionStatus;
+  currentSandboxLeaseId?: string;
+  lastContextSnapshotId?: string;
+  activeWorkItemId?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastActiveAt?: string;
+}
+
+export interface ContextSnapshotActivityView {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  workItemId?: string;
+  conversationThreadId?: string;
+  kind: string;
+  messagesVersion?: string;
+  memoryVersion?: string;
+  toolBindingsVersion?: string;
+  policyVersion?: string;
+  promptHash: string;
+  executor?: string;
+  model?: string;
+  provider?: string;
+  messageCount?: number;
+  memoryCount?: number;
+  toolBindingCount?: number;
+  policyRuleCount?: number;
+  createdAt: string;
+}
+
+export interface SandboxLeaseActivityView {
+  id: string;
+  sessionId: string;
+  provider: string;
+  providerHandle?: string;
+  status: string;
+  startedAt: string;
+  stoppedAt?: string;
+}
+
+export interface WorkItemChildView {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  kind: WorkItemKind;
+  status: WorkItemStatus;
+  parentWorkItemId?: string;
+  runId?: string;
+  agentTaskId?: string;
+  triggerRunId?: string;
+  title?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface WorkItemView extends WorkItemChildView {
+  input?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  run?: RunActivityStateView;
+  childWorkItems: WorkItemChildView[];
+  session?: AgentSessionActivityView;
+  latestSnapshot?: ContextSnapshotActivityView;
+  currentSandboxLease?: SandboxLeaseActivityView;
+}
+
 export interface ApprovalView {
   id: string;
   runId: string;
@@ -275,6 +368,21 @@ export interface ConnectionView {
   providerName?: string | null;
 }
 
+export interface AgentConnectionBindingView {
+  id: string;
+  agentId: string;
+  provider: string;
+  connectionId: string;
+  resourceType?: string;
+  resourceId?: string;
+  resourceLabel?: string;
+  alias: string;
+  purpose?: string;
+  isDefault: boolean;
+  status: string;
+  config: Record<string, unknown>;
+}
+
 export interface AgentView {
   id: string;
   projectId?: string;
@@ -294,6 +402,7 @@ export interface AgentView {
   lessonCount: number;
   runCount: number;
   connections: ProviderRequirementView[];
+  connectionBindings?: AgentConnectionBindingView[];
   toolConfig?: ToolConfigView;
   notificationConfig?: NotificationConfigView;
   createdAt: number;
@@ -332,7 +441,10 @@ export interface AgentActivityStateView {
   activeRunCount: number;
   pendingApprovalCount: number;
   activeRunId: string | null;
+  activeWorkItemId: string | null;
   runs: RunActivityStateView[];
+  workItems: WorkItemView[];
+  sessions: AgentSessionActivityView[];
 }
 
 export interface ProjectActivityStateView {

@@ -51,7 +51,7 @@ describe("persistent UI message stream options", () => {
     const result = streamText({
       model: new MockLanguageModelV3({
         doStream: async () => ({
-          stream: createTextStream("I will check that."),
+          stream: createTextStream("I will check that.") as never,
         }),
       }),
       prompt: "Check AI Max traffic",
@@ -93,7 +93,7 @@ describe("persistent UI message stream options", () => {
     const result = streamText({
       model: new MockLanguageModelV3({
         doStream: async () => ({
-          stream: createTextStream(" with fresh findings."),
+          stream: createTextStream(" with fresh findings.") as never,
         }),
       }),
       prompt: "Continue",

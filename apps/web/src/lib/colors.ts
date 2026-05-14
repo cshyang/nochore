@@ -21,6 +21,11 @@ export const COLORS = {
   bgRaised: "#15141A",
   surface: "#1B1A21",
   surfaceHover: "#222128",
+  // Raised feature cards (AgentCard etc.). ~8 luminance steps above `surface`
+  // so the card "pops" off the page — the trick is luminance delta + a hairline
+  // top-edge highlight via inset shadow, not box-shadow drop.
+  cardRaised: "#23212C",
+  cardRaisedHover: "#2A2834",
   border: "#2B2935",
   borderStrong: "#3A3845",
 

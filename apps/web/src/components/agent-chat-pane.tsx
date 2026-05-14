@@ -25,7 +25,7 @@ interface AgentChatPaneProps {
   onSelectThread?: (threadId: string) => void;
   onCreateThread?: () => void;
   onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
-  onRunTriggered?: (runId: string, triggerRunId: string) => void;
+  onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   onThreadCreated?: (threadId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
   pendingApproval?: PendingActionView | null;

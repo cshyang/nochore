@@ -109,6 +109,98 @@ export const conversationCheckpoints = sqliteTable(
   (table) => [uniqueIndex("idx_conversation_checkpoints_thread_kind").on(table.threadId, table.kind)],
 );
 
+export const agentSessions = sqliteTable(
+  "agent_sessions",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    conversationThreadId: text("conversation_thread_id"),
+    contextKey: text("context_key").notNull(),
+    status: text("status").notNull().default("idle"),
+    currentSandboxLeaseId: text("current_sandbox_lease_id"),
+    lastContextSnapshotId: text("last_context_snapshot_id"),
+    activeWorkItemId: text("active_work_item_id"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    lastActiveAt: integer("last_active_at"),
+  },
+  (table) => [
+    index("idx_agent_sessions_agent_updated").on(table.agentId, table.updatedAt),
+    uniqueIndex("idx_agent_sessions_context_key").on(table.agentId, table.contextKey),
+    index("idx_agent_sessions_thread").on(table.conversationThreadId),
+  ],
+);
+
+export const workItems = sqliteTable(
+  "work_items",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("queued"),
+    parentWorkItemId: text("parent_work_item_id"),
+    runId: text("run_id"),
+    agentTaskId: text("agent_task_id"),
+    triggerRunId: text("trigger_run_id"),
+    title: text("title"),
+    input: text("input"),
+    result: text("result"),
+    error: text("error"),
+    createdAt: integer("created_at").notNull(),
+    startedAt: integer("started_at"),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [
+    index("idx_work_items_session_created").on(table.sessionId, table.createdAt),
+    index("idx_work_items_agent_created").on(table.agentId, table.createdAt),
+    index("idx_work_items_run").on(table.runId),
+    index("idx_work_items_agent_task").on(table.agentTaskId),
+  ],
+);
+
+export const contextSnapshots = sqliteTable(
+  "context_snapshots",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    workItemId: text("work_item_id"),
+    conversationThreadId: text("conversation_thread_id"),
+    kind: text("kind").notNull(),
+    messagesVersion: text("messages_version"),
+    memoryVersion: text("memory_version"),
+    toolBindingsVersion: text("tool_bindings_version"),
+    policyVersion: text("policy_version"),
+    promptHash: text("prompt_hash").notNull(),
+    payload: text("payload").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_context_snapshots_session_created").on(table.sessionId, table.createdAt),
+    index("idx_context_snapshots_work_item").on(table.workItemId),
+  ],
+);
+
+export const sandboxLeases = sqliteTable(
+  "sandbox_leases",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    provider: text("provider").notNull(),
+    providerHandle: text("provider_handle"),
+    status: text("status").notNull(),
+    metadata: text("metadata"),
+    startedAt: integer("started_at").notNull(),
+    stoppedAt: integer("stopped_at"),
+  },
+  (table) => [
+    index("idx_sandbox_leases_session_started").on(table.sessionId, table.startedAt),
+    index("idx_sandbox_leases_provider_handle").on(table.provider, table.providerHandle),
+  ],
+);
+
 export const runEvents = sqliteTable(
   "run_events",
   {

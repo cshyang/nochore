@@ -10,6 +10,7 @@ import type {
   SkillView,
   ToolConfigEntryView,
   ToolConfigView,
+  WorkItemView,
 } from "~/lib/types";
 
 export type WorkspaceTab = "runs" | "chat" | "learned" | "settings";
@@ -31,15 +32,16 @@ export interface AgentWorkspaceProps {
   project: ProjectView;
   onBack: () => void;
   onDeleteAgent?: () => void;
-  onRunNow?: () => Promise<{ runId?: string } | undefined>;
+  onRunNow?: () => Promise<{ runId?: string; workItemId?: string } | undefined>;
   onUpdateAgent?: (updates: Partial<AgentWorkspaceUpdate>) => Promise<void> | void;
-  onRunTriggered?: (runId: string, triggerRunId: string) => void;
+  onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   availableSkills?: SkillView[];
   skills?: SkillView[];
   projectConnections?: ConnectionView[];
   policyToolCatalog?: ToolConfigEntryView[];
   requiredProviders?: ProviderRequirementView[];
   runs?: RunView[];
+  workItems?: WorkItemView[];
   conversation?: ConversationStateView;
   conversationThreads?: ConversationThreadSummaryView[];
   activeThreadId?: string;
@@ -47,9 +49,11 @@ export interface AgentWorkspaceProps {
   isDraft?: boolean;
   initialTab?: WorkspaceTab;
   initialRunId?: string | null;
+  initialWorkItemId?: string | null;
   initialPendingActionId?: string | null;
   onTabChange?: (tab: WorkspaceTab) => void;
   onSelectRun?: (runId: string | null) => void;
+  onSelectWorkItem?: (workItemId: string | null, runId?: string | null) => void;
   onSelectThread?: (threadId: string) => void;
   onCreateThread?: () => void;
   onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
@@ -60,7 +64,11 @@ export interface AgentWorkspaceProps {
     accounts?: Array<{ id: string; formattedId: string; label: string }>;
     error?: string;
   }>;
-  onSetConnectionConfig?: (provider: string, config: Record<string, unknown>) => Promise<void> | void;
+  onSetConnectionConfig?: (
+    provider: string,
+    config: Record<string, unknown>,
+    connectionId?: string,
+  ) => Promise<void> | void;
   onSetAgentConnectionBinding?: (binding: {
     provider: string;
     connectionId: string;
@@ -72,6 +80,7 @@ export interface AgentWorkspaceProps {
     isDefault?: boolean;
   }) => Promise<void> | void;
   activeRunId?: string | null;
+  activeWorkItemId?: string | null;
   runError?: string | null;
   onApprove?: (actionId: string, reason: string) => void | Promise<void>;
   onReject?: (actionId: string, reason: string) => void | Promise<void>;
@@ -80,6 +89,7 @@ export interface AgentWorkspaceProps {
   onSuppressLearnedRule?: (ruleId: string) => void | Promise<void>;
   onRevokeLearnedRule?: (ruleId: string) => void | Promise<void>;
   onCancelRun?: () => void;
+  onCancelWorkItem?: () => void;
   cancelling?: boolean;
   providerLogos?: Record<string, string>;
 }

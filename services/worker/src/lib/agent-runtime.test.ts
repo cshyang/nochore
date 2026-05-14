@@ -134,4 +134,96 @@ describe("resolveAgentConnectionContext", () => {
       accountLabel: "support@example.com",
     });
   });
+
+  it("ignores empty active Google Ads rows that have no OAuth account or customer id", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "nochore-googleads-empty-"));
+    tempDirs.push(root);
+    const db = createDb(path.join(root, "project.db"));
+    const repositories = createProjectRepositories(db);
+    const now = Date.now();
+
+    db.insert(projects).values({ id: "project_001", name: "Project", createdAt: now }).run();
+    const agentId = await repositories.agentRepository.create({
+      id: "agent_googleads",
+      projectId: "project_001",
+      name: "Google Ads Agent",
+      description: "",
+      instructions: "Use Google Ads.",
+      skills: [],
+      toolConfig: {
+        globalApprovalRequired: false,
+        requiredProviders: [{ provider: "googleads" }],
+        tools: {},
+      },
+      notificationConfig: { inApp: true, email: false, slack: false },
+      schedule: "manual",
+    });
+
+    db.insert(connections)
+      .values({
+        id: "conn_empty_googleads",
+        projectId: "project_001",
+        provider: "googleads",
+        composioEntityId: null,
+        status: "active",
+        config: "{}",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const agent = await repositories.agentRepository.getById(agentId);
+    if (!agent) throw new Error("missing test agent");
+
+    const context = await resolveAgentConnectionContext({ db, projectId: "project_001", agent });
+    expect(context.activeProviders).toEqual([]);
+    expect(context.providerBindings).toEqual([]);
+    expect(context.providerConfigs).toEqual({});
+  });
+
+  it("does not treat Google Ads OAuth as runnable until a customer id is selected", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "nochore-googleads-oauth-no-customer-"));
+    tempDirs.push(root);
+    const db = createDb(path.join(root, "project.db"));
+    const repositories = createProjectRepositories(db);
+    const now = Date.now();
+
+    db.insert(projects).values({ id: "project_001", name: "Project", createdAt: now }).run();
+    const agentId = await repositories.agentRepository.create({
+      id: "agent_googleads",
+      projectId: "project_001",
+      name: "Google Ads Agent",
+      description: "",
+      instructions: "Use Google Ads.",
+      skills: [],
+      toolConfig: {
+        globalApprovalRequired: false,
+        requiredProviders: [{ provider: "googleads" }],
+        tools: {},
+      },
+      notificationConfig: { inApp: true, email: false, slack: false },
+      schedule: "manual",
+    });
+
+    db.insert(connections)
+      .values({
+        id: "conn_oauth_googleads",
+        projectId: "project_001",
+        provider: "googleads",
+        composioEntityId: "ca_googleads",
+        status: "active",
+        config: "{}",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const agent = await repositories.agentRepository.getById(agentId);
+    if (!agent) throw new Error("missing test agent");
+
+    const context = await resolveAgentConnectionContext({ db, projectId: "project_001", agent });
+    expect(context.activeProviders).toEqual([]);
+    expect(context.providerBindings).toEqual([]);
+    expect(context.providerConfigs).toEqual({});
+  });
 });

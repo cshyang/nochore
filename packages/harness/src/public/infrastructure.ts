@@ -14,16 +14,20 @@ export { createDb, type HarnessDb } from "../db/client";
 
 export {
   agentConnectionBindings,
+  agentSessions,
   agents,
   agentTasks,
   approvals,
   connections,
+  contextSnapshots,
   learnedPolicyRules,
   lessons,
   projects,
   runEvents,
   runs,
+  sandboxLeases,
   suggestionSuppressions,
+  workItems,
 } from "../db/schema";
 export { createAiSdkModel, resolveAiSdkProvider } from "../llm/model";
 export { getProjectPersistence, openProjectDb } from "../persistence/index";
