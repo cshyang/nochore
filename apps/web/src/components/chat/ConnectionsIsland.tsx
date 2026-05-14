@@ -37,7 +37,6 @@ export function ConnectionsIsland({ connections, projectId }: ConnectionsIslandP
         boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
         borderRadius: RADIUS.lg,
         padding: `${SPACE[3]}px ${SPACE[3]}px`,
-        margin: `${SPACE[3]}px ${SPACE[3]}px ${SPACE[3]}px 0`,
         transition: `width 220ms cubic-bezier(0.16, 1, 0.3, 1)`,
         display: "flex",
         flexDirection: "column",
@@ -54,6 +53,7 @@ export function ConnectionsIsland({ connections, projectId }: ConnectionsIslandP
             }
           : {
               position: "relative" as const,
+              margin: `${SPACE[3]}px ${SPACE[3]}px ${SPACE[3]}px 0`,
             }),
       }}
     >
