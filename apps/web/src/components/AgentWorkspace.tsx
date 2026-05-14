@@ -1,4 +1,4 @@
-import { Play, Stop } from "@phosphor-icons/react";
+import { Stop } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentChatPane } from "~/components/agent-chat-pane";
 import type { AgentWorkspaceProps, WorkspaceTab } from "~/components/agent-workspace.types";
@@ -325,11 +325,6 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               >
                 <Stop size={13} weight="bold" />
                 {cancelling ? "Cancelling..." : "Cancel work"}
-              </Button>
-            ) : wrappedOnRunNow ? (
-              <Button variant="secondary" onClick={wrappedOnRunNow}>
-                <Play size={13} weight="bold" />
-                Background run
               </Button>
             ) : undefined
           }

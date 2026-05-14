@@ -345,6 +345,7 @@ function textOfMessage(m: UIMessage): string {
 function derivePaneStatus(runs: RunView[], pendingApproval: PendingActionView | null | undefined): ChatStatus {
   if (pendingApproval && pendingApproval.status === "pending") return "needs-you";
   if (runs.some((r) => r.status === "waiting_for_approval")) return "needs-you";
-  if (runs.some((r) => r.status === "running" || r.status === "waiting_for_tasks" || r.status === "queued")) return "running";
+  if (runs.some((r) => r.status === "running" || r.status === "waiting_for_tasks" || r.status === "queued"))
+    return "running";
   return "idle";
 }
