@@ -7,6 +7,7 @@ import { ChatColumn } from "~/components/chat/ChatColumn";
 import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
 import { ChatInput } from "~/components/chat/ChatInput";
 import { EmptyThreadHero } from "~/components/chat/EmptyThreadHero";
+import { RunCard } from "~/components/chat/RunCard";
 import { UserMessage } from "~/components/chat/UserMessage";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
@@ -248,6 +249,22 @@ export function AgentChatPane({
                         message={message as { role: string; parts: Array<Record<string, unknown>> }}
                         onOptionClick={isLastAssistant ? handleOptionClick : undefined}
                       />
+                      {runCardsForMessage(message, runs).map(({ runId, run }) => (
+                        <RunCard
+                          key={runId}
+                          runId={runId}
+                          agentId={agent.id}
+                          projectId={projectId}
+                          headline={run.summary?.headline ?? ""}
+                          findings={(run.summary?.details ?? []).map((text) => ({ text }))}
+                          completedAt={run.completedAt}
+                          durationMs={
+                            run.completedAt && run.startedAt
+                              ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
+                              : undefined
+                          }
+                        />
+                      ))}
                     </AgentMessage>
                   </div>
                 );
@@ -269,6 +286,26 @@ export function AgentChatPane({
       </div>
     </>
   );
+}
+
+function runCardsForMessage(message: UIMessage, runs: RunView[]): Array<{ runId: string; run: RunView }> {
+  const results: Array<{ runId: string; run: RunView }> = [];
+  for (const part of message.parts) {
+    const record = part as Record<string, unknown>;
+    const type = record.type as string | undefined;
+    const isTriggerRun =
+      (type === "dynamic-tool" && record.toolName === "trigger_run") ||
+      (typeof type === "string" && type.startsWith("tool-") && type.includes("trigger_run"));
+    if (!isTriggerRun || record.state !== "output-available") continue;
+    const output = record.output as { runId?: string } | undefined;
+    const runId = output?.runId;
+    if (!runId) continue;
+    const run = runs.find((r) => r.id === runId);
+    if (run?.summary) {
+      results.push({ runId, run });
+    }
+  }
+  return results;
 }
 
 function textOfMessage(m: UIMessage): string {
