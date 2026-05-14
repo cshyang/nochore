@@ -6,6 +6,7 @@ import { AgentMessage } from "~/components/chat/AgentMessage";
 import { ChatColumn } from "~/components/chat/ChatColumn";
 import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
 import { ChatInput } from "~/components/chat/ChatInput";
+import { EmptyThreadHero } from "~/components/chat/EmptyThreadHero";
 import { UserMessage } from "~/components/chat/UserMessage";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
@@ -155,94 +156,115 @@ export function AgentChatPane({
       />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <ChatColumn scrollRef={scrollRef}>
-          {pendingApproval?.status === "pending" ? (
-            <ApprovalCard
-              approval={pendingApproval}
-              title="Pending approval in chat"
-              onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from chat") : undefined}
-              onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
+          {messages.length === 0 ? (
+            <EmptyThreadHero
+              agent={agent}
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onSubmit={handleSubmit}
+              onKeyDown={handleKeyDown}
+              inputRef={inputRef}
+              isLoading={isLoading}
+              onPickSuggestion={(text) => {
+                setInputValue(text);
+                // Auto-submit after pick. Small UX detail; can remove if it feels too eager.
+                setTimeout(() => handleSubmit(), 0);
+              }}
             />
-          ) : null}
+          ) : (
+            <>
+              {pendingApproval?.status === "pending" ? (
+                <ApprovalCard
+                  approval={pendingApproval}
+                  title="Pending approval in chat"
+                  onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from chat") : undefined}
+                  onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
+                />
+              ) : null}
 
-          {!draftThreadOpen && conversation?.checkpointSummary ? (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: RADIUS.lg,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.surface,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: TYPE.scale.xs,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.8,
-                  color: COLORS.textDim,
-                  marginBottom: 6,
-                }}
-              >
-                Earlier conversation summarized
-                {conversation.checkpointMessageCount > 0 ? ` · ${conversation.checkpointMessageCount} messages` : ""}
-              </div>
-              <div
-                style={{
-                  fontSize: TYPE.scale.sm,
-                  lineHeight: TYPE.leading.normal,
-                  color: COLORS.textSecondary,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {conversation.checkpointSummary}
-              </div>
-            </div>
-          ) : null}
+              {!draftThreadOpen && conversation?.checkpointSummary ? (
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: RADIUS.lg,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.surface,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: TYPE.scale.xs,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      color: COLORS.textDim,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Earlier conversation summarized
+                    {conversation.checkpointMessageCount > 0
+                      ? ` · ${conversation.checkpointMessageCount} messages`
+                      : ""}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: TYPE.scale.sm,
+                      lineHeight: TYPE.leading.normal,
+                      color: COLORS.textSecondary,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {conversation.checkpointSummary}
+                  </div>
+                </div>
+              ) : null}
 
-          {draftThreadOpen && messages.length === 1 ? (
-            <div
-              style={{
-                padding: "18px 20px",
-                borderRadius: RADIUS.lg,
-                border: `1px dashed ${COLORS.borderStrong}`,
-                background: COLORS.surface,
-                color: COLORS.textSecondary,
-                fontSize: TYPE.scale.sm,
-                lineHeight: TYPE.leading.normal,
-              }}
-            >
-              This thread is still a draft. It will only be saved after your first message.
-            </div>
-          ) : null}
+              {draftThreadOpen && messages.length === 1 ? (
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: RADIUS.lg,
+                    border: `1px dashed ${COLORS.borderStrong}`,
+                    background: COLORS.surface,
+                    color: COLORS.textSecondary,
+                    fontSize: TYPE.scale.sm,
+                    lineHeight: TYPE.leading.normal,
+                  }}
+                >
+                  This thread is still a draft. It will only be saved after your first message.
+                </div>
+              ) : null}
 
-          {messages.map((message, index) => {
-            const isLastAssistant = index === messages.length - 1 && message.role === "assistant";
+              {messages.map((message, index) => {
+                const isLastAssistant = index === messages.length - 1 && message.role === "assistant";
 
-            if (message.role === "user") {
-              return <UserMessage key={message.id}>{textOfMessage(message)}</UserMessage>;
-            }
+                if (message.role === "user") {
+                  return <UserMessage key={message.id}>{textOfMessage(message)}</UserMessage>;
+                }
 
-            return (
-              <div key={message.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
-                <AgentMessage>
-                  <ConversationMessage
-                    message={message as { role: string; parts: Array<Record<string, unknown>> }}
-                    onOptionClick={isLastAssistant ? handleOptionClick : undefined}
-                  />
-                </AgentMessage>
-              </div>
-            );
-          })}
+                return (
+                  <div key={message.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
+                    <AgentMessage>
+                      <ConversationMessage
+                        message={message as { role: string; parts: Array<Record<string, unknown>> }}
+                        onOptionClick={isLastAssistant ? handleOptionClick : undefined}
+                      />
+                    </AgentMessage>
+                  </div>
+                );
+              })}
 
-          {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking...</div> : null}
+              {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking...</div> : null}
 
-          <ChatInput
-            value={inputValue}
-            onChange={setInputValue}
-            onSubmit={() => handleSubmit()}
-            onKeyDown={handleKeyDown}
-            inputRef={inputRef}
-            isLoading={isLoading}
-          />
+              <ChatInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSubmit={() => handleSubmit()}
+                onKeyDown={handleKeyDown}
+                inputRef={inputRef}
+                isLoading={isLoading}
+              />
+            </>
+          )}
         </ChatColumn>
       </div>
     </>
