@@ -14,6 +14,7 @@ import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import type {
   AgentView,
+  ConnectionView,
   ConversationStateView,
   ConversationThreadSummaryView,
   PendingActionView,
@@ -24,6 +25,7 @@ interface AgentChatPaneProps {
   agent: AgentView;
   projectId: string;
   runs: RunView[];
+  connections?: ConnectionView[];
   conversation?: ConversationStateView;
   threads?: ConversationThreadSummaryView[];
   activeThreadId?: string;
@@ -50,6 +52,7 @@ export function AgentChatPane({
   agent,
   projectId,
   runs,
+  connections: _connections = [],
   conversation,
   threads = [],
   activeThreadId,

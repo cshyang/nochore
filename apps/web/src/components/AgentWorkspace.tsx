@@ -423,6 +423,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               agent={agent}
               projectId={project.id}
               runs={runs}
+              connections={projectConnections}
               conversation={conversation}
               threads={conversationThreads}
               activeThreadId={activeThreadId}
