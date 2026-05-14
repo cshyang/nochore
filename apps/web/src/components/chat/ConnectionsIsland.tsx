@@ -14,6 +14,9 @@ const EXPANDED_WIDTH = 340;
 export function ConnectionsIsland({ connections, projectId }: ConnectionsIslandProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = activeId ? (connections.find((c) => c.id === activeId) ?? null) : null;
+  const viewportWidth = useViewportWidth();
+  const isNarrow = viewportWidth < 1100;
+  const expandedDrawer = isNarrow && active !== null;
 
   useEffect(() => {
     if (!activeId) return;
@@ -40,6 +43,18 @@ export function ConnectionsIsland({ connections, projectId }: ConnectionsIslandP
         flexDirection: "column",
         overflow: "hidden",
         minHeight: 0,
+        ...(expandedDrawer
+          ? {
+              position: "absolute" as const,
+              top: SPACE[3],
+              right: SPACE[3],
+              bottom: SPACE[3],
+              zIndex: 6,
+              margin: 0,
+            }
+          : {
+              position: "relative" as const,
+            }),
       }}
     >
       <div
@@ -154,6 +169,18 @@ export function ConnectionsIsland({ connections, projectId }: ConnectionsIslandP
       )}
     </aside>
   );
+}
+
+function useViewportWidth(): number {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1440);
+  useEffect(() => {
+    function onResize() {
+      setW(window.innerWidth);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return w;
 }
 
 function ConnLogo({ logo, fallback }: { logo: string | null | undefined; fallback: string }) {
