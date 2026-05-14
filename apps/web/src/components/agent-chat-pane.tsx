@@ -2,8 +2,11 @@ import type { UIMessage } from "ai";
 import { useEffect } from "react";
 import { ApprovalCard } from "~/components/ApprovalCard";
 import { useAgentChatFlow } from "~/components/agent-chat-flow";
+import { AgentMessage } from "~/components/chat/AgentMessage";
 import { ChatColumn } from "~/components/chat/ChatColumn";
 import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
+import { ChatInput } from "~/components/chat/ChatInput";
+import { UserMessage } from "~/components/chat/UserMessage";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
 import type {
@@ -213,19 +216,26 @@ export function AgentChatPane({
 
           {messages.map((message, index) => {
             const isLastAssistant = index === messages.length - 1 && message.role === "assistant";
+
+            if (message.role === "user") {
+              return <UserMessage key={message.id}>{textOfMessage(message)}</UserMessage>;
+            }
+
             return (
               <div key={message.id} ref={isLastAssistant ? latestAssistantRef : undefined}>
-                <ConversationMessage
-                  message={message as { role: string; parts: Array<Record<string, unknown>> }}
-                  onOptionClick={isLastAssistant ? handleOptionClick : undefined}
-                />
+                <AgentMessage>
+                  <ConversationMessage
+                    message={message as { role: string; parts: Array<Record<string, unknown>> }}
+                    onOptionClick={isLastAssistant ? handleOptionClick : undefined}
+                  />
+                </AgentMessage>
               </div>
             );
           })}
 
           {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking...</div> : null}
 
-          <ChatInputStub
+          <ChatInput
             value={inputValue}
             onChange={setInputValue}
             onSubmit={() => handleSubmit()}
@@ -239,53 +249,15 @@ export function AgentChatPane({
   );
 }
 
+function textOfMessage(m: UIMessage): string {
+  return m.parts
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
+
 function derivePaneStatus(runs: RunView[], pendingApproval: PendingActionView | null | undefined): ChatStatus {
   if (pendingApproval && pendingApproval.status === "pending") return "needs-you";
   if (runs.some((r) => r.status === "running" || r.status === "waiting_for_tasks")) return "running";
   return "idle";
-}
-
-/**
- * Temporary inline input wrapper. Replaced by chat/ChatInput.tsx in Phase 2.
- * Kept inline here so the chat keeps working between phases.
- */
-function ChatInputStub(props: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  isLoading: boolean;
-}) {
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        props.onSubmit();
-      }}
-      style={{ marginTop: "auto", paddingTop: 8 }}
-    >
-      <textarea
-        ref={props.inputRef}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        onKeyDown={props.onKeyDown}
-        placeholder="Brief or ask anything…"
-        rows={2}
-        disabled={props.isLoading}
-        style={{
-          width: "100%",
-          background: COLORS.surface,
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: RADIUS.lg,
-          padding: "12px 14px",
-          fontSize: TYPE.scale.sm,
-          color: COLORS.text,
-          fontFamily: "inherit",
-          resize: "none",
-          outline: "none",
-        }}
-      />
-    </form>
-  );
 }
