@@ -1,13 +1,14 @@
 import type { UIMessage } from "ai";
 import { useEffect } from "react";
-import { ApprovalCard } from "~/components/ApprovalCard";
 import { useAgentChatFlow } from "~/components/agent-chat-flow";
 import { AgentMessage } from "~/components/chat/AgentMessage";
+import { ChatApprovalCard } from "~/components/chat/ChatApprovalCard";
 import { ChatColumn } from "~/components/chat/ChatColumn";
 import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
 import { ChatInput } from "~/components/chat/ChatInput";
 import { EmptyThreadHero } from "~/components/chat/EmptyThreadHero";
 import { RunCard } from "~/components/chat/RunCard";
+import { ScrollPastPill } from "~/components/chat/ScrollPastPill";
 import { UserMessage } from "~/components/chat/UserMessage";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
 import { COLORS, RADIUS, TYPE } from "~/lib/colors";
@@ -155,7 +156,7 @@ export function AgentChatPane({
         onSelectThread={(id) => onSelectThread?.(id)}
         onCreateThread={() => onCreateThread?.()}
       />
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      <div style={{ position: "relative", flex: 1, display: "flex", minHeight: 0 }}>
         <ChatColumn scrollRef={scrollRef}>
           {messages.length === 0 ? (
             <EmptyThreadHero
@@ -174,15 +175,6 @@ export function AgentChatPane({
             />
           ) : (
             <>
-              {pendingApproval?.status === "pending" ? (
-                <ApprovalCard
-                  approval={pendingApproval}
-                  title="Pending approval in chat"
-                  onApprove={onApprove ? (approval) => onApprove(approval.id, "Approved from chat") : undefined}
-                  onReject={onReject ? (approval) => onReject(approval.id, "Rejected from chat") : undefined}
-                />
-              ) : null}
-
               {!draftThreadOpen && conversation?.checkpointSummary ? (
                 <div
                   style={{
@@ -265,6 +257,16 @@ export function AgentChatPane({
                           }
                         />
                       ))}
+                      {messageTriggeredApproval(message, pendingApproval) &&
+                        pendingApproval &&
+                        onApprove &&
+                        onReject && (
+                          <ChatApprovalCard
+                            approval={pendingApproval}
+                            onApprove={(reason) => onApprove(pendingApproval.id, reason)}
+                            onReject={(reason) => onReject(pendingApproval.id, reason)}
+                          />
+                        )}
                     </AgentMessage>
                   </div>
                 );
@@ -283,9 +285,29 @@ export function AgentChatPane({
             </>
           )}
         </ChatColumn>
+        <ScrollPastPill
+          scrollRef={scrollRef}
+          approvalElementId={pendingApproval?.id}
+          pendingCount={pendingApproval && pendingApproval.status === "pending" ? 1 : 0}
+        />
       </div>
     </>
   );
+}
+
+function messageTriggeredApproval(message: UIMessage, pendingApproval: PendingActionView | null | undefined): boolean {
+  if (!pendingApproval || pendingApproval.status !== "pending") return false;
+  for (const part of message.parts) {
+    const record = part as Record<string, unknown>;
+    const type = record.type as string | undefined;
+    const isTriggerRun =
+      (type === "dynamic-tool" && record.toolName === "trigger_run") ||
+      (typeof type === "string" && type.startsWith("tool-") && type.includes("trigger_run"));
+    if (!isTriggerRun || record.state !== "output-available") continue;
+    const output = record.output as { runId?: string } | undefined;
+    if (output?.runId && output.runId === pendingApproval.runId) return true;
+  }
+  return false;
 }
 
 function runCardsForMessage(message: UIMessage, runs: RunView[]): Array<{ runId: string; run: RunView }> {
