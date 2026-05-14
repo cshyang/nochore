@@ -6,6 +6,7 @@ import { ChatApprovalCard } from "~/components/chat/ChatApprovalCard";
 import { ChatColumn } from "~/components/chat/ChatColumn";
 import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
 import { ChatInput } from "~/components/chat/ChatInput";
+import { ConnectionsIsland } from "~/components/chat/ConnectionsIsland";
 import { EmptyThreadHero } from "~/components/chat/EmptyThreadHero";
 import { RunCard } from "~/components/chat/RunCard";
 import { ScrollPastPill } from "~/components/chat/ScrollPastPill";
@@ -52,7 +53,7 @@ export function AgentChatPane({
   agent,
   projectId,
   runs,
-  connections: _connections = [],
+  connections = [],
   conversation,
   threads = [],
   activeThreadId,
@@ -288,6 +289,7 @@ export function AgentChatPane({
             </>
           )}
         </ChatColumn>
+        <ConnectionsIsland connections={connections} projectId={projectId} />
         <ScrollPastPill
           scrollRef={scrollRef}
           approvalElementId={pendingApproval?.id}
