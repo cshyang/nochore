@@ -23,13 +23,15 @@ The composition mirrors the chat-first energy of tools like Codex: a centered co
 
 ## Locked Decisions
 
-### 1. Composition: header dropdown, centered chat column
+### 1. Composition: header dropdown, centered chat column, floating right island
 
 **No left thread rail.** Threads live in a `Main chat ▾` dropdown picker in the page header, next to the agent name. Clicking opens a flyout showing thread titles + relative timestamps + a `+ New thread` action; selecting closes the flyout.
 
-**Centered chat column** with `max-width: 720px`, balanced left/right gutters. Reading width matches text best-practices (~60-80 characters per line); empty space reads as intentional rather than wasted.
+**Chat column flexes** in the remaining horizontal space, capping message content at `max-width: 560px` (closed-panel state) / `~440px` (expanded-panel state). The chat-content cap keeps reading width readable; the column itself fills available room so the chat input and message gutters always anchor consistently.
 
-**Why not a slim text rail (Codex's actual pattern)?** The chat-memory design already establishes "one primary relationship thread + occasional secondaries." Most users will have 2-5 threads. A permanent rail wastes pixels at low volume; a dropdown scales gracefully and removes the asymmetric left-heavy weight the current layout suffers from.
+**Floating right island** (see section 6 for full details) sits to the right of the chat with 18px gap. It has its own raised surface, 12px radius, and is inset from the page edges — it reads as a peer object, not a sidebar.
+
+**Why not a slim text rail (Codex's actual pattern) for threads?** The chat-memory design already establishes "one primary relationship thread + occasional secondaries." Most users will have 2-5 threads. A permanent rail wastes pixels at low volume; a dropdown scales gracefully and removes the asymmetric left-heavy weight the current layout suffers from.
 
 **Fallback signal:** If usage shows users frequently swap between 10+ threads, a thin text rail can be reintroduced. Not v1.
 
@@ -85,6 +87,44 @@ Approval cards are **part of the conversation history**. After a decision, the c
 
 **Multiple pending approvals in one thread** are stacked inline (each as its own card in the message stream). The pill counter increments; tapping scrolls to the oldest pending. If multi-approval workloads grow common, a future iteration can collect approvals into a thread-level "Pending (3)" chip in the header.
 
+### 6. Right panel: floating connections island with master/detail expansion
+
+A persistent right-hand panel sits to the right of the chat, styled as a **floating island** — its own raised surface with rounded corners, inset from the page edges. It is not an edge-anchored sidebar.
+
+**Closed state (default):**
+- Width: **220px**
+- Surface: `COLORS.cardRaised` (`#23212C`) with inset top-edge highlight (`inset 0 1px 0 rgba(255,255,255,0.04)`) — same recipe as `AgentCard`
+- Border: `1px solid COLORS.borderStrong`
+- Border radius: **12px**
+- Margin: 18px gap from chat, 18px from page edges
+- Content:
+  - `CONNECTIONS` label (uppercase, dim, tracking-wide)
+  - One row per active connection: 20px logo + provider name + account label + green status dot (or orange if unhealthy)
+  - Bottom-anchored `Manage in project →` link separated by a thin internal divider
+
+**Expanded state (after clicking a row):**
+- Width: **340px** (transitions over ~220ms ease-out-quart)
+- Content swaps to the connection's detail view:
+  - 32px logo + provider name + account header, with × close affordance
+  - Key/value stats: Status (Healthy / Degraded / Disconnected), Last used, Connected, Routed by
+  - Two action buttons: `Reconnect` (primary) and `Open in project` (ghost)
+  - Bottom "Other connections" section with collapsed rows so users can swap focus without collapsing first
+- Close affordances: × button, ESC key, or clicking the active row again
+
+**Chat column shrinks** when the panel expands; messages re-wrap inside the new available width. No content is hidden; only line breaks change.
+
+**Responsive behavior:**
+- Viewports ≥1100px: push-shrink behavior as described above
+- Viewports <1100px: expanded state slides over chat as a drawer (right-anchored, ~340px) rather than pushing it, so chat doesn't get crushed
+- Viewports <768px: panel collapses to a floating "Connections" chip in the header; tap opens a full-screen drawer
+
+**Why connections specifically?** Pushback considered: connections are static info and already shown on the project page. The right panel earns its keep by:
+- Surfacing **status** at a glance (green/orange dot) — users notice broken connections without leaving chat
+- Providing **quick reconnect** without context-switching to the project page
+- Echoing Codex's floating-island aesthetic that the user explicitly referenced
+
+If usage shows the panel is rarely interacted with after first use, the content can pivot to something more dynamic (live activity, recent runs) without changing the island chrome.
+
 ## Component Architecture
 
 The redesign keeps the existing data layer (multi-thread persistence, lessons, approvals) and reshapes the presentation layer.
@@ -93,19 +133,21 @@ The redesign keeps the existing data layer (multi-thread persistence, lessons, a
 
 ```
 apps/web/src/components/
-├─ agent-chat-pane.tsx           ← Major rewrite: drop left rail, add hero state, restructure column
+├─ agent-chat-pane.tsx           ← Major rewrite: drop left rail, add hero state, restructure column, slot in island
 ├─ agent-chat-flow.ts            ← Stays. Chat lifecycle hook unchanged.
 ├─ chat/                         ← New subdirectory for chat components
 │  ├─ ChatHeader.tsx             ← New: agent name + thread picker + status pill + tabs
 │  ├─ ThreadPicker.tsx           ← New: dropdown flyout with thread list + "+ New thread"
 │  ├─ EmptyThreadHero.tsx        ← New: hero title + suggestion grid + big input
-│  ├─ ChatColumn.tsx             ← New: centered max-720px wrapper
+│  ├─ ChatColumn.tsx             ← New: flex chat layout with internal max-width for messages
 │  ├─ UserMessage.tsx            ← New: right-aligned periwinkle bubble
 │  ├─ AgentMessage.tsx           ← New: full-width prose + child slots (RunCard, ApprovalCard)
 │  ├─ RunCard.tsx                ← Extract from current chat pane; align with AgentCard recipe
 │  ├─ ApprovalCard.tsx           ← Refactor existing: inline format, decision-resolved state
 │  ├─ ScrollPastPill.tsx         ← New: sticky "↑ N pending" pill
-│  └─ ChatInput.tsx              ← Extract from current pane: multi-line, send button, Cmd-Enter
+│  ├─ ChatInput.tsx              ← Extract from current pane: multi-line, send button, Cmd-Enter
+│  ├─ ConnectionsIsland.tsx      ← New: floating right panel, closed/expanded states
+│  └─ ConnectionDetail.tsx       ← New: expanded-state content (stats + actions + other-conns)
 ```
 
 ### Component contracts
@@ -116,13 +158,17 @@ apps/web/src/components/
 
 **`EmptyThreadHero`** — Pure presentation. Takes agent + onSubmit + onSuggestionPick. Renders title, input, and skill-driven suggestion grid.
 
-**`ChatColumn`** — Layout wrapper. Centers content at `max-width: 720px`. Handles scroll behavior, scroll-past pill positioning, autoscroll-to-bottom logic.
+**`ChatColumn`** — Layout wrapper. Flexes to fill space left of the connections island. Internal `max-width` on message content (560px closed / 440px expanded) keeps reading width readable. Handles scroll behavior, scroll-past pill positioning, autoscroll-to-bottom logic.
 
 **`AgentMessage`** — Full-width agent message container. Children can be plain text, RunCard, ApprovalCard, or any combination. Renders meta line (status dot + "Agent · time") above content.
 
 **`RunCard`** — Self-contained. Takes `runId`, `headline`, `findings[]` (top 3), `duration`, `completedAt`, `onOpenReport`. Reuses `cardRaised` styling for visual continuity with AgentCard.
 
 **`ApprovalCard`** — Two states: `pending` and `resolved`. Pending shows full card with buttons; resolved collapses to a labeled chip. Takes `approval` + `onApprove(reason)` + `onReject(reason)`.
+
+**`ConnectionsIsland`** — Floating right panel. Takes `connections: ConnectionView[]`, `projectId`. Owns internal state for active (expanded) connection id. Renders closed-state list or expanded-state detail via `ConnectionDetail`. Closes on × / ESC / clicking active row. Animates width transition via CSS (`transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1)`).
+
+**`ConnectionDetail`** — Expanded-state content. Takes `connection`, `otherConnections`, `onClose`, `onReconnect`, `onOpenInProject`. Renders header + stats + actions + "Other connections" list.
 
 ### Suggestion source
 
@@ -151,7 +197,7 @@ Lookup is by the agent's primary skill id (first entry in `agent.skills`). If no
 
 ## Data Flow
 
-No new data shapes required. The existing flow remains:
+The existing chat flow is unchanged:
 
 ```
 ChatInput.submit()
@@ -161,9 +207,13 @@ ChatInput.submit()
   → Run completions arrive via activity stream; matched to messages by runId
 ```
 
-The presentation change is entirely client-side; server APIs (`getConversationState`, `listConversationThreads`, the chat endpoint, approval handlers) are unchanged.
+The presentation change is entirely client-side for chat data; server APIs (`getConversationState`, `listConversationThreads`, the chat endpoint, approval handlers) are unchanged.
 
 **Run-card hydration:** when an agent message references a completed run, the chat pane reads run data from the activity stream (already in `runs` prop) and renders the RunCard inline. No new fetch.
+
+**Connections island data:** the existing `listConnections` server function already returns `ConnectionView[]` with `logo`, `providerName`, `status`, `accountLabel`, `connectedAccountId`, `connector`, and `createdAt` — all of which the closed state and expanded detail need. The route-level loader already fetches connections for the project; pass them as a prop to the chat pane. **Open the door for one optional extension:** a `lastUsedAt` timestamp per agent + connection pair, so the detail view's "Last used 4m ago" line is accurate rather than approximated. If that data isn't available in v1, fall back to "Last seen `{relative time}`" derived from the most recent run that consumed the connection.
+
+**Reconnect action:** delegate to the existing Composio reconnect flow (`/$projectId/callback.composio` route). No new endpoint.
 
 ## Decisions Inherited / Confirmed
 
@@ -185,12 +235,13 @@ The presentation change is entirely client-side; server APIs (`getConversationSt
 
 Phasing is for the implementation plan to detail; this is a rough order of value:
 
-1. **Composition shell** — `ChatColumn`, `ChatHeader`, `ThreadPicker`. Centered layout in place, threads accessible. *Largest visible improvement; smallest behavior risk.*
+1. **Composition shell** — `ChatColumn`, `ChatHeader`, `ThreadPicker`. New layout in place (no left rail, chat flexes), threads accessible. *Largest visible improvement; smallest behavior risk.*
 2. **Message styling split** — `UserMessage`, `AgentMessage`. Asymmetric layout. Existing messages reflow into the new shape.
 3. **Empty thread hero** — `EmptyThreadHero` + `chat-suggestions.ts` config.
 4. **Run card refactor** — `RunCard` extracted, restyled with `cardRaised` recipe.
 5. **Approval refactor** — inline format, resolved-state chip, `ScrollPastPill`.
-6. **Status pill in header + tab default.** Polish.
+6. **Connections island** — `ConnectionsIsland` + `ConnectionDetail`. Closed-state ships first; expanded state can be a fast-follow if time-boxed.
+7. **Status pill in header + tab default.** Polish.
 
 Each step is independently shippable; the chat keeps working between phases.
 
@@ -214,5 +265,8 @@ A working implementation should pass these acceptance checks:
 4. A completed run's findings appear as a compact card inside the agent message, with a working `Open full report` link.
 5. An incoming approval renders inline; the `Needs you` pill appears when scrolled past.
 6. Approving or skipping collapses the approval to a `Approved` / `Skipped` chip in the same message position.
-7. The chat column stays within `max-width: 720px` on screens ≥1100px; collapses to full-width gracefully on narrower viewports.
-8. No left rail. No "Background run" button in the top-right.
+7. The chat column flexes between the page edge and the connections island; message content stays capped at the spec'd widths in both panel states.
+8. The connections island renders as a floating card (12px radius, raised surface, 18px gap from chat) — not edge-anchored.
+9. Clicking a connection row expands the island from 220px to 340px over ~220ms; chat re-wraps. Clicking × / ESC / the active row collapses it.
+10. On viewports <1100px the expanded island slides over chat as a drawer instead of pushing it.
+11. No left rail. No "Background run" button in the top-right.
