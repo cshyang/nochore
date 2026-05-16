@@ -30,6 +30,7 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
     onUpdateAgent,
     onRunTriggered,
     onConnect,
+    onReconnect,
     onDisconnect,
     onListGoogleAdsAccounts,
     onSetConnectionConfig,
@@ -474,6 +475,8 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               draftThreadOpen={draftThreadOpen}
               onThreadCreated={props.onThreadCreated}
               onConnect={onConnect}
+              onReconnect={onReconnect}
+              onDisconnect={onDisconnect}
               onRunTriggered={(runId, triggerRunId, workItemId) => {
                 if (workItemId) {
                   selectWorkItem(workItemId);

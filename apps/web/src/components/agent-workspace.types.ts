@@ -59,6 +59,7 @@ export interface AgentWorkspaceProps {
   onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
   onThreadCreated?: (threadId: string) => void;
   onConnect?: (provider: string) => void;
+  onReconnect?: (provider: string, oldConnectionId: string) => void;
   onDisconnect?: (provider: string, connectedAccountId: string) => void;
   onListGoogleAdsAccounts?: (connectionId?: string) => Promise<{
     accounts?: Array<{ id: string; formattedId: string; label: string }>;

@@ -32,6 +32,8 @@ interface AgentChatPaneProps {
   activeThreadId?: string;
   draftThreadOpen?: boolean;
   onConnect?: (provider: string) => void;
+  onReconnect?: (provider: string, oldConnectionId: string) => void;
+  onDisconnect?: (provider: string, connectedAccountId: string) => void;
   onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   onThreadCreated?: (threadId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
@@ -52,6 +54,8 @@ export function AgentChatPane({
   activeThreadId,
   draftThreadOpen = false,
   onConnect,
+  onReconnect,
+  onDisconnect,
   onRunTriggered,
   onThreadCreated,
   registerRunCompleteHandler,
@@ -259,6 +263,8 @@ export function AgentChatPane({
         projectId={projectId}
         providerLogos={providerLogos}
         onConnect={onConnect}
+        onReconnect={onReconnect}
+        onDisconnect={onDisconnect}
       />
       <ScrollPastPill
         scrollRef={scrollRef}

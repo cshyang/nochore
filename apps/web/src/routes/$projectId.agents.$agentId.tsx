@@ -219,6 +219,17 @@ function AgentDetailPage() {
     [projectId, router],
   );
 
+  // Reconnect-replace: when user reconnects, capture the old connection id so we can
+  // auto-disconnect it after a fresh connection lands for the same provider.
+  const [pendingReconnect, setPendingReconnect] = useState<{ provider: string; oldConnectionId: string } | null>(null);
+  const handleReconnect = useCallback(
+    (provider: string, oldConnectionId: string) => {
+      setPendingReconnect({ provider, oldConnectionId });
+      void handleConnect(provider);
+    },
+    [handleConnect],
+  );
+
   // Refresh data when OAuth popup signals a successful connection
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -229,6 +240,24 @@ function AgentDetailPage() {
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, [router]);
+
+  // When a fresh connection lands for the same provider as a pending reconnect,
+  // disconnect the old one (replace semantic).
+  useEffect(() => {
+    if (!pendingReconnect) return;
+    const { provider, oldConnectionId } = pendingReconnect;
+    const sameProvider = projectConnections.filter((c) => c.provider === provider && c.status === "active");
+    const hasNew = sameProvider.some((c) => c.id !== oldConnectionId);
+    const oldStillThere = sameProvider.find((c) => c.id === oldConnectionId);
+    if (hasNew && oldStillThere?.connectedAccountId) {
+      void handleDisconnect(provider, oldStillThere.connectedAccountId).finally(() => setPendingReconnect(null));
+    } else if (hasNew && !oldStillThere) {
+      setPendingReconnect(null);
+    } else if (!oldStillThere) {
+      // Old gone (user disconnected manually) — nothing to replace
+      setPendingReconnect(null);
+    }
+  }, [projectConnections, pendingReconnect, handleDisconnect]);
 
   useEffect(() => {
     if (draftThreadOpen || pendingThreadNavigationId || search.tab !== "chat" || !conversation?.threadId) {
@@ -513,6 +542,7 @@ function AgentDetailPage() {
       onDeleteAgent={handleDeleteAgent}
       onRunNow={handleRunNow}
       onConnect={handleConnect}
+      onReconnect={handleReconnect}
       onDisconnect={handleDisconnect}
       onListGoogleAdsAccounts={async (connectionId) =>
         coerceGoogleAdsAccountListResult(await listGoogleAdsAccounts({ data: { projectId, connectionId } }))
