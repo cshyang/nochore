@@ -30,11 +30,30 @@ export type RunTrigger = z.infer<typeof RunTriggerSchema>;
 // Run summary (stored as JSON in runs.summary)
 // ---------------------------------------------------------------------------
 
+export const RunFindingSeveritySchema = z.enum(["critical", "warning", "watch", "winner", "info", "success"]);
+export type RunFindingSeverity = z.infer<typeof RunFindingSeveritySchema>;
+
+export const RunFindingSchema = z.object({
+  severity: RunFindingSeveritySchema,
+  title: z.string(),
+  body: z.string(),
+});
+export type RunFinding = z.infer<typeof RunFindingSchema>;
+
+export const RunTrailSchema = z.object({
+  toolCalls: z.array(z.string()).optional(),
+  eventCount: z.number().optional(),
+});
+export type RunTrail = z.infer<typeof RunTrailSchema>;
+
 export const RunSummarySchema = z.object({
   status: z.enum(["completed", "failed"]),
   headline: z.string(),
   details: z.array(z.string()),
   finalText: z.string().optional(),
+  findings: z.array(RunFindingSchema).optional(),
+  overallSeverity: RunFindingSeveritySchema.optional(),
+  trail: RunTrailSchema.optional(),
 });
 export type RunSummary = z.infer<typeof RunSummarySchema>;
 

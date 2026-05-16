@@ -5,7 +5,9 @@ import {
   classifyEpisodicLesson,
   createAiSdkModel,
   extractRunInsights,
+  extractStructuredReport,
   getAgentWorkspacePath,
+  parseRunReport,
 } from "@nochore/harness";
 import { logger, metadata, task } from "@trigger.dev/sdk";
 import type { UIMessage } from "ai";
@@ -135,6 +137,9 @@ export const agentRunTask = task({
         eventIds.push(findingId);
       }
 
+      const structured = executionResult.output.trim()
+        ? await extractStructuredReport(createAiSdkModel(), executionResult.output)
+        : null;
       const summary = buildSummary({
         status: "completed",
         finalText: executionResult.output,
@@ -142,6 +147,7 @@ export const agentRunTask = task({
         runId,
         recentToolCalls: executionResult.toolCalls,
         eventIds,
+        structured,
       });
       await runtime.runRepository.complete(runId, new Date(), summary);
 
@@ -453,25 +459,35 @@ function buildSummary(params: {
   recentToolCalls: Array<{ toolName: string; timestamp: Date }>;
   eventIds: string[];
   error?: string;
+  structured?: Awaited<ReturnType<typeof extractStructuredReport>>;
 }): RunSummary {
   const normalizedText = params.finalText.trim();
-  const headline =
-    normalizedText.split(/\n|\./, 1)[0]?.trim().slice(0, 140) ||
-    (params.status === "completed" ? `${params.agent.name} completed` : `${params.agent.name} failed`);
+  // Prefer LLM-extracted structure; fall back to heuristic parser on null.
+  const parsed =
+    params.structured ??
+    (normalizedText
+      ? parseRunReport(normalizedText)
+      : { headline: "", overallSeverity: "info" as const, findings: [] });
 
-  const details = [
-    params.error ? `Error: ${params.error}` : undefined,
-    normalizedText ? normalizedText : undefined,
-    params.recentToolCalls.length > 0
-      ? `Tool calls executed: ${params.recentToolCalls.map((call) => call.toolName).join(", ")}`
-      : undefined,
-    `Events recorded: ${params.eventIds.length}`,
-  ].filter((item): item is string => typeof item === "string" && item.length > 0);
+  const fallbackHeadline =
+    params.status === "completed" ? `${params.agent.name} completed` : `${params.agent.name} failed`;
+  const headline = parsed.headline || normalizedText.split(/\n|\./, 1)[0]?.trim().slice(0, 140) || fallbackHeadline;
+
+  // Legacy `details` kept for backward compat. Now only carries the error message
+  // (if any) — trail/findings are dedicated fields.
+  const details = params.error ? [`Error: ${params.error}`] : [];
+
+  const trail = {
+    ...(params.recentToolCalls.length > 0 ? { toolCalls: params.recentToolCalls.map((call) => call.toolName) } : {}),
+    eventCount: params.eventIds.length,
+  };
 
   return {
     status: params.status,
     headline,
     details,
     ...(normalizedText ? { finalText: normalizedText } : {}),
+    ...(parsed.findings.length > 0 ? { findings: parsed.findings, overallSeverity: parsed.overallSeverity } : {}),
+    trail,
   };
 }

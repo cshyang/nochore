@@ -202,7 +202,9 @@ export function AgentChatPane({
                           agentId={agent.id}
                           projectId={projectId}
                           headline={run.summary?.headline ?? ""}
-                          findings={(run.summary?.details ?? []).map((text) => ({ text }))}
+                          findings={run.summary?.findings ?? []}
+                          overallSeverity={run.summary?.overallSeverity}
+                          trail={run.summary?.trail}
                           completedAt={run.completedAt}
                           durationMs={
                             run.completedAt && run.startedAt

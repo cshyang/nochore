@@ -16,6 +16,7 @@ export type {
   ComposioExecuteResult,
   ComposioRawTool,
 } from "../connections/index";
+export { extractStructuredReport, parseRunReport } from "../conversation/run-report-parser";
 export {
   buildConversationTranscript,
   CHECKPOINT_KEEP_RECENT_TOKENS,
@@ -57,16 +58,16 @@ export {
   ApprovalRecordSchema,
   type ApprovalStatus,
   ApprovalStatusSchema,
+  type ContextSnapshotKind,
+  ContextSnapshotKindSchema,
+  type ContextSnapshotRecord,
+  ContextSnapshotSchema,
   type ConversationCheckpoint,
   ConversationCheckpointSchema,
   type ConversationEvent,
   ConversationEventSchema,
   type ConversationThread,
   ConversationThreadSchema,
-  type ContextSnapshotKind,
-  ContextSnapshotKindSchema,
-  type ContextSnapshotRecord,
-  ContextSnapshotSchema,
   type LearnedPolicyRule,
   LearnedPolicyRuleSchema,
   type MetricObservation,

@@ -70,11 +70,27 @@ const LearnedRuleViewSchema = z.object({
   acceptedAt: z.string().optional(),
 });
 
+const RunFindingSeverityViewSchema = z.enum(["critical", "warning", "watch", "winner", "info", "success"]);
+
+const RunFindingViewSchema = z.object({
+  severity: RunFindingSeverityViewSchema,
+  title: z.string(),
+  body: z.string(),
+});
+
+const RunTrailViewSchema = z.object({
+  toolCalls: z.array(z.string()).optional(),
+  eventCount: z.number().optional(),
+});
+
 const RunSummaryViewSchema = z.object({
   status: z.string(),
   headline: z.string(),
   details: z.array(z.string()),
   finalText: z.string().optional(),
+  findings: z.array(RunFindingViewSchema).optional(),
+  overallSeverity: RunFindingSeverityViewSchema.optional(),
+  trail: RunTrailViewSchema.optional(),
 });
 
 const RunResultViewSchema = z.object({

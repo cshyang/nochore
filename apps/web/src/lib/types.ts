@@ -100,11 +100,27 @@ export interface NotificationConfigView {
   slack: boolean;
 }
 
+export type RunFindingSeverityView = "critical" | "warning" | "watch" | "winner" | "info" | "success";
+
+export interface RunFindingView {
+  severity: RunFindingSeverityView;
+  title: string;
+  body: string;
+}
+
+export interface RunTrailView {
+  toolCalls?: string[];
+  eventCount?: number;
+}
+
 export interface RunSummaryView {
   status: "completed" | "failed";
   headline: string;
   details: string[];
   finalText?: string;
+  findings?: RunFindingView[];
+  overallSeverity?: RunFindingSeverityView;
+  trail?: RunTrailView;
 }
 
 export interface RunStepView {
