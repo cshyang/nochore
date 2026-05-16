@@ -9,18 +9,18 @@
 /* ── Design Tokens ── */
 
 :root {
-  /* ── Palette: Warm neutrals with plum undertone ── */
-  --bg: #0e0d12;
-  --bg-raised: #15141a;
-  --surface: #1b1a21;
-  --surface-hover: #222128;
-  --border: #2b2935;
-  --border-strong: #3a3845;
+  /* ── Palette: Warm charcoal with coffee undertone ── */
+  --bg: #14110d;
+  --bg-raised: #1a1612;
+  --surface: #221d17;
+  --surface-hover: #2a241d;
+  --border: #352e26;
+  --border-strong: #463e33;
 
-  /* ── Text: Warm off-whites, never pure white ── */
-  --text: #eceaf2;
-  --text-secondary: #9b97ab;
-  --text-dim: #6b6780;
+  /* ── Text: Warm creams, never pure white ── */
+  --text: #f4f0e8;
+  --text-secondary: #b8afa1;
+  --text-dim: #8f8779;
 
   /* ── Accent: Periwinkle blue — balanced, clear, distinctive ── */
   --accent: #5a7acd;
@@ -117,6 +117,7 @@ body {
   height: 100%;
   font-family: var(--font-body);
   font-size: var(--text-base);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
   color: var(--text);
   background: var(--bg);

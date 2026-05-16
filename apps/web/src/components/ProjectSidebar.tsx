@@ -57,10 +57,8 @@ export function ProjectSidebar({ activeAgentId, onSelectAgent, onGoHome, onNewAg
           e.currentTarget.style.background = "transparent";
         }}
       >
-        <ArrowLeft size={14} weight="light" color={COLORS.textSecondary} />
-        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.textSecondary, fontFamily: TYPE.body }}>
-          All projects
-        </span>
+        <ArrowLeft size={14} weight="light" color={COLORS.text} />
+        <span style={{ fontSize: TYPE.scale.sm, color: COLORS.text, fontFamily: TYPE.body }}>All projects</span>
       </button>
 
       {/* Project header */}
@@ -267,7 +265,7 @@ function AgentRow({
           style={{
             fontSize: TYPE.scale.sm,
             fontWeight: isActive ? TYPE.weight.semibold : TYPE.weight.regular,
-            color: isDraft ? COLORS.textDim : isActive ? COLORS.text : COLORS.textSecondary,
+            color: isDraft ? COLORS.textDim : COLORS.text,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",

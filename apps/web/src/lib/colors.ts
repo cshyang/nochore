@@ -16,18 +16,18 @@
 // - Everything else = warm neutral with plum undertone
 
 export const COLORS = {
-  // Warm neutral base (plum undertone)
-  bg: "#0E0D12",
-  bgRaised: "#15141A",
-  surface: "#1B1A21",
-  surfaceHover: "#222128",
+  // Warm charcoal base (coffee undertone — pairs complementary with periwinkle accent)
+  bg: "#14110D",
+  bgRaised: "#1A1612",
+  surface: "#221D17",
+  surfaceHover: "#2A241D",
   // Raised feature cards (AgentCard etc.). ~8 luminance steps above `surface`
   // so the card "pops" off the page — the trick is luminance delta + a hairline
   // top-edge highlight via inset shadow, not box-shadow drop.
-  cardRaised: "#23212C",
-  cardRaisedHover: "#2A2834",
-  border: "#2B2935",
-  borderStrong: "#3A3845",
+  cardRaised: "#2C261F",
+  cardRaisedHover: "#352D24",
+  border: "#352E26",
+  borderStrong: "#463E33",
 
   // Brand accent — periwinkle blue
   accent: "#5A7ACD",
@@ -57,10 +57,10 @@ export const COLORS = {
   write: "#C49B7C",
   writeDim: "rgba(196, 155, 124, 0.10)",
 
-  // Text
-  text: "#ECEAF2",
-  textSecondary: "#9B97AB",
-  textDim: "#8A86A0",
+  // Text — warm creams, not pure white
+  text: "#F4F0E8",
+  textSecondary: "#B8AFA1",
+  textDim: "#8F8779",
 
   // Utility
   white: "#FFFFFF",
