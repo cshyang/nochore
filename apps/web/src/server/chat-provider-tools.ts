@@ -238,6 +238,12 @@ function getSelectedCustomerId(config: Record<string, unknown> | undefined): str
   return typeof value === "string" ? value.replace(/\D/g, "") : undefined;
 }
 
+function normalizeOptionalCustomerId(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  return digits.length > 0 ? digits : undefined;
+}
+
 function withProviderScope(description: string, binding: ChatProviderBinding): string {
   const scope = [
     `Agent connection binding: ${binding.alias}.`,
@@ -275,6 +281,16 @@ function resolveChatProviderBindings(connections: ConnectionRow[], bindings: Bin
     const connection = activeById.get(binding.connectionId);
     if (!connection) continue;
     const connectionConfig = parseConfig(connection.config);
+    const connectionCustomerId =
+      connection.provider === "googleads" ? getSelectedCustomerId(connectionConfig) : undefined;
+    const isComposioGoogleAds = connection.provider === "googleads" && Boolean(connection.composioEntityId);
+    const resourceId = isComposioGoogleAds
+      ? connectionCustomerId
+      : (normalizeOptionalCustomerId(binding.resourceId) ?? connectionCustomerId);
+    const resourceLabel =
+      isComposioGoogleAds && resourceId
+        ? formatGoogleAdsCustomerId(resourceId)
+        : (binding.resourceLabel ?? (resourceId ? formatGoogleAdsCustomerId(resourceId) : undefined));
     explicit.push({
       id: binding.id,
       provider: binding.provider,
@@ -287,16 +303,14 @@ function resolveChatProviderBindings(connections: ConnectionRow[], bindings: Bin
         bindingId: binding.id,
         alias: binding.alias,
         ...(connection.composioEntityId ? { composioConnectedAccountId: connection.composioEntityId } : {}),
-        ...(binding.resourceId ? { selectedCustomerId: binding.resourceId, resourceId: binding.resourceId } : {}),
-        ...(binding.resourceLabel
-          ? { selectedCustomerLabel: binding.resourceLabel, resourceLabel: binding.resourceLabel }
-          : {}),
+        ...(resourceId ? { selectedCustomerId: resourceId, resourceId } : {}),
+        ...(resourceLabel ? { selectedCustomerLabel: resourceLabel, resourceLabel } : {}),
         ...(binding.resourceType ? { resourceType: binding.resourceType } : {}),
       },
       accountLabel: getAccountLabel(connection, connectionConfig),
       resourceType: binding.resourceType,
-      resourceId: binding.resourceId,
-      resourceLabel: binding.resourceLabel,
+      resourceId,
+      resourceLabel,
     });
   }
 

@@ -445,12 +445,15 @@ function toAgentProviderBinding(params: {
 }): AgentProviderBinding {
   const connectionConfig = parseConfig(params.connection.config);
   const bindingConfig = parseConfig(params.binding?.config ?? null);
-  const resourceId =
-    params.binding?.resourceId ??
-    (params.connection.provider === "googleads" ? getGoogleAdsCustomerId(connectionConfig) : null);
+  const connectionCustomerId =
+    params.connection.provider === "googleads" ? getGoogleAdsCustomerId(connectionConfig) : null;
+  const isComposioGoogleAds = params.connection.provider === "googleads" && Boolean(params.connection.composioEntityId);
+  const resourceId = isComposioGoogleAds ? connectionCustomerId : (params.binding?.resourceId ?? connectionCustomerId);
   const resourceLabel =
-    params.binding?.resourceLabel ??
-    (params.connection.provider === "googleads" && resourceId ? formatGoogleAdsCustomerId(resourceId) : null);
+    isComposioGoogleAds && resourceId
+      ? formatGoogleAdsCustomerId(resourceId)
+      : (params.binding?.resourceLabel ??
+        (params.connection.provider === "googleads" && resourceId ? formatGoogleAdsCustomerId(resourceId) : null));
   const alias = params.binding?.alias ?? defaultBindingAlias(params.connection.provider, resourceId);
   const accountLabel = getConnectionAccountLabel(params.connection, connectionConfig);
   const config = {

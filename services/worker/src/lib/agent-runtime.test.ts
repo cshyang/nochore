@@ -226,4 +226,77 @@ describe("resolveAgentConnectionContext", () => {
     expect(context.providerBindings).toEqual([]);
     expect(context.providerConfigs).toEqual({});
   });
+
+  it("uses the Composio-authorized Google Ads customer instead of a stale binding resource", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "nochore-googleads-authoritative-customer-"));
+    tempDirs.push(root);
+    const db = createDb(path.join(root, "project.db"));
+    const repositories = createProjectRepositories(db);
+    const now = Date.now();
+
+    db.insert(projects).values({ id: "project_001", name: "Project", createdAt: now }).run();
+    const agentId = await repositories.agentRepository.create({
+      id: "agent_googleads",
+      projectId: "project_001",
+      name: "Google Ads Agent",
+      description: "",
+      instructions: "Use Google Ads.",
+      skills: [],
+      toolConfig: {
+        globalApprovalRequired: false,
+        requiredProviders: [{ provider: "googleads" }],
+        tools: {},
+      },
+      notificationConfig: { inApp: true, email: false, slack: false },
+      schedule: "manual",
+    });
+
+    db.insert(connections)
+      .values({
+        id: "conn_googleads",
+        projectId: "project_001",
+        provider: "googleads",
+        composioEntityId: "ca_googleads",
+        status: "active",
+        config: JSON.stringify({
+          selectedCustomerId: "1073100792",
+          selectedCustomerLabel: "107-310-0792",
+          selectedCustomerSource: "composio_auth",
+        }),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(agentConnectionBindings)
+      .values({
+        id: "binding_stale",
+        agentId,
+        provider: "googleads",
+        connectionId: "conn_googleads",
+        resourceType: "google_ads_customer",
+        resourceId: "4827228419",
+        resourceLabel: "482-722-8419",
+        alias: "googleads_4827228419",
+        isDefault: true,
+        status: "active",
+        config: "{}",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const agent = await repositories.agentRepository.getById(agentId);
+    if (!agent) throw new Error("missing test agent");
+
+    const context = await resolveAgentConnectionContext({ db, projectId: "project_001", agent });
+    expect(context.providerBindings).toHaveLength(1);
+    expect(context.providerBindings[0]).toMatchObject({
+      provider: "googleads",
+      connectionId: "conn_googleads",
+      resourceId: "1073100792",
+      resourceLabel: "107-310-0792",
+    });
+    expect(context.providerBindings[0].config.selectedCustomerId).toBe("1073100792");
+    expect(context.providerConfigs.googleads.selectedCustomerId).toBe("1073100792");
+  });
 });

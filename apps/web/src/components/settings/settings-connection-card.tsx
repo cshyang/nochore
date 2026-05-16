@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "~/components/Button";
 import { ProviderIcon, SettingsCard, SmallAction } from "~/components/SettingsComponents";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
@@ -59,9 +59,6 @@ export function SettingsConnectionCard({
   onDisconnect,
   onSetConnectionApproval,
   onSetToolApproval,
-  onListGoogleAdsAccounts,
-  onSetConnectionConfig,
-  onSetAgentConnectionBinding,
   onAcceptLearnedRule,
   onDismissLearnedRule,
   onSuppressLearnedRule,
@@ -79,14 +76,17 @@ export function SettingsConnectionCard({
   const [expanded, setExpanded] = useState(false);
 
   const isBuiltin = connection.provider === "builtin";
-  const hasGoogleAdsAccountSelector = connection.provider === "googleads" && Boolean(connection.connectedAccountId);
-  const configuredGoogleAdsCustomerId = getConfiguredGoogleAdsCustomerId(connection.config, binding);
+  const isComposioGoogleAds = connection.provider === "googleads" && Boolean(connection.connectedAccountId);
+  const configuredGoogleAdsCustomerId = getConfiguredGoogleAdsCustomerId(
+    connection.config,
+    isComposioGoogleAds ? undefined : binding,
+  );
   const needsGoogleAdsCustomer = connection.provider === "googleads" && !configuredGoogleAdsCustomerId;
   const connectionMode = deriveConnectionMode(tools);
   const ruleCount = scopedRules.length + scopedSuggestions.length;
   const hasConnectionActions = connection.provider !== "builtin";
   const hasBody =
-    hasGoogleAdsAccountSelector || configFields.length > 0 || tools.length > 0 || ruleCount > 0 || hasConnectionActions;
+    isComposioGoogleAds || configFields.length > 0 || tools.length > 0 || ruleCount > 0 || hasConnectionActions;
   const canBulkSet = !isBuiltin && tools.length > 1;
 
   return (
@@ -119,13 +119,13 @@ export function SettingsConnectionCard({
                   <>
                     <span style={{ color: needsGoogleAdsCustomer ? COLORS.orange : COLORS.green }}>●</span>{" "}
                     {needsGoogleAdsCustomer
-                      ? "OAuth connected · choose a Google Ads customer"
+                      ? "OAuth connected · missing authorized Google Ads customer"
                       : `Connected · authorized by ${connection.authorizedByUserId ?? "you"}`}
                   </>
                 )}
                 {connection.accountLabel ? ` · ${connection.accountLabel}` : ""}
                 {tools.length > 0 ? ` · ${tools.length} tool${tools.length === 1 ? "" : "s"}` : ""}
-                {hasGoogleAdsAccountSelector && configuredGoogleAdsCustomerId
+                {isComposioGoogleAds && configuredGoogleAdsCustomerId
                   ? ` · ${formatGoogleAdsCustomerId(configuredGoogleAdsCustomerId)}`
                   : ""}
               </div>
@@ -212,35 +212,10 @@ export function SettingsConnectionCard({
             </div>
           ) : null}
 
-          {hasGoogleAdsAccountSelector ? (
-            <GoogleAdsAccountSelector
-              connection={connection}
-              binding={binding}
-              expanded={expanded}
-              onLoadAccounts={onListGoogleAdsAccounts}
-              onSave={async (customerId, label) => {
-                await onSetConnectionConfig?.(
-                  connection.provider,
-                  {
-                    selectedCustomerId: customerId,
-                    selectedCustomerLabel: label,
-                    selectedCustomerSource: "user",
-                  },
-                  connection.id,
-                );
-                if (onSetAgentConnectionBinding) {
-                  await onSetAgentConnectionBinding({
-                    provider: connection.provider,
-                    connectionId: connection.id,
-                    resourceType: "google_ads_customer",
-                    resourceId: customerId,
-                    resourceLabel: label,
-                    alias: `googleads_${customerId.replace(/\D/g, "")}`,
-                    purpose: "Primary Google Ads account for this agent",
-                    isDefault: true,
-                  });
-                }
-              }}
+          {isComposioGoogleAds ? (
+            <GoogleAdsConnectedCustomer
+              customerId={configuredGoogleAdsCustomerId}
+              onConnectAnother={() => onConnect?.(connection.provider)}
             />
           ) : null}
 
@@ -345,7 +320,7 @@ export function SettingsConnectionCard({
               }}
             >
               <SmallAction color={COLORS.textSecondary} onClick={() => onConnect?.(connection.provider)}>
-                Change account
+                {isComposioGoogleAds ? "Connect another customer" : "Change account"}
               </SmallAction>
               {connection.connectedAccountId ? (
                 <SmallAction
@@ -363,102 +338,40 @@ export function SettingsConnectionCard({
   );
 }
 
-function GoogleAdsAccountSelector({
-  connection,
-  binding,
-  expanded,
-  onLoadAccounts,
-  onSave,
+function GoogleAdsConnectedCustomer({
+  customerId,
+  onConnectAnother,
 }: {
-  connection: ConnectionView;
-  binding?: AgentConnectionBindingView;
-  expanded: boolean;
-  onLoadAccounts?: (connectionId?: string) => Promise<{ accounts?: GoogleAdsAccountOption[]; error?: string }>;
-  onSave: (customerId: string, label: string) => Promise<void> | void;
+  customerId: string | null;
+  onConnectAnother: () => void;
 }) {
-  const [accounts, setAccounts] = useState<GoogleAdsAccountOption[] | null>(null);
-  const [selectedCustomerId, setSelectedCustomerId] = useState(
-    getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "",
-  );
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSelectedCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "");
-  }, [binding, connection.config]);
-
-  useEffect(() => {
-    if (!expanded || accounts || loading || !onLoadAccounts) return;
-    setLoading(true);
-    setError(null);
-    void onLoadAccounts(connection.id)
-      .then((result) => {
-        setAccounts(result.accounts ?? []);
-        setError(result.error ?? null);
-      })
-      .catch((err) => {
-        setAccounts([]);
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => setLoading(false));
-  }, [accounts, connection.id, expanded, loading, onLoadAccounts]);
-
-  const selectedAccount = accounts?.find((account) => account.id === selectedCustomerId);
-
   return (
-    <div style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
-      <SectionLabel>Google Ads customer</SectionLabel>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <label
-          htmlFor={`connection-${connection.id}-googleads-account`}
-          style={{ width: 104, fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}
-        >
-          Customer ID
-        </label>
-        <select
-          id={`connection-${connection.id}-googleads-account`}
-          value={selectedCustomerId}
-          disabled={loading || saving || !onLoadAccounts}
-          onChange={(event) => {
-            const next = event.target.value;
-            const account = accounts?.find((item) => item.id === next);
-            setSelectedCustomerId(next);
-            setSaving(true);
-            setError(null);
-            void Promise.resolve(onSave(next, account?.label ?? formatGoogleAdsCustomerId(next)))
-              .catch((err) => {
-                setError(err instanceof Error ? err.message : String(err));
-                setSelectedCustomerId(getConfiguredGoogleAdsCustomerId(connection.config, binding) ?? "");
-              })
-              .finally(() => setSaving(false));
-          }}
-          style={{
-            flex: "1 1 260px",
-            minWidth: 220,
-            maxWidth: 420,
-            padding: "7px 10px",
-            border: `1px solid ${COLORS.border}`,
-            borderRadius: RADIUS.md,
-            background: COLORS.bg,
-            color: selectedCustomerId ? COLORS.text : COLORS.textDim,
-            fontSize: TYPE.scale.sm,
-            fontFamily: TYPE.body,
-            outline: "none",
-          }}
-        >
-          <option value="">{loading ? "Loading accounts..." : "Choose account"}</option>
-          {(accounts ?? []).map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.label}
-            </option>
-          ))}
-        </select>
-        <span style={{ fontSize: TYPE.scale.xs, color: saving ? COLORS.accent : COLORS.textDim }}>
-          {saving ? "Saving..." : selectedAccount ? "Saved" : ""}
-        </span>
+    <div style={{ padding: "14px 16px", display: "grid", gap: 10 }}>
+      <SectionLabel>Project account</SectionLabel>
+      <div style={{ display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ width: 104, fontSize: TYPE.scale.xs, color: COLORS.textSecondary, whiteSpace: "nowrap" }}>
+            Customer ID
+          </span>
+          <span
+            style={{
+              color: customerId ? COLORS.text : COLORS.orange,
+              fontSize: TYPE.scale.sm,
+              fontFamily: TYPE.body,
+            }}
+          >
+            {customerId ? formatGoogleAdsCustomerId(customerId) : "Missing from authorization"}
+          </span>
+        </div>
+        <div style={{ fontSize: TYPE.scale.xs, color: COLORS.textSecondary }}>
+          This Customer ID was chosen during Google Ads authorization.
+        </div>
       </div>
-      {error ? <div style={{ fontSize: TYPE.scale.xs, color: COLORS.orange }}>{error}</div> : null}
+      <div>
+        <SmallAction color={COLORS.accent} onClick={onConnectAnother}>
+          Connect another customer
+        </SmallAction>
+      </div>
     </div>
   );
 }
