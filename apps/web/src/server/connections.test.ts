@@ -17,4 +17,9 @@ describe("extractComposioGoogleAdsCustomerId", () => {
   it("returns null when Composio metadata has no customer id", () => {
     expect(extractComposioGoogleAdsCustomerId({ data: { account_url: "https://ads.google.com/" } })).toBeNull();
   });
+
+  it("returns null for Composio-masked partial customer ids", () => {
+    expect(extractComposioGoogleAdsCustomerId({ data: { generic_id: "482-..." } })).toBeNull();
+    expect(extractComposioGoogleAdsCustomerId({ params: { headers: { customer_id: "107-..." } } })).toBeNull();
+  });
 });

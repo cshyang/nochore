@@ -1,4 +1,4 @@
-import { type AgentToolDefinition, createComposioAdapter } from "@nochore/harness";
+import { type AgentToolDefinition, createComposioAdapter, getGoogleAdsAgentTools } from "@nochore/harness";
 import { jsonSchema } from "ai";
 import { z } from "zod";
 
@@ -148,7 +148,7 @@ async function loadProviderTools(
     limit: COMPOSIO_RAW_TOOL_LIMIT,
   });
 
-  return rawTools.flatMap((tool) => {
+  const composioTools = rawTools.flatMap((tool) => {
     const provider = inferProviderFromTool(tool.slug);
     const bindings = providerBindings.filter((binding) => binding.provider === provider);
     const useAliasedToolName = bindings.length > 1;
@@ -171,6 +171,7 @@ async function loadProviderTools(
       },
     }));
   });
+  return [...composioTools, ...getCustomGoogleAdsTools(providerBindings)];
 }
 
 function wrapProviderTool(tool: AgentToolDefinition): ChatTool {
@@ -236,6 +237,42 @@ function redactConfig(config: Record<string, unknown>): Record<string, unknown> 
 function getSelectedCustomerId(config: Record<string, unknown> | undefined): string | undefined {
   const value = config?.selectedCustomerId ?? config?.customerId;
   return typeof value === "string" ? value.replace(/\D/g, "") : undefined;
+}
+
+function getCustomGoogleAdsTools(providerBindings: ChatProviderBinding[]): AgentToolDefinition[] {
+  const bindings = providerBindings.filter((binding) => binding.provider === "googleads");
+  const useAliasedToolName = bindings.length > 1;
+  return bindings.flatMap((binding) => {
+    const customerId = getValidGoogleAdsCustomerId(binding.config);
+    if (!customerId) return [];
+
+    const tools = getGoogleAdsAgentTools({
+      customerId,
+      refreshToken: getOptionalString(binding.config.refreshToken),
+      managerCustomerId: getOptionalString(binding.config.managerCustomerId ?? binding.config.loginCustomerId),
+    });
+
+    return tools.map((tool) => ({
+      ...tool,
+      name: useAliasedToolName ? toBindingToolName(tool.name, binding.alias) : tool.name,
+      label: useAliasedToolName ? `${tool.label} (${binding.alias})` : tool.label,
+      description: [
+        tool.description,
+        "",
+        `Google Ads customer ID: ${formatGoogleAdsCustomerId(customerId)}.`,
+        "This is a Nochore custom Google Ads adapter tool exposed alongside Composio tools.",
+      ].join("\n"),
+    }));
+  });
+}
+
+function getValidGoogleAdsCustomerId(config: Record<string, unknown> | undefined): string | undefined {
+  const selectedCustomerId = getSelectedCustomerId(config);
+  return selectedCustomerId?.length === 10 ? selectedCustomerId : undefined;
+}
+
+function getOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 function normalizeOptionalCustomerId(value: string | undefined): string | undefined {

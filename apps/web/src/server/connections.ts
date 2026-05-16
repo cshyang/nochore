@@ -98,7 +98,7 @@ export const pollComposioConnection = createServerFn({ method: "GET" })
       const composio = await createComposioClient();
       const account = await composio.connectedAccounts.get(pending.composioEntityId);
       if (account.status === "ACTIVE") {
-        const synced = syncComposioConnectionConfig(db, pending, account);
+        const synced = await syncComposioConnectionConfig(db, pending, account, composio);
         if (!synced.success) {
           return jsonSafe({ connected: false, status: "missing_customer_id", error: synced.error });
         }
@@ -133,7 +133,7 @@ export const activateConnection = createServerFn({ method: "POST" })
         if (account.status !== "ACTIVE") {
           return jsonSafe({ success: false, error: `Connection not yet active: ${account.status}` });
         }
-        const synced = syncComposioConnectionConfig(db, pending, account);
+        const synced = await syncComposioConnectionConfig(db, pending, account, composio);
         if (!synced.success) {
           return jsonSafe({ success: false, error: synced.error });
         }
@@ -462,7 +462,7 @@ export const listGoogleAdsAccounts = createServerFn({ method: "GET" })
       if (account.status !== "ACTIVE") {
         return jsonSafe({ accounts: [], error: `Google Ads connection is ${account.status ?? "not active"}` });
       }
-      const synced = syncComposioConnectionConfig(db, latest, account);
+      const synced = await syncComposioConnectionConfig(db, latest, account, composio);
       if (!synced.success || !synced.customerId) {
         return jsonSafe({ accounts: [], error: synced.success ? "Missing Customer ID" : synced.error });
       }
@@ -563,7 +563,7 @@ async function normalizeConnectionRowForView(
     try {
       const account = await composio.connectedAccounts.get(row.composioEntityId);
       if (account.status === "ACTIVE") {
-        const synced = syncComposioConnectionConfig(db, row, account);
+        const synced = await syncComposioConnectionConfig(db, row, account, composio);
         if (!synced.success) {
           return { ...row, status: "disconnected" };
         }
@@ -582,16 +582,19 @@ async function normalizeConnectionRowForView(
   return { ...normalizedRow, status: "disconnected" };
 }
 
-function syncComposioConnectionConfig(
+async function syncComposioConnectionConfig(
   db: ProjectDb,
   row: typeof connections.$inferSelect,
   account: unknown,
-): { success: true; customerId?: string } | { success: false; error: string } {
+  composio: ComposioClient | null,
+): Promise<{ success: true; customerId?: string } | { success: false; error: string }> {
   if (row.provider !== "googleads" || !row.composioEntityId) {
     return { success: true };
   }
 
-  const customerId = extractComposioGoogleAdsCustomerId(account);
+  const customerId =
+    extractComposioGoogleAdsCustomerId(account) ??
+    (composio ? await fetchComposioGoogleAdsCustomerId(composio, row).catch(() => null) : null);
   if (!customerId) {
     return {
       success: false,
@@ -640,6 +643,28 @@ function syncComposioConnectionConfig(
     .run();
 
   return { success: true, customerId };
+}
+
+async function fetchComposioGoogleAdsCustomerId(
+  composio: ComposioClient,
+  row: typeof connections.$inferSelect,
+): Promise<string | null> {
+  if (!row.composioEntityId) return null;
+  const { getComposioUserId } = await import("@nochore/harness");
+  const result = (await composio.tools.execute("GOOGLEADS_SEARCH_STREAM_GAQL", {
+    userId: getComposioUserId(row.projectId),
+    connectedAccountId: row.composioEntityId,
+    arguments: {
+      query: "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1",
+    },
+    dangerouslySkipVersionCheck: true,
+  })) as { data?: unknown; successful?: boolean; error?: string | null };
+
+  if (result.successful === false) {
+    return null;
+  }
+
+  return extractGoogleAdsCustomerIdFromGaqlResult(result.data);
 }
 
 function parseConnectionConfig(value: string | null): Record<string, unknown> {
@@ -702,7 +727,29 @@ function defaultBindingAlias(provider: string, resourceId: string | null): strin
 
 function normalizeGoogleAdsCustomerId(value: string): string | null {
   const digits = value.replace(/\D/g, "");
-  return digits.length > 0 ? digits : null;
+  return digits.length === 10 ? digits : null;
+}
+
+function extractGoogleAdsCustomerIdFromGaqlResult(data: unknown): string | null {
+  const results = (data as { results?: unknown[] } | null)?.results;
+  if (!Array.isArray(results)) return null;
+
+  for (const result of results) {
+    const customer = (result as { customer?: unknown } | null)?.customer;
+    const id = (customer as { id?: unknown } | null)?.id;
+    if (typeof id === "string") {
+      const customerId = normalizeGoogleAdsCustomerId(id);
+      if (customerId) return customerId;
+    }
+
+    const resourceName = (customer as { resourceName?: unknown } | null)?.resourceName;
+    if (typeof resourceName === "string") {
+      const customerId = normalizeGoogleAdsCustomerId(resourceName);
+      if (customerId) return customerId;
+    }
+  }
+
+  return null;
 }
 
 export function extractComposioGoogleAdsCustomerId(account: unknown): string | null {
