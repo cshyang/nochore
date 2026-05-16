@@ -44,6 +44,24 @@ export async function runAgentSession(spec: AgentSessionSpec): Promise<AgentExec
   const learnedRules = await spec.runtime.learnedRuleRepository.listActive(spec.agent.id);
   const recentToolCalls: Array<{ toolName: string; timestamp: Date }> = [];
 
+  // Serialize approval handler invocations within this session. Trigger.dev forbids
+  // concurrent `wait.forToken()` calls in the same task, so when the LLM emits multiple
+  // approval-required tool calls in one turn, we queue them through this lock.
+  let approvalLock: Promise<unknown> = Promise.resolve();
+  const withApprovalLock = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const previous = approvalLock;
+    let release: () => void = () => {};
+    approvalLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await previous.catch(() => undefined);
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+
   logger.info("Prompt assembled", {
     systemPromptLength: spec.systemPrompt.length,
     systemPromptPreview: spec.systemPrompt.slice(0, 500),
@@ -98,17 +116,19 @@ export async function runAgentSession(spec: AgentSessionSpec): Promise<AgentExec
         await spec.onTaskApprovalWaiting?.(taskId);
       }
 
-      const approvalResult = await approvalHandler({
-        runtime: spec.runtime,
-        agent: spec.agent,
-        runId: spec.runId,
-        toolName,
-        toolInput,
-        policyReason: policy.reason,
-        eventIds: spec.eventIds,
-        projectId: spec.projectId,
-        taskId,
-      });
+      const approvalResult = await withApprovalLock(() =>
+        approvalHandler({
+          runtime: spec.runtime,
+          agent: spec.agent,
+          runId: spec.runId,
+          toolName,
+          toolInput,
+          policyReason: policy.reason,
+          eventIds: spec.eventIds,
+          projectId: spec.projectId,
+          taskId,
+        }),
+      );
 
       if (taskId) {
         await spec.onTaskApprovalResumed?.(taskId);
