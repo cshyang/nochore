@@ -1,4 +1,5 @@
 import { useChat } from "@ai-sdk/react";
+import { useRouter } from "@tanstack/react-router";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,6 +39,7 @@ export function useAgentChatFlow(params: {
   onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   onThreadCreated?: (threadId: string) => void;
 }) {
+  const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const latestAssistantRef = useRef<HTMLDivElement>(null);
@@ -93,6 +95,9 @@ export function useAgentChatFlow(params: {
           return;
         }
       }
+
+      // Pick up auto-generated thread title (and any other server-side state changes).
+      void router.invalidate();
     },
   });
 

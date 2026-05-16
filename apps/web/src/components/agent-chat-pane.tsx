@@ -4,7 +4,6 @@ import { useAgentChatFlow } from "~/components/agent-chat-flow";
 import { AgentMessage } from "~/components/chat/AgentMessage";
 import { ChatApprovalCard } from "~/components/chat/ChatApprovalCard";
 import { ChatColumn } from "~/components/chat/ChatColumn";
-import { ChatHeader, type ChatStatus } from "~/components/chat/ChatHeader";
 import { ChatInput } from "~/components/chat/ChatInput";
 import { ConnectionsIsland } from "~/components/chat/ConnectionsIsland";
 import { EmptyThreadHero } from "~/components/chat/EmptyThreadHero";
@@ -12,13 +11,13 @@ import { RunCard } from "~/components/chat/RunCard";
 import { ScrollPastPill } from "~/components/chat/ScrollPastPill";
 import { UserMessage } from "~/components/chat/UserMessage";
 import { ConversationMessage } from "~/components/onboarding-chat-messages";
-import { COLORS, RADIUS, TYPE } from "~/lib/colors";
+import { COLORS, RADIUS, SPACE, TYPE } from "~/lib/colors";
 import type {
   AgentView,
   ConnectionView,
   ConversationStateView,
-  ConversationThreadSummaryView,
   PendingActionView,
+  ProviderRequirementView,
   RunView,
 } from "~/lib/types";
 
@@ -27,13 +26,12 @@ interface AgentChatPaneProps {
   projectId: string;
   runs: RunView[];
   connections?: ConnectionView[];
+  requiredProviders?: ProviderRequirementView[];
+  providerLogos?: Record<string, string>;
   conversation?: ConversationStateView;
-  threads?: ConversationThreadSummaryView[];
   activeThreadId?: string;
   draftThreadOpen?: boolean;
-  onSelectThread?: (threadId: string) => void;
-  onCreateThread?: () => void;
-  onDeleteThread?: (thread: ConversationThreadSummaryView) => Promise<void> | void;
+  onConnect?: (provider: string) => void;
   onRunTriggered?: (runId: string, triggerRunId: string, workItemId?: string) => void;
   onThreadCreated?: (threadId: string) => void;
   registerRunCompleteHandler?: (handler: () => void) => void;
@@ -43,24 +41,17 @@ interface AgentChatPaneProps {
   onClearPendingApproval?: () => void;
 }
 
-type DisplayThread = ConversationThreadSummaryView & {
-  isDraft?: boolean;
-};
-
-const DRAFT_THREAD_ID = "draft:new-thread";
-
 export function AgentChatPane({
   agent,
   projectId,
   runs,
   connections = [],
+  requiredProviders = [],
+  providerLogos = {},
   conversation,
-  threads = [],
   activeThreadId,
   draftThreadOpen = false,
-  onSelectThread,
-  onCreateThread,
-  onDeleteThread: _onDeleteThread,
+  onConnect,
   onRunTriggered,
   onThreadCreated,
   registerRunCompleteHandler,
@@ -93,41 +84,6 @@ export function AgentChatPane({
     onThreadCreated,
   });
 
-  const availableThreads: DisplayThread[] =
-    threads.length > 0
-      ? threads
-      : conversation
-        ? [
-            {
-              id: conversation.threadId,
-              title: conversation.threadTitle,
-              scope: conversation.isPrimary ? "primary" : "manual",
-              isPrimary: conversation.isPrimary,
-              createdAt: "",
-              updatedAt: "",
-              messageCount: conversation.messages.length,
-              hasMessages: conversation.messages.length > 0,
-            } satisfies ConversationThreadSummaryView,
-          ]
-        : [];
-
-  const displayedThreads = draftThreadOpen
-    ? ([
-        {
-          id: DRAFT_THREAD_ID,
-          title: "New thread",
-          scope: "manual",
-          isPrimary: false,
-          createdAt: "",
-          updatedAt: "",
-          messageCount: 0,
-          hasMessages: false,
-          isDraft: true,
-        },
-        ...availableThreads,
-      ] satisfies DisplayThread[])
-    : availableThreads;
-
   useEffect(() => {
     registerRunCompleteHandler?.(() => notifyRunCompleted());
   }, [registerRunCompleteHandler, notifyRunCompleted]);
@@ -150,19 +106,13 @@ export function AgentChatPane({
     onClearPendingApproval?.();
   }, [onClearPendingApproval, pendingApproval]);
 
+  const isEmpty = messages.length === 0;
+
   return (
-    <>
-      <ChatHeader
-        agent={agent}
-        threads={displayedThreads}
-        activeThreadId={draftThreadOpen ? DRAFT_THREAD_ID : (activeThreadId ?? conversation?.threadId)}
-        status={derivePaneStatus(runs, pendingApproval)}
-        onSelectThread={(id) => onSelectThread?.(id)}
-        onCreateThread={() => onCreateThread?.()}
-      />
-      <div style={{ position: "relative", flex: 1, display: "flex", minHeight: 0 }}>
+    <div style={{ position: "relative", flex: 1, display: "flex", minHeight: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <ChatColumn scrollRef={scrollRef}>
-          {messages.length === 0 ? (
+          {isEmpty ? (
             <EmptyThreadHero
               agent={agent}
               inputValue={inputValue}
@@ -277,7 +227,18 @@ export function AgentChatPane({
               })}
 
               {isLoading ? <div style={{ fontSize: TYPE.scale.sm, color: COLORS.textDim }}>Thinking...</div> : null}
-
+            </>
+          )}
+        </ChatColumn>
+        {!isEmpty ? (
+          <div
+            style={{
+              flexShrink: 0,
+              padding: `${SPACE[2]}px ${SPACE[4]}px ${SPACE[3]}px`,
+              background: COLORS.bg,
+            }}
+          >
+            <div style={{ maxWidth: 560, margin: "0 auto" }}>
               <ChatInput
                 value={inputValue}
                 onChange={setInputValue}
@@ -286,17 +247,23 @@ export function AgentChatPane({
                 inputRef={inputRef}
                 isLoading={isLoading}
               />
-            </>
-          )}
-        </ChatColumn>
-        <ConnectionsIsland connections={connections} projectId={projectId} />
-        <ScrollPastPill
-          scrollRef={scrollRef}
-          approvalElementId={pendingApproval?.id}
-          pendingCount={pendingApproval && pendingApproval.status === "pending" ? 1 : 0}
-        />
+            </div>
+          </div>
+        ) : null}
       </div>
-    </>
+      <ConnectionsIsland
+        connections={connections}
+        requiredProviders={requiredProviders}
+        projectId={projectId}
+        providerLogos={providerLogos}
+        onConnect={onConnect}
+      />
+      <ScrollPastPill
+        scrollRef={scrollRef}
+        approvalElementId={pendingApproval?.id}
+        pendingCount={pendingApproval && pendingApproval.status === "pending" ? 1 : 0}
+      />
+    </div>
   );
 }
 
@@ -340,12 +307,4 @@ function textOfMessage(m: UIMessage): string {
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
     .join("");
-}
-
-function derivePaneStatus(runs: RunView[], pendingApproval: PendingActionView | null | undefined): ChatStatus {
-  if (pendingApproval && pendingApproval.status === "pending") return "needs-you";
-  if (runs.some((r) => r.status === "waiting_for_approval")) return "needs-you";
-  if (runs.some((r) => r.status === "running" || r.status === "waiting_for_tasks" || r.status === "queued"))
-    return "running";
-  return "idle";
 }

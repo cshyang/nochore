@@ -12,10 +12,13 @@ import {
 } from "~/components/agent-workspace-chrome";
 import { AgentWorkspaceSettingsPanel } from "~/components/agent-workspace-settings";
 import { Button } from "~/components/Button";
+import { ThreadPicker } from "~/components/chat/ThreadPicker";
 import { MemoryDossier } from "~/components/MemoryDossier";
 import { COLORS, MOTION, TYPE } from "~/lib/colors";
 import { humanize } from "~/lib/text-format";
 import type { PendingActionView } from "~/lib/types";
+
+const DRAFT_THREAD_ID = "draft:new-thread";
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
   const {
@@ -57,6 +60,41 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
   const activeThreadId = props.activeThreadId ?? conversation?.threadId;
   const draftThreadOpen = props.draftThreadOpen ?? false;
   const isDraft = props.isDraft ?? agent.lifecycleStatus === "draft";
+
+  const threadsForPicker = useMemo(() => {
+    const base =
+      conversationThreads.length > 0
+        ? conversationThreads
+        : conversation
+          ? [
+              {
+                id: conversation.threadId,
+                title: conversation.threadTitle,
+                scope: (conversation.isPrimary ? "primary" : "manual") as "primary" | "manual",
+                isPrimary: conversation.isPrimary,
+                createdAt: "",
+                updatedAt: "",
+                messageCount: conversation.messages.length,
+                hasMessages: conversation.messages.length > 0,
+              },
+            ]
+          : [];
+    return draftThreadOpen
+      ? [
+          {
+            id: DRAFT_THREAD_ID,
+            title: "New thread",
+            scope: "manual" as const,
+            isPrimary: false,
+            createdAt: "",
+            updatedAt: "",
+            messageCount: 0,
+            hasMessages: false,
+          },
+          ...base,
+        ]
+      : base;
+  }, [conversationThreads, conversation, draftThreadOpen]);
 
   const [tab, setTab] = useState<WorkspaceTab>(props.initialTab ?? "chat");
   const chatRunCompleteRef = useRef<(() => void) | null>(null);
@@ -340,6 +378,16 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
           onChange={changeTab}
           activeConnections={activeConnections.length}
           requiredProviders={mergedRequiredProviders.length}
+          threadSlot={
+            tab === "chat" ? (
+              <ThreadPicker
+                threads={threadsForPicker}
+                activeThreadId={draftThreadOpen ? DRAFT_THREAD_ID : (activeThreadId ?? conversation?.threadId)}
+                onSelectThread={(id) => props.onSelectThread?.(id)}
+                onCreateThread={() => props.onCreateThread?.()}
+              />
+            ) : undefined
+          }
         />
 
         {showFirstRunPrompt ? (
@@ -419,14 +467,13 @@ export function AgentWorkspace(props: AgentWorkspaceProps) {
               projectId={project.id}
               runs={runs}
               connections={projectConnections}
+              requiredProviders={mergedRequiredProviders}
+              providerLogos={providerLogos}
               conversation={conversation}
-              threads={conversationThreads}
               activeThreadId={activeThreadId}
               draftThreadOpen={draftThreadOpen}
-              onSelectThread={props.onSelectThread}
-              onCreateThread={props.onCreateThread}
-              onDeleteThread={props.onDeleteThread}
               onThreadCreated={props.onThreadCreated}
+              onConnect={onConnect}
               onRunTriggered={(runId, triggerRunId, workItemId) => {
                 if (workItemId) {
                   selectWorkItem(workItemId);

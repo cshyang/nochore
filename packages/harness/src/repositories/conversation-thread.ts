@@ -97,7 +97,7 @@ export class ConversationThreadRepository {
       agentId,
       scope: "primary",
       channelKind: "web",
-      title: "Main chat",
+      title: DEFAULT_MANUAL_CONVERSATION_THREAD_TITLE,
     });
 
     return (await this.getById(id))!;

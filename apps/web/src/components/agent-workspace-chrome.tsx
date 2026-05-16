@@ -4,7 +4,6 @@ import type { WorkspaceTab } from "~/components/agent-workspace.types";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Card } from "~/components/Card";
-import { formatAgentActivitySummary } from "~/lib/activity";
 import { COLORS, MOTION, RADIUS, TYPE } from "~/lib/colors";
 import { getProviderMetadata } from "~/lib/provider-metadata";
 import { humanize } from "~/lib/text-format";
@@ -176,144 +175,126 @@ export function AgentWorkspaceHeader({
         : agent.status === "error"
           ? "red"
           : "gray";
-  const activitySummary = formatAgentActivitySummary({
-    pendingApprovalCount: agent.pendingCount,
-    activeRunCount: agent.activeRunCount,
-  });
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between",
-        gap: 18,
-        flexWrap: "wrap",
-        marginBottom: 10,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, minWidth: 0 }}>
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            background: "transparent",
-            border: `1px solid ${COLORS.border}`,
-            borderRadius: RADIUS.md,
-            cursor: "pointer",
-            color: COLORS.textSecondary,
-            width: 36,
-            height: 36,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-            <Badge color="accent">
-              {project.icon} {project.name}
-            </Badge>
-            <Badge color={statusBadgeColor}>{humanize(agent.status ?? (isDraft ? "draft" : "idle"))}</Badge>
-          </div>
+    <div style={{ marginBottom: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: "1 1 auto" }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              background: "transparent",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: RADIUS.md,
+              cursor: "pointer",
+              color: COLORS.textSecondary,
+              width: 32,
+              height: 32,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <ArrowLeft size={14} />
+          </button>
+          <Badge color="accent">
+            {project.icon} {project.name}
+          </Badge>
           <h1
             style={{
               margin: 0,
-              fontSize: TYPE.scale.xl,
+              fontSize: TYPE.scale.lg,
               fontFamily: TYPE.display,
-              fontWeight: TYPE.weight.bold,
+              fontWeight: TYPE.weight.semibold,
               letterSpacing: TYPE.tracking.tight,
               color: COLORS.text,
               lineHeight: TYPE.leading.tight,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {agent.name}
           </h1>
-          <p
-            style={{
-              margin: "4px 0 0",
-              color: COLORS.textSecondary,
-              maxWidth: 780,
-              lineHeight: TYPE.leading.normal,
-              fontSize: TYPE.scale.sm,
-              fontFamily: TYPE.body,
-            }}
-          >
-            {agent.description || agent.instructions || "No description yet."}
-          </p>
-          {activitySummary ? (
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: TYPE.scale.sm,
-                color: COLORS.textDim,
-                fontFamily: TYPE.body,
-              }}
-            >
-              {activitySummary}
-            </div>
-          ) : null}
+          <Badge color={statusBadgeColor}>{humanize(agent.status ?? (isDraft ? "draft" : "idle"))}</Badge>
         </div>
-      </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {runAction}
-        <div style={{ position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {runAction}
           <Button variant="ghost" onClick={onToggleMore}>
             <DotsThree size={18} />
             More
           </Button>
-          {moreOpen ? (
-            <>
-              <button
-                type="button"
-                aria-label="Close menu"
-                onClick={onCloseMore}
-                style={{ position: "fixed", inset: 0, border: "none", background: "transparent" }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  marginTop: 8,
-                  minWidth: 180,
-                  background: COLORS.surface,
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 12,
-                  padding: 6,
-                  zIndex: 20,
-                }}
-              >
-                {onDeleteAgent ? (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      onCloseMore();
-                      onDeleteAgent();
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      background: "transparent",
-                      border: "none",
-                      color: COLORS.red,
-                      textAlign: "left",
-                      cursor: "pointer",
-                      borderRadius: 8,
-                    }}
-                  >
-                    Delete agent
-                  </button>
-                ) : null}
-              </div>
-            </>
-          ) : null}
         </div>
       </div>
+
+      {moreOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onCloseMore}
+            style={{ position: "fixed", inset: 0, border: "none", background: "transparent", zIndex: 19 }}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 20,
+              marginTop: 10,
+              padding: "12px 14px",
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: RADIUS.md,
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                color: COLORS.textSecondary,
+                fontSize: TYPE.scale.sm,
+                fontFamily: TYPE.body,
+                lineHeight: TYPE.leading.normal,
+              }}
+            >
+              {agent.description || agent.instructions || "No description yet."}
+            </p>
+            {onDeleteAgent ? (
+              <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCloseMore();
+                    onDeleteAgent();
+                  }}
+                  style={{
+                    padding: "6px 12px",
+                    background: "transparent",
+                    border: `1px solid ${COLORS.border}`,
+                    color: COLORS.red,
+                    cursor: "pointer",
+                    borderRadius: RADIUS.md,
+                    fontSize: TYPE.scale.xs,
+                    fontWeight: TYPE.weight.medium,
+                  }}
+                >
+                  Delete agent
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -323,11 +304,13 @@ export function WorkspaceTabs({
   onChange,
   activeConnections,
   requiredProviders,
+  threadSlot,
 }: {
   tab: WorkspaceTab;
   onChange: (tab: WorkspaceTab) => void;
   activeConnections: number;
   requiredProviders: number;
+  threadSlot?: ReactNode;
 }) {
   const tabs: Array<{ value: WorkspaceTab; label: string }> = [
     { value: "chat", label: "Chat" },
@@ -337,7 +320,15 @@ export function WorkspaceTabs({
   ];
 
   return (
-    <div style={{ display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 14 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 24,
+        borderBottom: `1px solid ${COLORS.border}`,
+        marginBottom: 14,
+      }}
+    >
       {tabs.map((item) => (
         <button
           type="button"
@@ -346,7 +337,7 @@ export function WorkspaceTabs({
           style={{
             background: "transparent",
             border: "none",
-            padding: "12px 0",
+            padding: "10px 0",
             marginBottom: -1,
             cursor: "pointer",
             color: tab === item.value ? COLORS.text : COLORS.textDim,
@@ -365,15 +356,16 @@ export function WorkspaceTabs({
           marginLeft: "auto",
           display: "flex",
           alignItems: "center",
-          gap: 10,
-          paddingBottom: 12,
-          color: COLORS.textDim,
-          fontSize: TYPE.scale.xs,
+          gap: 16,
+          paddingBottom: 6,
         }}
       >
-        <span>{activeConnections} connected</span>
-        <span>•</span>
-        <span>{requiredProviders} required</span>
+        {threadSlot}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.textDim, fontSize: TYPE.scale.xs }}>
+          <span>{activeConnections} connected</span>
+          <span>•</span>
+          <span>{requiredProviders} required</span>
+        </div>
       </div>
     </div>
   );

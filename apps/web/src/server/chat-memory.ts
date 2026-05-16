@@ -61,6 +61,7 @@ Rules:
 - Do not restate tool outputs unless they change future behavior`;
 
 const NEW_THREAD_TITLE = "New thread";
+const LEGACY_PRIMARY_THREAD_TITLE = "Main chat";
 const MAX_THREAD_TITLE_LENGTH = 58;
 
 type MessagePartRecord = Record<string, unknown>;
@@ -130,6 +131,7 @@ export async function persistConversationMessages(params: {
   agentId: string;
   messages: UIMessage[];
   source?: "web" | "system";
+  model?: LanguageModel;
 }): Promise<{
   messageEvents: ConversationEvent[];
   structuredEvents: ConversationEvent[];
@@ -176,7 +178,7 @@ export async function persistConversationMessages(params: {
     await params.deps.conversationThreadRepository.touch(params.threadId, latestEvent.createdAt);
   }
 
-  await maybeAutoTitleManualThread(params.deps, params.threadId, persistedMessages);
+  await maybeAutoTitleThread(params.deps, params.threadId, persistedMessages, params.model);
 
   return { messageEvents, structuredEvents };
 }
@@ -266,6 +268,7 @@ export async function persistConversationAfterResponse(params: {
     threadId: params.thread.id,
     agentId: params.agent.id,
     messages: params.messages,
+    model: params.model,
   });
 
   if (params.totalUsage) {
@@ -306,12 +309,7 @@ export async function persistConversationAfterResponse(params: {
   });
 }
 
-const ALLOWED_DURABLE_SCOPES = new Set([
-  "memory:preference",
-  "memory:correction",
-  "memory:decision",
-  "memory:insight",
-]);
+const ALLOWED_DURABLE_SCOPES = new Set(["memory:preference", "memory:correction", "memory:decision", "memory:insight"]);
 
 function buildChatMemoryContext(params: {
   checkpointSummary?: string;
@@ -608,13 +606,23 @@ function extractVisibleText(message: UIMessage): string {
     .trim();
 }
 
-async function maybeAutoTitleManualThread(deps: ProjectDeps, threadId: string, messages: UIMessage[]): Promise<void> {
+async function maybeAutoTitleThread(
+  deps: ProjectDeps,
+  threadId: string,
+  messages: UIMessage[],
+  model?: LanguageModel,
+): Promise<void> {
   const thread = await deps.conversationThreadRepository.getById(threadId);
-  if (!thread || thread.scope !== "manual" || thread.title !== NEW_THREAD_TITLE) {
+  if (!thread) {
+    return;
+  }
+  // Eligible: never-titled threads. Legacy "Main chat" primary threads also count, for lazy backfill.
+  const isEligible = thread.title === NEW_THREAD_TITLE || thread.title === LEGACY_PRIMARY_THREAD_TITLE;
+  if (!isEligible) {
     return;
   }
 
-  const title = deriveThreadTitle(messages);
+  const title = (model ? await generateLLMThreadTitle(model, messages) : null) ?? deriveThreadTitleHeuristic(messages);
   if (!title) {
     return;
   }
@@ -622,7 +630,48 @@ async function maybeAutoTitleManualThread(deps: ProjectDeps, threadId: string, m
   await deps.conversationThreadRepository.updateTitle(threadId, title);
 }
 
-function deriveThreadTitle(messages: UIMessage[]): string | null {
+async function generateLLMThreadTitle(model: LanguageModel, messages: UIMessage[]): Promise<string | null> {
+  const transcript = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(0, 4)
+    .map((message) => {
+      const text = extractVisibleText(message);
+      return text ? `${message.role}: ${text}` : null;
+    })
+    .filter((line): line is string => Boolean(line))
+    .join("\n\n");
+
+  if (!transcript.trim()) {
+    return null;
+  }
+
+  try {
+    const result = await generateText({
+      model,
+      prompt: `You write concise conversation titles. Return ONLY the title — no quotes, no period, no preamble. Use sentence case. Aim for 3-5 words that capture the topic, not the question form (e.g. "Negative keywords vs AI Max" not "Should we add negatives?").\n\nConversation:\n${transcript}\n\nTitle:`,
+    });
+
+    const cleaned = result.text
+      .trim()
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .replace(/\.+$/, "")
+      .replace(/^title:\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (cleaned.length === 0) {
+      return null;
+    }
+
+    return cleaned.length > MAX_THREAD_TITLE_LENGTH
+      ? `${cleaned.slice(0, MAX_THREAD_TITLE_LENGTH - 3).trimEnd()}...`
+      : cleaned;
+  } catch {
+    return null;
+  }
+}
+
+function deriveThreadTitleHeuristic(messages: UIMessage[]): string | null {
   const firstUserText = messages
     .filter((message) => message.role === "user")
     .map(extractVisibleText)

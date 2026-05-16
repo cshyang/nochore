@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from "ai";
 import { z } from "zod";
+import { CONNECTABLE_PROVIDER_SLUGS } from "~/lib/provider-metadata";
 import type { ToolkitSummary } from "~/server/onboard-prompt";
 import { buildOnboardingSystemPrompt } from "~/server/onboard-prompt";
 
@@ -254,10 +255,11 @@ export const Route = createFileRoute("/api/onboard")({
                 const resolvedSkills = resolveSkillIds(input.skills, availableSkills);
 
                 // Derive required providers from tool slugs.
-                // Tool slug convention: provider_action (e.g., googleads_list_campaigns → googleads)
+                // Composio slugs are not fully consistent across Google-family toolkits, so normalize
+                // to Nochore's connectable provider slugs before persisting requirements.
                 const providerSet = new Map<string, string>();
                 for (const slug of input.toolSlugs) {
-                  const provider = slug.split("_")[0]?.toLowerCase();
+                  const provider = inferRequiredProviderFromToolSlug(slug);
                   if (provider && !providerSet.has(provider)) {
                     providerSet.set(provider, `Required for ${input.name}`);
                   }
@@ -294,3 +296,21 @@ export const Route = createFileRoute("/api/onboard")({
     },
   },
 });
+
+const CONNECTABLE_PROVIDER_SET = new Set<string>(CONNECTABLE_PROVIDER_SLUGS);
+
+function inferRequiredProviderFromToolSlug(slug: string): string | null {
+  const normalized = slug.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const compact = normalized.replace(/_/g, "");
+
+  if (compact.startsWith("googleads") || compact.startsWith("adwords")) return "googleads";
+  if (compact.startsWith("googleanalytics") || compact.startsWith("ga4")) return "ga4";
+  if (compact.startsWith("googlesearchconsole") || compact.startsWith("searchconsole")) {
+    return "google_search_console";
+  }
+
+  const prefix = normalized.split("_")[0];
+  if (prefix && CONNECTABLE_PROVIDER_SET.has(prefix)) return prefix;
+
+  return null;
+}
