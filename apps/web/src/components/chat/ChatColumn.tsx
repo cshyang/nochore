@@ -24,6 +24,7 @@ export function ChatColumn({ children, scrollRef, contentMaxWidth = 560 }: ChatC
         flex: 1,
         minWidth: 0,
         overflowY: "auto",
+        overflowX: "hidden",
         display: "flex",
         flexDirection: "column",
         padding: `${SPACE[4]}px 0 ${SPACE[3]}px`,
@@ -33,6 +34,7 @@ export function ChatColumn({ children, scrollRef, contentMaxWidth = 560 }: ChatC
         style={{
           width: "100%",
           maxWidth: contentMaxWidth,
+          minWidth: 0,
           margin: "0 auto",
           padding: `0 ${SPACE[4]}px`,
           display: "flex",

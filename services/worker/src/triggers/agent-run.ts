@@ -437,18 +437,31 @@ async function resolveRunResultThread(
 }
 
 function formatRunResultMessage(summary: RunSummary): string {
-  const sections = [summary.headline.trim()];
+  const headline = summary.headline.trim();
   const finalText = summary.finalText?.trim();
-  if (finalText && finalText !== summary.headline.trim()) {
-    sections.push(finalText);
-  } else if (!finalText && summary.details && summary.details.length > 0) {
+
+  // If finalText already opens with the headline (typical — the agent emits a
+  // heading and we extract its text as the headline), return finalText alone.
+  // Otherwise prepend headline as a separate section.
+  if (finalText) {
+    const firstLine = finalText
+      .split(/\r?\n/, 1)[0]
+      ?.replace(/^#+\s*/, "")
+      .trim();
+    if (firstLine === headline) {
+      return finalText;
+    }
+    return `${headline}\n\n${finalText}`.trim();
+  }
+
+  if (summary.details && summary.details.length > 0) {
     const visibleDetails = summary.details.filter((detail) => !detail.startsWith("Events recorded:"));
     if (visibleDetails.length > 0) {
-      sections.push(visibleDetails.join("\n"));
+      return `${headline}\n\n${visibleDetails.join("\n")}`.trim();
     }
   }
 
-  return sections.filter(Boolean).join("\n\n");
+  return headline;
 }
 
 function buildSummary(params: {
